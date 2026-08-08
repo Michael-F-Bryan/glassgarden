@@ -16,7 +16,7 @@
 
 ## Calibrated direction
 
-Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to its residents. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish. The character model, simulation depth, progression, tone, platform, and scope remain undecided.
+Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish. Growth should introduce natural pressures—such as a larger population increasing cleaning demand—and give the player better ways to sustain greater complexity. The main progression spine, simulation depth, tone, platform, and scope remain undecided.
 
 ## Registers
 
@@ -38,7 +38,8 @@ _None._
 | U1 | Central player fantasy | Determines the core loop, progression, simulation emphasis, and emotional tone. | Michael’s judgement | Resolved: nurturing a thriving ecosystem |
 | U2 | Offline ecosystem behaviour and consequences | Determines whether idling feels like trust in a living system, harmless passive growth, or exposure to neglect and loss. | Michael’s judgement | Resolved: preparation-driven autonomous change with recoverable deterioration |
 | U3 | Target platform and presentation | Determines controls, session length, technology, and asset needs. | Later interview question | Open |
-| U4 | Character and attachment model | Determines whether emotional investment comes from authored characters, emergent individuals, or the aquarium community as a whole. | Michael’s judgement | Open |
+| U4 | Character and attachment model | Determines whether emotional investment comes from authored characters, emergent individuals, or the aquarium community as a whole. | Michael’s judgement | Resolved: procedurally generated individuals with emergent traits, relationships, and histories |
+| U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Open |
 
 ### Learnings
 
@@ -48,6 +49,8 @@ _None._
 | L2 | Nurturing a thriving ecosystem is the game’s central player fantasy. | Q1 |
 | L3 | The aquarium should continue changing autonomously according to how well the player prepared it. | Q2 |
 | L4 | Frequent check-ins and emotional attachment to the game’s characters are part of the intended Tamagotchi-like experience. | Q2 |
+| L5 | Emotional attachment should arise from procedurally generated individuals whose traits, relationships, and histories emerge through play. | Q3 |
+| L6 | Progression should increase ecological complexity and naturally create new maintenance pressures that motivate better solutions. | Q3 |
 
 ### Deferred decisions
 
@@ -55,15 +58,15 @@ _None._
 
 ## Pending question
 
-### Q3 — Where attachment lives
+### Q4 — The spine of progression
 
-**Asked:** 2026-08-09T00:25:31+0800 (AWST)
+**Asked:** 2026-08-09T00:31:21+0800 (AWST)
 
-**Question:** Which character model should carry the emotional attachment: a small authored cast of named residents with distinct personalities and ongoing stories; procedurally generated individuals whose traits, relationships, and histories emerge through play; the aquarium community as a whole; or a blend?
+**Question:** When a player looks back after their first week, which change should most clearly prove they have progressed: one tank has become denser and more self-sustaining; they have expanded into larger or multiple specialised habitats; generations of residents have developed lineages and adaptations; or better equipment lets them support complexity that was previously unmanageable? These can reinforce one another, but which is the spine?
 
-**What this is trying to decide:** Whether Glassgarden’s characters require authored narrative, an emergent individual-life simulation, a collective identity, or a deliberate combination.
+**What this is trying to decide:** The primary growth axis that should organise unlocks, escalating pressures, and the player’s sense of advancement.
 
-**Evidence basis:** C1, C2, U4, L2, and L4.
+**Evidence basis:** C1, U5, L2, L5, and L6.
 
 **Answer:** _Pending._
 
@@ -114,3 +117,29 @@ _None._
 **Effect:** Defines the offline simulation contract and introduces emotional attachment to individual game characters as a core direction. The next question must establish what sort of characters carry that bond.
 
 **Register updates:** C2 added; U2 resolved; U4 added; L3 and L4 added.
+
+### Q3 — Where attachment lives
+
+**Asked:** 2026-08-09T00:25:31+0800 (AWST)
+
+**Question:** Which character model should carry the emotional attachment: a small authored cast of named residents with distinct personalities and ongoing stories; procedurally generated individuals whose traits, relationships, and histories emerge through play; the aquarium community as a whole; or a blend?
+
+**What this is trying to decide:** Whether Glassgarden’s characters require authored narrative, an emergent individual-life simulation, a collective identity, or a deliberate combination.
+
+**Evidence basis:** C1, C2, U4, L2, and L4.
+
+**Answer received:** 2026-08-09T00:31:21+0800 (AWST)
+
+**Answer:**
+
+> B - Procedurally generated individuals whose traits, relationships, and histories emerge through play.
+>
+> I'd like there to be some aspect of emergent behaviour where systems and individuals can interact in whacky and wonderful ways.
+>
+> But at the same time, I feel like the player needs more than just looking after a mostly static cast of NPC. We need a sense of progression and growth, as well as challenges that start to naturally emerge as you play (e.g. more fish -> need to clean the tank more often -> start investing in better cleaning solutions).
+
+**Interpretation:** Individual residents should be generated rather than authored, becoming memorable through accumulated traits, relationships, events, and interactions. The broader simulation should produce surprising combinations rather than fixed character scripts. Progress should expand the ecosystem’s complexity, which creates new needs and gives practical meaning to upgrades.
+
+**Effect:** Resolves the attachment model and rejects a mostly static cast. Adds progression as an explicit design frontier, with ecological pressure and player capability expected to grow together.
+
+**Register updates:** U4 resolved; U5 added; L5 and L6 added.
