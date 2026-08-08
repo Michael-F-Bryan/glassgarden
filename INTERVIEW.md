@@ -17,7 +17,7 @@
 
 ## Calibrated direction
 
-Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. They sit between expressive animals and a whimsical fish society: recognisable emotions and relationships can grow into social mechanics without becoming a full cartoon civilisation. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression is driven by hidden thresholds responding to repeated care, environmental conditions, ornaments, and upgrades rather than a visible level or tech tree. New traits unlock capabilities and delayed liabilities: repeated petting might produce emotion, whose downside only becomes apparent after the first bereavement. The exact progression spine, the legibility of hidden causes, simulation depth, platform, and scope remain open.
+Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. They sit between expressive animals and a whimsical fish society: recognisable emotions and relationships can grow into social mechanics without becoming a full cartoon civilisation. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression is driven by hidden thresholds responding to repeated care, environmental conditions, ornaments, and upgrades rather than a visible level or tech tree. A special toast announces that something has developed, while contextual clues help the player infer its cause without exposing thresholds or formulas. New traits unlock capabilities and delayed liabilities: repeated petting might produce emotion, whose downside only becomes apparent after the first bereavement. The exact progression spine, simulation depth, target platform, and first-playable scope remain open.
 
 ## Registers
 
@@ -25,7 +25,7 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 
 | ID | Claim | Source | Confidence | Validation | Status |
 | --- | --- | --- | --- | --- | --- |
-| A1 | A hidden evolution structure could connect progression to biological and social capabilities without exposing a conventional tech tree. | Q6–Q7 | Moderate | Michael’s judgement after clarifying progression legibility | Narrowed |
+| A1 | A hidden evolution structure connects progression to biological and social capabilities without exposing a conventional tech tree. | Q6–Q8 | High | First-playable design validation | Accepted direction |
 
 ### Constraints
 
@@ -41,13 +41,13 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | --- | --- | --- | --- | --- |
 | U1 | Central player fantasy | Determines the core loop, progression, simulation emphasis, and emotional tone. | Michael’s judgement | Resolved: nurturing a thriving ecosystem |
 | U2 | Offline ecosystem behaviour and consequences | Determines whether idling feels like trust in a living system, harmless passive growth, or exposure to neglect and loss. | Michael’s judgement | Resolved: preparation-driven autonomous change with recoverable deterioration |
-| U3 | Target platform and presentation | Determines controls, session length, technology, and asset needs. | Later interview question | Open |
+| U3 | Target platform and presentation | Determines controls, session length, technology, and asset needs. | Michael’s judgement | Open |
 | U4 | Character and attachment model | Determines whether emotional investment comes from authored characters, emergent individuals, or the aquarium community as a whole. | Michael’s judgement | Resolved: procedurally generated individuals with emergent traits, relationships, and histories |
 | U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Narrowed: denser ecosystem and generational adaptation, possibly as one loop |
 | U6 | Resident lifecycle and turnover | Determines whether generational progression requires ageing, death, departure, or abstraction, and how attachment survives turnover. | Michael’s judgement | Resolved: predictable lifespans, natural death, and consequences for surviving relatives |
 | U7 | Degree of anthropomorphism | Determines whether grief, cemeteries, relationships, and other social systems are grounded animal behaviour or an overtly whimsical society. | Michael’s judgement | Resolved: between expressive animals and a whimsical social world |
 | U8 | Player authority over evolution | Determines whether the player engineers traits directly, shapes selection pressures, or unlocks possibilities that remain emergent. | Michael’s judgement | Resolved: indirect influence through care, environment, ornaments, and tank upgrades |
-| U9 | Legibility of hidden progression | Determines whether emergent traits feel discoverable and attributable or arbitrary and unfair. | Michael’s judgement | Open |
+| U9 | Legibility of hidden progression | Determines whether emergent traits feel discoverable and attributable or arbitrary and unfair. | Michael’s judgement | Resolved: unlock toast plus contextual causal clues, without formulas |
 
 ### Learnings
 
@@ -65,6 +65,7 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | L10 | Selective whimsical social behaviour should provide game mechanics without turning residents into a fully human-like civilisation. | Q6 |
 | L11 | Repeated player actions and environmental choices should cross hidden thresholds that cause natural-looking development rather than visible levelling. | Q7 |
 | L12 | A newly developed capability may reveal a downside only when a later event exercises it, creating the next pressure through play. | Q7 |
+| L13 | The game should announce that a hidden development occurred, but leave the player to identify its trigger from contextual clues. | Q8 |
 
 ### Deferred decisions
 
@@ -72,23 +73,23 @@ _None._
 
 ## Pending question
 
-### Q8 — Explaining hidden development
+### Q9 — Home of the first playable
 
-**Asked:** 2026-08-09T00:54:29+0800 (AWST)
+**Asked:** 2026-08-09T00:58:35+0800 (AWST)
 
-**Question:** Once a hidden trait appears, how much should the game explain about why it developed?
+**Question:** Where should Glassgarden’s first playable version primarily live?
 
-**A.** Nothing explicit; the player infers causes entirely by watching and experimenting.
+**A.** A desktop-first web game, opened for deliberate check-in sessions.
 
-**B.** A chronicle says what changed and when, but leaves the cause for the player to infer.
+**B.** A mobile-first web app or PWA, built around brief touch-based check-ins.
 
-**C.** Contextual clues connect the development to likely causes—such as frequent affection—without exposing thresholds or formulas.
+**C.** A persistent desktop “desk toy” that can remain visible alongside other work.
 
-**D.** After discovery, the player can inspect the exact triggers and mechanics even though undiscovered developments remain hidden.
+**D.** A native mobile app with notifications and an always-with-you Tamagotchi rhythm.
 
-**What this is trying to decide:** How Glassgarden preserves surprise while giving the player enough causal information to care for the ecosystem deliberately.
+**What this is trying to decide:** The interaction cadence, input model, presentation constraints, and delivery target for the smallest useful game.
 
-**Evidence basis:** A1, C3, U9, L5, L11, and L12.
+**Evidence basis:** C1, U3, L3, L4, and L13.
 
 **Answer:** _Pending._
 
@@ -291,3 +292,33 @@ _None._
 **Effect:** Resolves evolution authority, rejects conventional player-facing levelling, and establishes hidden action-driven thresholds as the preferred progression model. Raises legibility as the next decision: the system must feel emergent without becoming arbitrary.
 
 **Register updates:** A1 narrowed; C3 added; U8 resolved; U9 added; L11 and L12 added.
+
+### Q8 — Explaining hidden development
+
+**Asked:** 2026-08-09T00:54:29+0800 (AWST)
+
+**Question:** Once a hidden trait appears, how much should the game explain about why it developed?
+
+**A.** Nothing explicit; the player infers causes entirely by watching and experimenting.
+
+**B.** A chronicle says what changed and when, but leaves the cause for the player to infer.
+
+**C.** Contextual clues connect the development to likely causes—such as frequent affection—without exposing thresholds or formulas.
+
+**D.** After discovery, the player can inspect the exact triggers and mechanics even though undiscovered developments remain hidden.
+
+**What this is trying to decide:** How Glassgarden preserves surprise while giving the player enough causal information to care for the ecosystem deliberately.
+
+**Evidence basis:** A1, C3, U9, L5, L11, and L12.
+
+**Answer received:** 2026-08-09T00:58:35+0800 (AWST)
+
+**Answer:**
+
+> C. You might see a special toast message scroll past saying something has been unlocked, but the player has to figure out what action triggered it based on contextual clues.
+
+**Interpretation:** A development should be explicitly announced so progress is not missed, but its causal mechanism remains hidden. The player learns by connecting the toast and surrounding context to their own recent behaviour rather than consulting formulas or an exposed tree.
+
+**Effect:** Resolves progression legibility and confirms the hidden evolution structure as an accepted direction. Moves the interview from game behaviour to the target platform and interaction cadence for a first playable.
+
+**Register updates:** A1 accepted; U9 resolved; L13 added.
