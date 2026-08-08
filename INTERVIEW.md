@@ -2,13 +2,15 @@
 
 ## Interview state
 
-- **Status:** Active
+- **Status:** Complete
 - **Timezone:** Australia/Perth (AWST, UTC+08:00)
-- **Current phase:** Direction interview
+- **Current phase:** Direction interview — complete
+- **Completed:** 2026-08-09T01:08:44+0800 (AWST)
 - **Purpose:** Establish the game’s central fantasy, core loop, boundaries, and validation target before any specification or implementation.
 - **Decision horizon:** Decide what kind of aquarium idle game Glassgarden should become.
 - **Authorised output:** This durable interview record only. No game specification, plan, or implementation is authorised yet.
-- **Question format:** Bounded options are labelled A, B, C, and D so Michael can refer to them directly.
+- **Question format:** Questions and their A, B, C, and D options are preserved in quote blocks so they are visually distinct from the record.
+- **Commit cadence:** Record answers without committing each turn; commit the completed interview once at the end.
 
 ## Source basis
 
@@ -17,7 +19,7 @@
 
 ## Calibrated direction
 
-Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. They sit between expressive animals and a whimsical fish society: recognisable emotions and relationships can grow into social mechanics without becoming a full cartoon civilisation. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression is driven by hidden thresholds responding to repeated care, environmental conditions, ornaments, and upgrades rather than a visible level or tech tree. A special toast announces that something has developed, while contextual clues help the player infer its cause without exposing thresholds or formulas. New traits unlock capabilities and delayed liabilities: repeated petting might produce emotion, whose downside only becomes apparent after the first bereavement. The exact progression spine, simulation depth, target platform, and first-playable scope remain open.
+Glassgarden is a desktop-first web idle game designed to remain open in a laptop browser tab for occasional deliberate check-ins; mobile is not a target. It centres on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. They sit between expressive animals and a whimsical fish society: recognisable emotions and relationships can grow into social mechanics without becoming a full cartoon civilisation. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression is driven by hidden thresholds responding to repeated care, environmental conditions, ornaments, and upgrades rather than a visible level or tech tree. A special toast announces that something has developed, while contextual clues help the player infer its cause without exposing thresholds or formulas. New traits unlock capabilities and delayed liabilities: repeated petting might produce emotion, whose downside only becomes apparent after the first bereavement. The first playable must prove that ordinary player care causes the aquarium to grow and evolve in surprising but understandable ways. Exact simulation variables, content breadth, visual direction, and implementation choices belong to later phases.
 
 ## Registers
 
@@ -34,6 +36,7 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | C1 | The direction must retain an aquarium simulation and idle-game structure. | Michael’s initial direction | Concepts outside either boundary are out of scope unless Michael amends the premise. |
 | C2 | Deterioration during absence must not end in a tank full of dead fish. | Q2 | Offline consequences need a recoverable floor; the game cannot punish absence with catastrophic loss. |
 | C3 | Progression should feel like a natural response to care and tank changes rather than explicit levelling. | Q7 | Player-facing levels or a conventional visible tech tree would undermine the intended emergence. |
+| C4 | The first playable targets desktop web and does not target mobile. | Q9 | Interaction, layout, performance, and delivery should optimise for a laptop browser tab. |
 
 ### Unknowns
 
@@ -41,13 +44,14 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | --- | --- | --- | --- | --- |
 | U1 | Central player fantasy | Determines the core loop, progression, simulation emphasis, and emotional tone. | Michael’s judgement | Resolved: nurturing a thriving ecosystem |
 | U2 | Offline ecosystem behaviour and consequences | Determines whether idling feels like trust in a living system, harmless passive growth, or exposure to neglect and loss. | Michael’s judgement | Resolved: preparation-driven autonomous change with recoverable deterioration |
-| U3 | Target platform and presentation | Determines controls, session length, technology, and asset needs. | Michael’s judgement | Open |
+| U3 | Target platform and presentation | Determines controls, session length, technology, and asset needs. | Michael’s judgement | Resolved: desktop-first web game left running in a laptop tab; no mobile target |
 | U4 | Character and attachment model | Determines whether emotional investment comes from authored characters, emergent individuals, or the aquarium community as a whole. | Michael’s judgement | Resolved: procedurally generated individuals with emergent traits, relationships, and histories |
-| U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Narrowed: denser ecosystem and generational adaptation, possibly as one loop |
+| U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Resolved: action-driven hidden development expressed through ecosystem and generational change |
 | U6 | Resident lifecycle and turnover | Determines whether generational progression requires ageing, death, departure, or abstraction, and how attachment survives turnover. | Michael’s judgement | Resolved: predictable lifespans, natural death, and consequences for surviving relatives |
 | U7 | Degree of anthropomorphism | Determines whether grief, cemeteries, relationships, and other social systems are grounded animal behaviour or an overtly whimsical society. | Michael’s judgement | Resolved: between expressive animals and a whimsical social world |
 | U8 | Player authority over evolution | Determines whether the player engineers traits directly, shapes selection pressures, or unlocks possibilities that remain emergent. | Michael’s judgement | Resolved: indirect influence through care, environment, ornaments, and tank upgrades |
 | U9 | Legibility of hidden progression | Determines whether emergent traits feel discoverable and attributable or arbitrary and unfair. | Michael’s judgement | Resolved: unlock toast plus contextual causal clues, without formulas |
+| U10 | First-playable validation target | Determines which experience must survive scope cuts and prove that the game direction works. | Michael’s judgement | Resolved: ordinary care causes hidden but understandable growth and evolution |
 
 ### Learnings
 
@@ -66,32 +70,21 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | L11 | Repeated player actions and environmental choices should cross hidden thresholds that cause natural-looking development rather than visible levelling. | Q7 |
 | L12 | A newly developed capability may reveal a downside only when a later event exercises it, creating the next pressure through play. | Q7 |
 | L13 | The game should announce that a hidden development occurred, but leave the player to identify its trigger from contextual clues. | Q8 |
+| L14 | The intended cadence is leaving the game running in a laptop tab and jumping over to it occasionally. | Q9 |
+| L15 | The first playable succeeds if players feel the aquarium is growing and evolving in response to their actions. | Q10 |
 
 ### Deferred decisions
 
-_None._
+| ID | Decision | Revisit trigger | Evidence needed | Owner |
+| --- | --- | --- | --- | --- |
+| D1 | Exact simulation variables, thresholds, and content breadth | Design or prototyping is authorised | A playable model of the target check-in cadence and complexity | Future design phase |
+| D2 | Visual direction and implementation stack | Design or implementation is authorised | A bounded first-playable scope | Future design phase |
 
-## Pending question
+## Completion
 
-### Q9 — Home of the first playable
+The interview can stop because the game’s central fantasy, player relationship, autonomous behaviour, consequence floor, progression model, lifecycle, tone, platform, and first-playable validation target are established. Remaining questions are ordinary design and implementation discovery, not unresolved direction-setting judgement.
 
-**Asked:** 2026-08-09T00:58:35+0800 (AWST)
-
-**Question:** Where should Glassgarden’s first playable version primarily live?
-
-**A.** A desktop-first web game, opened for deliberate check-in sessions.
-
-**B.** A mobile-first web app or PWA, built around brief touch-based check-ins.
-
-**C.** A persistent desktop “desk toy” that can remain visible alongside other work.
-
-**D.** A native mobile app with notifications and an always-with-you Tamagotchi rhythm.
-
-**What this is trying to decide:** The interaction cadence, input model, presentation constraints, and delivery target for the smallest useful game.
-
-**Evidence basis:** C1, U3, L3, L4, and L13.
-
-**Answer:** _Pending._
+This completion authorises no specification, plan, design, or implementation beyond the interview record.
 
 ## Chronological record
 
@@ -99,8 +92,10 @@ _None._
 
 **Asked:** 2026-08-09T00:19:56+0800 (AWST)
 
-**Question:** When Glassgarden is working at its best, which fantasy should dominate: nurturing a thriving ecosystem, collecting and breeding unusual creatures, optimising a complex living system, building an aquarium empire, or something else? You can mix them, but which one should be the centre of gravity?
+**Question:**
 
+> When Glassgarden is working at its best, which fantasy should dominate: nurturing a thriving ecosystem, collecting and breeding unusual creatures, optimising a complex living system, building an aquarium empire, or something else? You can mix them, but which one should be the centre of gravity?
+>
 **What this is trying to decide:** The emotional promise that should govern the game’s core loop and prevent a generic pile-up of aquarium mechanics.
 
 **Evidence basis:** C1, U1, and L1.
@@ -121,8 +116,10 @@ _None._
 
 **Asked:** 2026-08-09T00:22:42+0800 (AWST)
 
-**Question:** You leave Glassgarden alone for a day and return. Which outcome best fits the game: the aquarium only grows while you are away; problems can develop but everything is recoverable; creatures can genuinely become sick or die; or the ecosystem autonomously improves or deteriorates according to how well you prepared it? You can combine these, but where should the consequences stop?
+**Question:**
 
+> You leave Glassgarden alone for a day and return. Which outcome best fits the game: the aquarium only grows while you are away; problems can develop but everything is recoverable; creatures can genuinely become sick or die; or the ecosystem autonomously improves or deteriorates according to how well you prepared it? You can combine these, but where should the consequences stop?
+>
 **What this is trying to decide:** Whether nurturing means cosy encouragement, recoverable responsibility, genuine caretaking stakes, or designing a resilient system—and what “idle” permits while the player is absent.
 
 **Evidence basis:** C1, U2, L1, and L2.
@@ -145,8 +142,10 @@ _None._
 
 **Asked:** 2026-08-09T00:25:31+0800 (AWST)
 
-**Question:** Which character model should carry the emotional attachment: a small authored cast of named residents with distinct personalities and ongoing stories; procedurally generated individuals whose traits, relationships, and histories emerge through play; the aquarium community as a whole; or a blend?
+**Question:**
 
+> Which character model should carry the emotional attachment: a small authored cast of named residents with distinct personalities and ongoing stories; procedurally generated individuals whose traits, relationships, and histories emerge through play; the aquarium community as a whole; or a blend?
+>
 **What this is trying to decide:** Whether Glassgarden’s characters require authored narrative, an emergent individual-life simulation, a collective identity, or a deliberate combination.
 
 **Evidence basis:** C1, C2, U4, L2, and L4.
@@ -171,8 +170,10 @@ _None._
 
 **Asked:** 2026-08-09T00:31:21+0800 (AWST)
 
-**Question:** When a player looks back after their first week, which change should most clearly prove they have progressed: one tank has become denser and more self-sustaining; they have expanded into larger or multiple specialised habitats; generations of residents have developed lineages and adaptations; or better equipment lets them support complexity that was previously unmanageable? These can reinforce one another, but which is the spine?
+**Question:**
 
+> When a player looks back after their first week, which change should most clearly prove they have progressed: one tank has become denser and more self-sustaining; they have expanded into larger or multiple specialised habitats; generations of residents have developed lineages and adaptations; or better equipment lets them support complexity that was previously unmanageable? These can reinforce one another, but which is the spine?
+>
 **What this is trying to decide:** The primary growth axis that should organise unlocks, escalating pressures, and the player’s sense of advancement.
 
 **Evidence basis:** C1, U5, L2, L5, and L6.
@@ -203,16 +204,18 @@ _None._
 
 **Asked:** 2026-08-09T00:38:54+0800 (AWST)
 
-**Question:** If generations and individual attachment both matter, what should eventually happen to older residents?
+**Question:**
 
-**A.** They never die from age; generations accumulate until the player moves or manages them.
-
-**B.** They have predictable lifespans and eventually die, with enough warning and history to make that meaningful rather than punitive.
-
-**C.** They eventually leave or retire from the active tank instead of dying.
-
-**D.** Generations are partly abstracted, so offspring and adaptations appear without simulating every resident’s full lifecycle.
-
+> If generations and individual attachment both matter, what should eventually happen to older residents?
+>
+> **A.** They never die from age; generations accumulate until the player moves or manages them.
+>
+> **B.** They have predictable lifespans and eventually die, with enough warning and history to make that meaningful rather than punitive.
+>
+> **C.** They eventually leave or retire from the active tank instead of dying.
+>
+> **D.** Generations are partly abstracted, so offspring and adaptations appear without simulating every resident’s full lifecycle.
+>
 **What this is trying to decide:** The lifecycle contract needed to support new generations without undermining emotional attachment or filling the tank forever.
 
 **Evidence basis:** C2, U5, U6, L4, L5, and L7.
@@ -233,16 +236,18 @@ _None._
 
 **Asked:** 2026-08-09T00:42:57+0800 (AWST)
 
-**Question:** How anthropomorphic should Glassgarden’s residents be?
+**Question:**
 
-**A.** Mostly grounded fish behaviour; emotions and relationships are inferred from movement and habits.
-
-**B.** Expressive animals with recognisable emotions and relationships, but little overtly human behaviour.
-
-**C.** A whimsical fish society with rituals, grudges, celebrations, cemeteries, and other social behaviour.
-
-**D.** A full cartoon civilisation with dialogue, professions, institutions, and character-driven stories.
-
+> How anthropomorphic should Glassgarden’s residents be?
+>
+> **A.** Mostly grounded fish behaviour; emotions and relationships are inferred from movement and habits.
+>
+> **B.** Expressive animals with recognisable emotions and relationships, but little overtly human behaviour.
+>
+> **C.** A whimsical fish society with rituals, grudges, celebrations, cemeteries, and other social behaviour.
+>
+> **D.** A full cartoon civilisation with dialogue, professions, institutions, and character-driven stories.
+>
 **What this is trying to decide:** The tonal boundary for the social simulation and how literally ideas such as grief and cemetery visits should appear on screen.
 
 **Evidence basis:** U7, L5, L8, and L9.
@@ -265,16 +270,18 @@ _None._
 
 **Asked:** 2026-08-09T00:46:24+0800 (AWST)
 
-**Question:** How much control should the player have over evolution?
+**Question:**
 
-**A.** Direct control: the player chooses exact traits or behaviours for a lineage.
-
-**B.** Indirect control: the player shapes the environment, and adaptations emerge from those pressures.
-
-**C.** Gated emergence: the tech tree unlocks possible adaptations or social behaviours, but individuals develop them unpredictably.
-
-**D.** Broad direction: the player steers a species towards themes such as sociability, resilience, or fertility, while individual expression remains emergent.
-
+> How much control should the player have over evolution?
+>
+> **A.** Direct control: the player chooses exact traits or behaviours for a lineage.
+>
+> **B.** Indirect control: the player shapes the environment, and adaptations emerge from those pressures.
+>
+> **C.** Gated emergence: the tech tree unlocks possible adaptations or social behaviours, but individuals develop them unpredictably.
+>
+> **D.** Broad direction: the player steers a species towards themes such as sociability, resilience, or fertility, while individual expression remains emergent.
+>
 **What this is trying to decide:** Whether evolution is an optimisation menu, a consequence of care, a pool of unlocked possibilities, or a balance between player intent and surprise.
 
 **Evidence basis:** A1, U5, U8, L5, L7, and L10.
@@ -297,16 +304,18 @@ _None._
 
 **Asked:** 2026-08-09T00:54:29+0800 (AWST)
 
-**Question:** Once a hidden trait appears, how much should the game explain about why it developed?
+**Question:**
 
-**A.** Nothing explicit; the player infers causes entirely by watching and experimenting.
-
-**B.** A chronicle says what changed and when, but leaves the cause for the player to infer.
-
-**C.** Contextual clues connect the development to likely causes—such as frequent affection—without exposing thresholds or formulas.
-
-**D.** After discovery, the player can inspect the exact triggers and mechanics even though undiscovered developments remain hidden.
-
+> Once a hidden trait appears, how much should the game explain about why it developed?
+>
+> **A.** Nothing explicit; the player infers causes entirely by watching and experimenting.
+>
+> **B.** A chronicle says what changed and when, but leaves the cause for the player to infer.
+>
+> **C.** Contextual clues connect the development to likely causes—such as frequent affection—without exposing thresholds or formulas.
+>
+> **D.** After discovery, the player can inspect the exact triggers and mechanics even though undiscovered developments remain hidden.
+>
 **What this is trying to decide:** How Glassgarden preserves surprise while giving the player enough causal information to care for the ecosystem deliberately.
 
 **Evidence basis:** A1, C3, U9, L5, L11, and L12.
@@ -322,3 +331,99 @@ _None._
 **Effect:** Resolves progression legibility and confirms the hidden evolution structure as an accepted direction. Moves the interview from game behaviour to the target platform and interaction cadence for a first playable.
 
 **Register updates:** A1 accepted; U9 resolved; L13 added.
+
+### Q9 — Home of the first playable
+
+**Asked:** 2026-08-09T00:58:35+0800 (AWST)
+
+**Question:**
+
+> Where should Glassgarden’s first playable version primarily live?
+>
+> **A.** A desktop-first web game, opened for deliberate check-in sessions.
+>
+> **B.** A mobile-first web app or PWA, built around brief touch-based check-ins.
+>
+> **C.** A persistent desktop “desk toy” that can remain visible alongside other work.
+>
+> **D.** A native mobile app with notifications and an always-with-you Tamagotchi rhythm.
+>
+**What this is trying to decide:** The interaction cadence, input model, presentation constraints, and delivery target for the smallest useful game.
+
+**Evidence basis:** C1, U3, L3, L4, and L13.
+
+**Answer received:** 2026-08-09T01:02:55+0800 (AWST)
+
+**Answer:**
+
+> A. I'd like to be able to leave the game running in a tab on my laptop and jump over to it every now and then. We won't target mobile.
+
+**Interpretation:** The first playable should be a desktop-first browser game that can remain open in a background tab between deliberate visits. It does not need mobile layouts, touch-first interaction, native notifications, or mobile packaging.
+
+**Effect:** Resolves the target platform and check-in cadence, allowing the remaining interview to focus on the experience the first playable must validate.
+
+**Register updates:** C4 added; U3 resolved; U10 added; L14 added.
+
+### Interview-control amendment 2 — Question and commit format
+
+**Received:** 2026-08-09T01:02:55+0800 (AWST)
+
+**Direction:**
+
+> Btw, I just checked the interview log. Are you able to put your questions in quote blocks too? You also don't need to make a commit after each answer. We'll commit it all at the end.
+
+**Effect:** Questions and options are recorded in quote blocks. Per-answer commits stop after Q8; the remaining interview changes will be committed together when the interview ends.
+
+### Q10 — What the first playable must prove
+
+**Asked:** 2026-08-09T01:02:55+0800 (AWST)
+
+**Question:**
+
+> Which experience must the first playable prove even if everything else is cut?
+>
+> **A.** Returning to a tank that changed meaningfully according to how it was prepared.
+>
+> **B.** Recognising and becoming attached to particular procedurally generated residents.
+>
+> **C.** Discovering that ordinary care caused a hidden but understandable new trait to develop.
+>
+> **D.** Seeing a new trait or system interaction create the next recoverable problem to solve.
+>
+**What this is trying to decide:** The smallest vertical slice that validates Glassgarden’s distinct identity rather than merely producing a generic aquarium toy.
+
+**Evidence basis:** C1–C4, U10, and L2–L14.
+
+**Answer received:** 2026-08-09T01:08:44+0800 (AWST)
+
+**Answer:**
+
+> C. Players should feel like the aquarium is growing and evolving in response to their actions.
+
+**Interpretation:** The first playable does not need the full lifecycle, social system, or range of upgrades. It must demonstrate that ordinary care crosses hidden thresholds and produces a visible, contextually understandable change in the aquarium.
+
+**Effect:** Establishes the smallest validating experience and completes the direction interview. Exact mechanics and content can now be discovered in a later design phase without reopening the game’s central direction.
+
+**Register updates:** U5 and U10 resolved; L15 added; D1 and D2 added.
+
+### Interview-control amendment 3 — Discord question presentation
+
+**Received:** 2026-08-09T01:08:44+0800 (AWST)
+
+**Direction:**
+
+> Sorry, when I said to use quotes I only meant when you are recording a question in the interview log. Just use normal dot-points with option letters when posting messages to Discord.
+>
+> For example:
+>
+> ```md
+> Question 10 — What the first playable must prove
+> Which experience must the first playable prove even if everything else is cut?
+>
+> - A. Returning to a tank that changed meaningfully according to how it was prepared.
+> - B. Recognising and becoming attached to particular procedurally generated residents.
+> - C. Discovering that ordinary care caused a hidden but understandable new trait to develop.
+> - D. Seeing a new trait or system interaction create the next recoverable problem to solve.
+> ```
+
+**Effect:** Quote blocks remain a durable-log convention only. Discord questions use ordinary prose followed by lettered bullet points.
