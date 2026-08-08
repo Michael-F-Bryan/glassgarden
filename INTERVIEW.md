@@ -17,13 +17,15 @@
 
 ## Calibrated direction
 
-Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression currently appears to braid a denser, more self-sustaining tank with generations shaped by its conditions. The degree of anthropomorphism, exact progression spine, simulation depth, platform, and scope remain undecided.
+Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. They sit between expressive animals and a whimsical fish society: recognisable emotions and relationships can grow into social mechanics without becoming a full cartoon civilisation. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression currently appears to braid a denser, more self-sustaining tank with generations shaped by its conditions. An evolution tree may connect ecological growth to unlocked biological and social capabilities, but the player’s authority over evolution is undecided. The exact progression spine, simulation depth, platform, and scope also remain open.
 
 ## Registers
 
 ### Assumptions
 
-_None._
+| ID | Claim | Source | Confidence | Validation | Status |
+| --- | --- | --- | --- | --- | --- |
+| A1 | An evolution tech tree could connect progression to biological and social capabilities. | Q6 | Tentative | Michael’s judgement after clarifying player control | Open |
 
 ### Constraints
 
@@ -42,7 +44,8 @@ _None._
 | U4 | Character and attachment model | Determines whether emotional investment comes from authored characters, emergent individuals, or the aquarium community as a whole. | Michael’s judgement | Resolved: procedurally generated individuals with emergent traits, relationships, and histories |
 | U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Narrowed: denser ecosystem and generational adaptation, possibly as one loop |
 | U6 | Resident lifecycle and turnover | Determines whether generational progression requires ageing, death, departure, or abstraction, and how attachment survives turnover. | Michael’s judgement | Resolved: predictable lifespans, natural death, and consequences for surviving relatives |
-| U7 | Degree of anthropomorphism | Determines whether grief, cemeteries, relationships, and other social systems are grounded animal behaviour or an overtly whimsical society. | Michael’s judgement | Open |
+| U7 | Degree of anthropomorphism | Determines whether grief, cemeteries, relationships, and other social systems are grounded animal behaviour or an overtly whimsical society. | Michael’s judgement | Resolved: between expressive animals and a whimsical social world |
+| U8 | Player authority over evolution | Determines whether the player engineers traits directly, shapes selection pressures, or unlocks possibilities that remain emergent. | Michael’s judgement | Open |
 
 ### Learnings
 
@@ -57,6 +60,7 @@ _None._
 | L7 | Conditions during absence may shape the next generation through persistent but non-catastrophic effects such as illness risk or reduced growth. | Q4 |
 | L8 | Older residents may die naturally, with grief temporarily affecting their direct relatives. | Q5 |
 | L9 | Upgrades may address social and emotional pressures as well as physical aquarium needs; a cemetery could let relatives visit and remove the grief penalty. | Q5 |
+| L10 | Selective whimsical social behaviour should provide game mechanics without turning residents into a fully human-like civilisation. | Q6 |
 
 ### Deferred decisions
 
@@ -64,23 +68,23 @@ _None._
 
 ## Pending question
 
-### Q6 — How human the fish feel
+### Q7 — Who directs evolution
 
-**Asked:** 2026-08-09T00:42:57+0800 (AWST)
+**Asked:** 2026-08-09T00:46:24+0800 (AWST)
 
-**Question:** How anthropomorphic should Glassgarden’s residents be?
+**Question:** How much control should the player have over evolution?
 
-**A.** Mostly grounded fish behaviour; emotions and relationships are inferred from movement and habits.
+**A.** Direct control: the player chooses exact traits or behaviours for a lineage.
 
-**B.** Expressive animals with recognisable emotions and relationships, but little overtly human behaviour.
+**B.** Indirect control: the player shapes the environment, and adaptations emerge from those pressures.
 
-**C.** A whimsical fish society with rituals, grudges, celebrations, cemeteries, and other social behaviour.
+**C.** Gated emergence: the tech tree unlocks possible adaptations or social behaviours, but individuals develop them unpredictably.
 
-**D.** A full cartoon civilisation with dialogue, professions, institutions, and character-driven stories.
+**D.** Broad direction: the player steers a species towards themes such as sociability, resilience, or fertility, while individual expression remains emergent.
 
-**What this is trying to decide:** The tonal boundary for the social simulation and how literally ideas such as grief and cemetery visits should appear on screen.
+**What this is trying to decide:** Whether evolution is an optimisation menu, a consequence of care, a pool of unlocked possibilities, or a balance between player intent and surprise.
 
-**Evidence basis:** U7, L5, L8, and L9.
+**Evidence basis:** A1, U5, U8, L5, L7, and L10.
 
 **Answer:** _Pending._
 
@@ -219,3 +223,35 @@ _None._
 **Effect:** Resolves lifecycle turnover and establishes that residents’ relationships can create social pressures with dedicated upgrades. Raises the tonal question of whether these systems are lightly expressive or part of an overtly anthropomorphic society.
 
 **Register updates:** U6 resolved; U7 added; L8 and L9 added.
+
+### Q6 — How human the fish feel
+
+**Asked:** 2026-08-09T00:42:57+0800 (AWST)
+
+**Question:** How anthropomorphic should Glassgarden’s residents be?
+
+**A.** Mostly grounded fish behaviour; emotions and relationships are inferred from movement and habits.
+
+**B.** Expressive animals with recognisable emotions and relationships, but little overtly human behaviour.
+
+**C.** A whimsical fish society with rituals, grudges, celebrations, cemeteries, and other social behaviour.
+
+**D.** A full cartoon civilisation with dialogue, professions, institutions, and character-driven stories.
+
+**What this is trying to decide:** The tonal boundary for the social simulation and how literally ideas such as grief and cemetery visits should appear on screen.
+
+**Evidence basis:** U7, L5, L8, and L9.
+
+**Answer received:** 2026-08-09T00:46:24+0800 (AWST)
+
+**Answer:**
+
+> I feel like somewhere between B and C would be fun. Adding a bit of a social aspect gives you lots to work with when it comes to game mechanics.
+>
+> Maybe there's some sort of evolution tech tree where you can evolve the fish to unlock social behaviours, or increased reproduction rates, or whatever?
+
+**Interpretation:** Residents should remain recognisably animal-like while supporting selective, overtly whimsical social systems. Social behaviour is not merely decoration; it should create useful mechanical interactions. An evolution tree is a tentative way to turn biological and social development into progression, but the degree of direct player control remains unresolved.
+
+**Effect:** Resolves the tonal range, records the evolution tree as an open candidate rather than a settled feature, and moves the interview to player authority over emergent adaptation.
+
+**Register updates:** A1 added; U7 resolved; U8 added; L10 added.
