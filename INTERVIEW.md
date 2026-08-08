@@ -8,6 +8,7 @@
 - **Purpose:** Establish the game’s central fantasy, core loop, boundaries, and validation target before any specification or implementation.
 - **Decision horizon:** Decide what kind of aquarium idle game Glassgarden should become.
 - **Authorised output:** This durable interview record only. No game specification, plan, or implementation is authorised yet.
+- **Question format:** Bounded options are labelled A, B, C, and D so Michael can refer to them directly.
 
 ## Source basis
 
@@ -16,7 +17,7 @@
 
 ## Calibrated direction
 
-Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish. Growth should introduce natural pressures—such as a larger population increasing cleaning demand—and give the player better ways to sustain greater complexity. The main progression spine, simulation depth, tone, platform, and scope remain undecided.
+Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression currently appears to braid a denser, more self-sustaining tank with generations shaped by its conditions. Resident lifecycle, the exact progression spine, simulation depth, tone, platform, and scope remain undecided.
 
 ## Registers
 
@@ -39,7 +40,8 @@ _None._
 | U2 | Offline ecosystem behaviour and consequences | Determines whether idling feels like trust in a living system, harmless passive growth, or exposure to neglect and loss. | Michael’s judgement | Resolved: preparation-driven autonomous change with recoverable deterioration |
 | U3 | Target platform and presentation | Determines controls, session length, technology, and asset needs. | Later interview question | Open |
 | U4 | Character and attachment model | Determines whether emotional investment comes from authored characters, emergent individuals, or the aquarium community as a whole. | Michael’s judgement | Resolved: procedurally generated individuals with emergent traits, relationships, and histories |
-| U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Open |
+| U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Narrowed: denser ecosystem and generational adaptation, possibly as one loop |
+| U6 | Resident lifecycle and turnover | Determines whether generational progression requires ageing, death, departure, or abstraction, and how attachment survives turnover. | Michael’s judgement | Open |
 
 ### Learnings
 
@@ -51,6 +53,7 @@ _None._
 | L4 | Frequent check-ins and emotional attachment to the game’s characters are part of the intended Tamagotchi-like experience. | Q2 |
 | L5 | Emotional attachment should arise from procedurally generated individuals whose traits, relationships, and histories emerge through play. | Q3 |
 | L6 | Progression should increase ecological complexity and naturally create new maintenance pressures that motivate better solutions. | Q3 |
+| L7 | Conditions during absence may shape the next generation through persistent but non-catastrophic effects such as illness risk or reduced growth. | Q4 |
 
 ### Deferred decisions
 
@@ -58,15 +61,23 @@ _None._
 
 ## Pending question
 
-### Q4 — The spine of progression
+### Q5 — Generations and attachment
 
-**Asked:** 2026-08-09T00:31:21+0800 (AWST)
+**Asked:** 2026-08-09T00:38:54+0800 (AWST)
 
-**Question:** When a player looks back after their first week, which change should most clearly prove they have progressed: one tank has become denser and more self-sustaining; they have expanded into larger or multiple specialised habitats; generations of residents have developed lineages and adaptations; or better equipment lets them support complexity that was previously unmanageable? These can reinforce one another, but which is the spine?
+**Question:** If generations and individual attachment both matter, what should eventually happen to older residents?
 
-**What this is trying to decide:** The primary growth axis that should organise unlocks, escalating pressures, and the player’s sense of advancement.
+**A.** They never die from age; generations accumulate until the player moves or manages them.
 
-**Evidence basis:** C1, U5, L2, L5, and L6.
+**B.** They have predictable lifespans and eventually die, with enough warning and history to make that meaningful rather than punitive.
+
+**C.** They eventually leave or retire from the active tank instead of dying.
+
+**D.** Generations are partly abstracted, so offspring and adaptations appear without simulating every resident’s full lifecycle.
+
+**What this is trying to decide:** The lifecycle contract needed to support new generations without undermining emotional attachment or filling the tank forever.
+
+**Evidence basis:** C2, U5, U6, L4, L5, and L7.
 
 **Answer:** _Pending._
 
@@ -143,3 +154,35 @@ _None._
 **Effect:** Resolves the attachment model and rejects a mostly static cast. Adds progression as an explicit design frontier, with ecological pressure and player capability expected to grow together.
 
 **Register updates:** U4 resolved; U5 added; L5 and L6 added.
+
+### Q4 — The spine of progression
+
+**Asked:** 2026-08-09T00:31:21+0800 (AWST)
+
+**Question:** When a player looks back after their first week, which change should most clearly prove they have progressed: one tank has become denser and more self-sustaining; they have expanded into larger or multiple specialised habitats; generations of residents have developed lineages and adaptations; or better equipment lets them support complexity that was previously unmanageable? These can reinforce one another, but which is the spine?
+
+**What this is trying to decide:** The primary growth axis that should organise unlocks, escalating pressures, and the player’s sense of advancement.
+
+**Evidence basis:** C1, U5, L2, L5, and L6.
+
+**Answer received:** 2026-08-09T00:38:54+0800 (AWST)
+
+**Answer:**
+
+> I'm not sure. I'd say maybe A or C? It'd be cool to come back and see a bunch of new babies have spawned, maybe some of those babies have developed adaptations due to a problem that occurred while you were away (e.g. leaving the game for a while when you don't have a good cleaning system in place means the newer generation are more likely to get sick, which means they won't grow as big).
+
+**Interpretation:** The choice between ecosystem density and generational change may be false: reproduction grows the tank, while environmental conditions shape the offspring and preserve a history of the player’s care. The exact primary progression spine remains uncertain. Consequences may persist as health or growth differences without becoming catastrophic loss.
+
+**Effect:** Narrows progression to a likely feedback loop between tank conditions, reproduction, and inherited or developmental variation. Exposes resident lifecycle and population turnover as the next material decision.
+
+**Register updates:** U5 narrowed; U6 added; L7 added.
+
+### Interview-control amendment 1 — Option labels
+
+**Received:** 2026-08-09T00:38:54+0800 (AWST)
+
+**Direction:**
+
+> Btw, can you use option letters instead of blank dot-points? It makes it easier to refer to an individual option.
+
+**Effect:** All subsequent bounded options use A, B, C, and D labels.
