@@ -17,7 +17,7 @@
 
 ## Calibrated direction
 
-Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. They sit between expressive animals and a whimsical fish society: recognisable emotions and relationships can grow into social mechanics without becoming a full cartoon civilisation. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression currently appears to braid a denser, more self-sustaining tank with generations shaped by its conditions. An evolution tree may connect ecological growth to unlocked biological and social capabilities, but the player’s authority over evolution is undecided. The exact progression spine, simulation depth, platform, and scope also remain open.
+Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. They sit between expressive animals and a whimsical fish society: recognisable emotions and relationships can grow into social mechanics without becoming a full cartoon civilisation. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression is driven by hidden thresholds responding to repeated care, environmental conditions, ornaments, and upgrades rather than a visible level or tech tree. New traits unlock capabilities and delayed liabilities: repeated petting might produce emotion, whose downside only becomes apparent after the first bereavement. The exact progression spine, the legibility of hidden causes, simulation depth, platform, and scope remain open.
 
 ## Registers
 
@@ -25,7 +25,7 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 
 | ID | Claim | Source | Confidence | Validation | Status |
 | --- | --- | --- | --- | --- | --- |
-| A1 | An evolution tech tree could connect progression to biological and social capabilities. | Q6 | Tentative | Michael’s judgement after clarifying player control | Open |
+| A1 | A hidden evolution structure could connect progression to biological and social capabilities without exposing a conventional tech tree. | Q6–Q7 | Moderate | Michael’s judgement after clarifying progression legibility | Narrowed |
 
 ### Constraints
 
@@ -33,6 +33,7 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | --- | --- | --- | --- |
 | C1 | The direction must retain an aquarium simulation and idle-game structure. | Michael’s initial direction | Concepts outside either boundary are out of scope unless Michael amends the premise. |
 | C2 | Deterioration during absence must not end in a tank full of dead fish. | Q2 | Offline consequences need a recoverable floor; the game cannot punish absence with catastrophic loss. |
+| C3 | Progression should feel like a natural response to care and tank changes rather than explicit levelling. | Q7 | Player-facing levels or a conventional visible tech tree would undermine the intended emergence. |
 
 ### Unknowns
 
@@ -45,7 +46,8 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Narrowed: denser ecosystem and generational adaptation, possibly as one loop |
 | U6 | Resident lifecycle and turnover | Determines whether generational progression requires ageing, death, departure, or abstraction, and how attachment survives turnover. | Michael’s judgement | Resolved: predictable lifespans, natural death, and consequences for surviving relatives |
 | U7 | Degree of anthropomorphism | Determines whether grief, cemeteries, relationships, and other social systems are grounded animal behaviour or an overtly whimsical society. | Michael’s judgement | Resolved: between expressive animals and a whimsical social world |
-| U8 | Player authority over evolution | Determines whether the player engineers traits directly, shapes selection pressures, or unlocks possibilities that remain emergent. | Michael’s judgement | Open |
+| U8 | Player authority over evolution | Determines whether the player engineers traits directly, shapes selection pressures, or unlocks possibilities that remain emergent. | Michael’s judgement | Resolved: indirect influence through care, environment, ornaments, and tank upgrades |
+| U9 | Legibility of hidden progression | Determines whether emergent traits feel discoverable and attributable or arbitrary and unfair. | Michael’s judgement | Open |
 
 ### Learnings
 
@@ -61,6 +63,8 @@ Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem a
 | L8 | Older residents may die naturally, with grief temporarily affecting their direct relatives. | Q5 |
 | L9 | Upgrades may address social and emotional pressures as well as physical aquarium needs; a cemetery could let relatives visit and remove the grief penalty. | Q5 |
 | L10 | Selective whimsical social behaviour should provide game mechanics without turning residents into a fully human-like civilisation. | Q6 |
+| L11 | Repeated player actions and environmental choices should cross hidden thresholds that cause natural-looking development rather than visible levelling. | Q7 |
+| L12 | A newly developed capability may reveal a downside only when a later event exercises it, creating the next pressure through play. | Q7 |
 
 ### Deferred decisions
 
@@ -68,23 +72,23 @@ _None._
 
 ## Pending question
 
-### Q7 — Who directs evolution
+### Q8 — Explaining hidden development
 
-**Asked:** 2026-08-09T00:46:24+0800 (AWST)
+**Asked:** 2026-08-09T00:54:29+0800 (AWST)
 
-**Question:** How much control should the player have over evolution?
+**Question:** Once a hidden trait appears, how much should the game explain about why it developed?
 
-**A.** Direct control: the player chooses exact traits or behaviours for a lineage.
+**A.** Nothing explicit; the player infers causes entirely by watching and experimenting.
 
-**B.** Indirect control: the player shapes the environment, and adaptations emerge from those pressures.
+**B.** A chronicle says what changed and when, but leaves the cause for the player to infer.
 
-**C.** Gated emergence: the tech tree unlocks possible adaptations or social behaviours, but individuals develop them unpredictably.
+**C.** Contextual clues connect the development to likely causes—such as frequent affection—without exposing thresholds or formulas.
 
-**D.** Broad direction: the player steers a species towards themes such as sociability, resilience, or fertility, while individual expression remains emergent.
+**D.** After discovery, the player can inspect the exact triggers and mechanics even though undiscovered developments remain hidden.
 
-**What this is trying to decide:** Whether evolution is an optimisation menu, a consequence of care, a pool of unlocked possibilities, or a balance between player intent and surprise.
+**What this is trying to decide:** How Glassgarden preserves surprise while giving the player enough causal information to care for the ecosystem deliberately.
 
-**Evidence basis:** A1, U5, U8, L5, L7, and L10.
+**Evidence basis:** A1, C3, U9, L5, L11, and L12.
 
 **Answer:** _Pending._
 
@@ -255,3 +259,35 @@ _None._
 **Effect:** Resolves the tonal range, records the evolution tree as an open candidate rather than a settled feature, and moves the interview to player authority over emergent adaptation.
 
 **Register updates:** A1 added; U7 resolved; U8 added; L10 added.
+
+### Q7 — Who directs evolution
+
+**Asked:** 2026-08-09T00:46:24+0800 (AWST)
+
+**Question:** How much control should the player have over evolution?
+
+**A.** Direct control: the player chooses exact traits or behaviours for a lineage.
+
+**B.** Indirect control: the player shapes the environment, and adaptations emerge from those pressures.
+
+**C.** Gated emergence: the tech tree unlocks possible adaptations or social behaviours, but individuals develop them unpredictably.
+
+**D.** Broad direction: the player steers a species towards themes such as sociability, resilience, or fertility, while individual expression remains emergent.
+
+**What this is trying to decide:** Whether evolution is an optimisation menu, a consequence of care, a pool of unlocked possibilities, or a balance between player intent and surprise.
+
+**Evidence basis:** A1, U5, U8, L5, L7, and L10.
+
+**Answer received:** 2026-08-09T00:54:29+0800 (AWST)
+
+**Answer:**
+
+> B. I feel like it's pretty common for games to have an explicit tech tree, so maybe we could have some sort of "hidden" tech tree that drives progression, but the player never actually sees. That way the game feels like things are developing naturally in response to the player's actions (how they care for the fish, buy ornaments or tank upgrades, etc.), rather than feeling like you need to "level up".
+>
+> For example, the player might be able to "pet" a fish to give them a temporary morale boost, then after petting 20 fish they start developing a basic "emotion" trait. Then it's not until later and your first old fish dies that you realise the "emotion" can also have negative effects, which gives you a pressure to address those effects.
+
+**Interpretation:** The player should influence development indirectly through ordinary care and environmental choices. A hidden progression structure can make those actions accumulate into new traits without exposing levels or unlock menus. Traits should create new possibilities and latent costs, with later events revealing consequences the player could not fully optimise in advance.
+
+**Effect:** Resolves evolution authority, rejects conventional player-facing levelling, and establishes hidden action-driven thresholds as the preferred progression model. Raises legibility as the next decision: the system must feel emergent without becoming arbitrary.
+
+**Register updates:** A1 narrowed; C3 added; U8 resolved; U9 added; L11 and L12 added.
