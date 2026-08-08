@@ -17,7 +17,7 @@
 
 ## Calibrated direction
 
-Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression currently appears to braid a denser, more self-sustaining tank with generations shaped by its conditions. Resident lifecycle, the exact progression spine, simulation depth, tone, platform, and scope remain undecided.
+Glassgarden is an aquarium idle game centred on nurturing a thriving ecosystem and forming emotional attachments to procedurally generated residents. Their traits, relationships, and histories emerge through play, with interacting systems creating surprising behaviour. Residents have predictable lifespans and may die naturally; relatives grieve, and later upgrades such as a cemetery can transform that social pressure into remembrance. The ecosystem continues autonomously between frequent check-ins, improving or deteriorating according to the player’s preparation. Problems should remain recoverable rather than allowing absence to produce a tank full of dead fish, but may leave visible effects on a new generation’s health or growth. Progression currently appears to braid a denser, more self-sustaining tank with generations shaped by its conditions. The degree of anthropomorphism, exact progression spine, simulation depth, platform, and scope remain undecided.
 
 ## Registers
 
@@ -41,7 +41,8 @@ _None._
 | U3 | Target platform and presentation | Determines controls, session length, technology, and asset needs. | Later interview question | Open |
 | U4 | Character and attachment model | Determines whether emotional investment comes from authored characters, emergent individuals, or the aquarium community as a whole. | Michael’s judgement | Resolved: procedurally generated individuals with emergent traits, relationships, and histories |
 | U5 | Main progression spine | Determines what visibly grows, how new pressures emerge, and what upgrades enable. | Michael’s judgement | Narrowed: denser ecosystem and generational adaptation, possibly as one loop |
-| U6 | Resident lifecycle and turnover | Determines whether generational progression requires ageing, death, departure, or abstraction, and how attachment survives turnover. | Michael’s judgement | Open |
+| U6 | Resident lifecycle and turnover | Determines whether generational progression requires ageing, death, departure, or abstraction, and how attachment survives turnover. | Michael’s judgement | Resolved: predictable lifespans, natural death, and consequences for surviving relatives |
+| U7 | Degree of anthropomorphism | Determines whether grief, cemeteries, relationships, and other social systems are grounded animal behaviour or an overtly whimsical society. | Michael’s judgement | Open |
 
 ### Learnings
 
@@ -54,6 +55,8 @@ _None._
 | L5 | Emotional attachment should arise from procedurally generated individuals whose traits, relationships, and histories emerge through play. | Q3 |
 | L6 | Progression should increase ecological complexity and naturally create new maintenance pressures that motivate better solutions. | Q3 |
 | L7 | Conditions during absence may shape the next generation through persistent but non-catastrophic effects such as illness risk or reduced growth. | Q4 |
+| L8 | Older residents may die naturally, with grief temporarily affecting their direct relatives. | Q5 |
+| L9 | Upgrades may address social and emotional pressures as well as physical aquarium needs; a cemetery could let relatives visit and remove the grief penalty. | Q5 |
 
 ### Deferred decisions
 
@@ -61,23 +64,23 @@ _None._
 
 ## Pending question
 
-### Q5 — Generations and attachment
+### Q6 — How human the fish feel
 
-**Asked:** 2026-08-09T00:38:54+0800 (AWST)
+**Asked:** 2026-08-09T00:42:57+0800 (AWST)
 
-**Question:** If generations and individual attachment both matter, what should eventually happen to older residents?
+**Question:** How anthropomorphic should Glassgarden’s residents be?
 
-**A.** They never die from age; generations accumulate until the player moves or manages them.
+**A.** Mostly grounded fish behaviour; emotions and relationships are inferred from movement and habits.
 
-**B.** They have predictable lifespans and eventually die, with enough warning and history to make that meaningful rather than punitive.
+**B.** Expressive animals with recognisable emotions and relationships, but little overtly human behaviour.
 
-**C.** They eventually leave or retire from the active tank instead of dying.
+**C.** A whimsical fish society with rituals, grudges, celebrations, cemeteries, and other social behaviour.
 
-**D.** Generations are partly abstracted, so offspring and adaptations appear without simulating every resident’s full lifecycle.
+**D.** A full cartoon civilisation with dialogue, professions, institutions, and character-driven stories.
 
-**What this is trying to decide:** The lifecycle contract needed to support new generations without undermining emotional attachment or filling the tank forever.
+**What this is trying to decide:** The tonal boundary for the social simulation and how literally ideas such as grief and cemetery visits should appear on screen.
 
-**Evidence basis:** C2, U5, U6, L4, L5, and L7.
+**Evidence basis:** U7, L5, L8, and L9.
 
 **Answer:** _Pending._
 
@@ -186,3 +189,33 @@ _None._
 > Btw, can you use option letters instead of blank dot-points? It makes it easier to refer to an individual option.
 
 **Effect:** All subsequent bounded options use A, B, C, and D labels.
+
+### Q5 — Generations and attachment
+
+**Asked:** 2026-08-09T00:38:54+0800 (AWST)
+
+**Question:** If generations and individual attachment both matter, what should eventually happen to older residents?
+
+**A.** They never die from age; generations accumulate until the player moves or manages them.
+
+**B.** They have predictable lifespans and eventually die, with enough warning and history to make that meaningful rather than punitive.
+
+**C.** They eventually leave or retire from the active tank instead of dying.
+
+**D.** Generations are partly abstracted, so offspring and adaptations appear without simulating every resident’s full lifecycle.
+
+**What this is trying to decide:** The lifecycle contract needed to support new generations without undermining emotional attachment or filling the tank forever.
+
+**Evidence basis:** C2, U5, U6, L4, L5, and L7.
+
+**Answer received:** 2026-08-09T00:42:57+0800 (AWST)
+
+**Answer:**
+
+> B. It's okay for older fish to die. Maybe there's some sort of "grief" system which makes the direct relatives sad for a little while afterwards, and an upgrade could be to buy a cemetery so fish can visit their dead relatives (which then removes the morale penalty).
+
+**Interpretation:** Natural death is acceptable when it is part of a legible lifecycle rather than a surprise punishment. Kinship persists after death through temporary grief, and progression can provide a place-based response that turns loss into remembrance while relieving its mechanical cost.
+
+**Effect:** Resolves lifecycle turnover and establishes that residents’ relationships can create social pressures with dedicated upgrades. Raises the tonal question of whether these systems are lightly expressive or part of an overtly anthropomorphic society.
+
+**Register updates:** U6 resolved; U7 added; L8 and L9 added.
