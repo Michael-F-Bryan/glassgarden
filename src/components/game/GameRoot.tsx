@@ -33,6 +33,15 @@ type HudSnapshot = {
   gameOver: boolean
   waterQuality: WaterTier
   shopItems: ShopItem[]
+  residents: {
+    id: number
+    name: string
+    hue: number
+    saturation: number
+    weightGrams: number
+    mood: string
+    moodEmoji: string
+  }[]
   selectedFish?: {
     id: number
     name: string
@@ -57,6 +66,7 @@ const EMPTY_HUD: HudSnapshot = {
   gameOver: false,
   waterQuality: 'clear',
   shopItems: [],
+  residents: [],
 }
 
 function describeMood(fish: Fish): string {
@@ -67,6 +77,17 @@ function describeMood(fish: Fish): string {
   if (fish.hunger > 0.5) return 'peckish'
   if (fish.activity.kind === 'court') return 'smitten'
   return 'content'
+}
+
+function moodEmoji(fish: Fish): string {
+  if (fish.sickness >= 0.75) return '🤢'
+  if (fish.sickness > 0.4) return '🤒'
+  if (fish.hunger >= 0.999) return '😫'
+  if (fish.hunger > 0.85) return '😟'
+  if (fish.hunger > 0.5) return '😐'
+  if (fish.activity.kind === 'court') return '🥰'
+  if (fish.activity.kind === 'distress') return '😰'
+  return '😊'
 }
 
 function describeStage(fish: Fish): string {
@@ -112,13 +133,13 @@ function formatAway(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)} hours`
 }
 
-function buildHudSnapshot(
+export function buildHudSnapshot(
   sim: GameSim,
   selectedFishId: number | undefined,
   previousWater: WaterTier,
 ): HudSnapshot {
   const state = sim.state
-  const fishEntities = [...state.world.with('fish')]
+  const fishEntities = [...state.world.with('fish')].sort((a, b) => a.id - b.id)
   const selected = selectedFishId !== undefined ? state.byId.get(selectedFishId) : undefined
   return {
     coins: Math.floor(state.coins),
@@ -136,6 +157,15 @@ function buildHudSnapshot(
     gameOver: state.gameOver,
     waterQuality: describeWater(sim.worstPollution(), previousWater),
     shopItems: sim.shopItems(),
+    residents: fishEntities.map((entity) => ({
+      id: entity.id,
+      name: entity.fish.name,
+      hue: entity.fish.genome.hue,
+      saturation: entity.fish.genome.saturation,
+      weightGrams: entity.fish.weight,
+      mood: describeMood(entity.fish),
+      moodEmoji: moodEmoji(entity.fish),
+    })),
     selectedFish: selected?.fish
       ? {
           id: selected.id,
@@ -382,6 +412,11 @@ export default function GameRoot() {
 
   const closeInspector = () => {
     selectedFishRef.current = undefined
+    refreshHudRef.current()
+  }
+
+  const selectFish = (fishId: number) => {
+    selectedFishRef.current = fishId
     refreshHudRef.current()
   }
 
@@ -654,7 +689,7 @@ export default function GameRoot() {
         )}
       </div>
       <aside
-        className="min-h-56 rounded-2xl border border-cyan-100/15 bg-slate-950/80 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] lg:min-h-0"
+        className="flex min-h-56 flex-col rounded-2xl border border-cyan-100/15 bg-slate-950/80 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] lg:min-h-0"
         data-testid="shop-panel"
         data-ui-anchor="right-sidebar"
       >
@@ -690,6 +725,60 @@ export default function GameRoot() {
             ))}
           </ul>
         )}
+        <section
+          className="mt-auto border-t border-cyan-100/10 pt-4"
+          data-testid="fish-roster"
+          data-ui-section="shop-footer"
+        >
+          <div className="mb-2 flex items-baseline justify-between">
+            <h3 className="text-xs font-semibold tracking-wide text-cyan-100 uppercase">Residents</h3>
+            <span className="text-[0.65rem] text-slate-500 tabular-nums">
+              {hud.residents.length}/{TUNING.maxPopulation}
+            </span>
+          </div>
+          {hud.residents.length === 0 ? (
+            <p className="text-xs text-slate-500">The tank has no residents.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {hud.residents.map((resident) => (
+                <button
+                  key={resident.id}
+                  type="button"
+                  onClick={() => selectFish(resident.id)}
+                  aria-label={`${resident.name}, ${resident.weightGrams.toFixed(1)} grams, ${resident.mood}`}
+                  aria-pressed={hud.selectedFish?.id === resident.id}
+                  data-testid={`resident-${resident.id}`}
+                  className="group min-w-0 rounded-xl border border-white/10 bg-slate-950/60 p-2 text-left transition hover:border-cyan-200/25 hover:bg-slate-900/80 aria-pressed:border-cyan-300/40 aria-pressed:bg-cyan-950/50"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <svg
+                      viewBox="0 0 48 28"
+                      className="h-7 w-11 shrink-0 drop-shadow-sm"
+                      style={{
+                        color: `hsl(${resident.hue}, ${resident.saturation * 100}%, 58%)`,
+                      }}
+                      aria-hidden="true"
+                    >
+                      <path d="M14 14 2 4v20Z" fill="currentColor" opacity="0.72" />
+                      <ellipse cx="29" cy="14" rx="16" ry="10" fill="currentColor" />
+                      <circle cx="36" cy="11" r="2.2" fill="#e8f4f6" />
+                      <circle cx="36.7" cy="11" r="1" fill="#1c2733" />
+                    </svg>
+                    <span className="min-w-0 truncate text-xs font-medium text-slate-100">
+                      {resident.name}
+                    </span>
+                    <span className="ml-auto text-base leading-none" aria-hidden="true">
+                      {resident.moodEmoji}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[0.65rem] text-slate-400 tabular-nums">
+                    {resident.weightGrams.toFixed(1)} g
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
       </aside>
       </div>
     </main>

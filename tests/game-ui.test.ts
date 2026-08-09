@@ -2,7 +2,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, test } from 'vitest'
 
-import GameRoot from '@/components/game/GameRoot'
+import GameRoot, { buildHudSnapshot } from '@/components/game/GameRoot'
+import { GameSim } from '@/game/sim'
 
 function renderGame(): string {
   return renderToStaticMarkup(createElement(GameRoot))
@@ -25,5 +26,28 @@ describe('game UI layout', () => {
     expect(html).toContain('data-ui-anchor="top-left"')
     expect(html).toContain('data-testid="toast-stack"')
     expect(html).toContain('data-ui-anchor="bottom-left"')
+  })
+
+  test('fish roster is permanently present at the bottom of the shop', () => {
+    const html = renderGame()
+
+    expect(html).toContain('data-testid="fish-roster"')
+    expect(html).toContain('data-ui-section="shop-footer"')
+    expect(html).toContain('Residents')
+  })
+
+  test('fish roster summarises weight and mood with an emoji', () => {
+    const sim = GameSim.fresh(123)
+    const fish = [...sim.state.world.with('fish')][0].fish
+    fish.hunger = 0.9
+
+    const resident = buildHudSnapshot(sim, undefined, 'clear').residents[0]
+
+    expect(resident).toMatchObject({
+      name: fish.name,
+      weightGrams: fish.weight,
+      mood: 'very hungry',
+      moodEmoji: '😟',
+    })
   })
 })
