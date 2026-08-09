@@ -86,14 +86,14 @@ describe('game UI layout', () => {
     expect(resident.moodEmoji).toBe('😖')
   })
 
-  test('hud exposes worst pollution for the water-quality meter', () => {
+  test('hud exposes overall murk for the water-quality meter', () => {
     const state = createFreshGame(123)
     const sim = new GameSim(state)
-    expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBe(0)
+    expect(buildHudSnapshot(sim, undefined, 'clear').murkiness).toBe(0)
 
     state.water.cells.fill(0.4)
 
-    expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBeCloseTo(0.4)
+    expect(buildHudSnapshot(sim, undefined, 'clear').murkiness).toBeCloseTo(0.4)
   })
 
   test('journal entries reach the HUD newest-first with readable ages', () => {

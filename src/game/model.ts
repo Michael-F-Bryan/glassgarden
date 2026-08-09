@@ -235,19 +235,6 @@ export function createCareHistory(): CareHistory {
   return { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0 }
 }
 
-/** @deprecated Legacy V1 save shape only; the runtime uses DevelopmentId. */
-export type Unlocks = {
-  /** The player has dropped food at least once; gates the first-feed hint. */
-  fedOnce: boolean
-  /** Development milestones already announced, so each toast fires once. */
-  noticedGrowth: boolean
-  noticedPollution: boolean
-  siphonInShop: boolean
-  fishInShop: boolean
-  feederInShop: boolean
-  seenEgg: boolean
-}
-
 export const TUNING = {
   startingCoins: 30,
   pelletCost: 1,

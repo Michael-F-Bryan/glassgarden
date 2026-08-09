@@ -34,6 +34,11 @@ describe('development scenarios', () => {
     expect(dirty.waste.length).toBeGreaterThanOrEqual(3)
     expect(dirty.water.worstPollution).toBeGreaterThan(0.3)
 
+    const growing = createDevSnapshot(createDevScenario('growing-tank', 91))
+    expect(growing.fish.length).toBeGreaterThanOrEqual(6)
+    expect(growing.equipment).toMatchObject({ siphon: true, feeder: 'drip' })
+    expect(growing.developments).toContain('dripFeederOffered')
+
     const starving = createDevSnapshot(createDevScenario('starving-rescuable', 91))
     expect(starving.fish).toHaveLength(1)
     expect(starving.fish[0]).toMatchObject({ hunger: 1, health: 0.4 })

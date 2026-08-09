@@ -216,6 +216,18 @@ describe('hidden feeder developments', () => {
     expect(state.developments.has('rotaryFeederOffered')).toBe(true)
   })
 
+  test('buying equipment the shop is not offering is refused as unavailable', () => {
+    const { state, sim } = stockedTank({ seed: 724, residents: 2, feeder: 'none' })
+    state.coins = 100_000
+
+    // Staged equipment makes this a real path: the rotary feeder exists as an
+    // id long before the tank has earned it.
+    expect(sim.buy('rotaryFeeder')).toMatchObject({ ok: false, reason: 'unavailable' })
+    expect(sim.buy('spongeFilter')).toMatchObject({ ok: false, reason: 'unavailable' })
+    expect(state.equipment.feeder).toBe('none')
+    expect(state.equipment.filter).toBe('none')
+  })
+
   test('only the next feeder stage is ever offered', () => {
     const { state, sim } = stockedTank({ seed: 723, residents: 4, feeder: 'drip' })
     state.developments.add('twinHopperOffered')

@@ -129,8 +129,17 @@ export default function GameRoot() {
 
   const closeInspector = () => runtimeRef.current?.selectFish(undefined)
 
+  /** Only one overlay at a time — opening any closes the rest, so the
+   * topmost-wins Escape rule always has a single topmost. */
+  const openOnly = (overlay: 'journal' | 'help' | 'none') => {
+    setJournalOpen(overlay === 'journal')
+    setHelpOpen(overlay === 'help')
+    if (overlay !== 'none') runtimeRef.current?.selectFish(undefined)
+  }
+
   const selectFish = (fishId: number) => {
     setJournalOpen(false)
+    setHelpOpen(false)
     runtimeRef.current?.selectFish(fishId)
   }
 
@@ -212,7 +221,10 @@ export default function GameRoot() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  })
+    // Re-bound when the active overlay changes, so Escape always closes the
+    // one actually on top.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeOverlay])
 
   /** Keyboard control of the tank itself, mirroring the pointer intents. */
   const onCanvasKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
@@ -231,10 +243,18 @@ export default function GameRoot() {
       runtime.moveCaret(move[0], move[1])
       return
     }
-    if (event.key === 'Tab') {
-      // Cycle residents inside the tank; the canvas keeps focus.
+    // Tab is deliberately NOT captured: it must keep moving focus out of the
+    // tank, or a keyboard player who lands here can never reach the tools,
+    // the shop, or the menu again. Stepping between residents gets its own
+    // keys instead.
+    if (event.key === 'n' || event.key === 'N') {
       event.preventDefault()
-      runtime.nextResident(event.shiftKey ? -1 : 1)
+      runtime.nextResident(1)
+      return
+    }
+    if (event.key === 'p' || event.key === 'P') {
+      event.preventDefault()
+      runtime.nextResident(-1)
       return
     }
     if (event.key === 'Enter' || event.key === ' ') {
@@ -245,12 +265,20 @@ export default function GameRoot() {
     if (event.key === 'i' || event.key === 'I') {
       event.preventDefault()
       runtime.inspectAtCaret()
+      return
+    }
+    // A second way out, for anyone who does not think to press Tab.
+    if (event.key === 'Escape' && !activeOverlay) {
+      event.currentTarget.blur()
     }
   }
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,_#12303e,_#0a1a24_65%)] p-4 text-slate-100">
-      <div className="flex w-full max-w-[min(1720px,calc((100svh-7rem)*16/9+21rem))] items-end justify-between px-1">
+      <div
+        inert={modalOpen || undefined}
+        className="flex w-full max-w-[min(1720px,calc((100svh-7rem)*16/9+21rem))] items-end justify-between px-1"
+      >
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-cyan-100">Glassgarden</h1>
           <p className="text-xs text-cyan-300/70">a quiet aquarium that grows around your care</p>
@@ -292,12 +320,18 @@ export default function GameRoot() {
           onPointerUp={onCanvasPointerUp}
           onPointerCancel={onCanvasPointerUp}
           onKeyDown={onCanvasKeyDown}
-          onFocus={() => runtimeRef.current?.showCaret()}
+          onFocus={(event) => {
+            // Only a keyboard arrival should arm the caret; a click sets its
+            // own aim and :focus-visible is exactly that distinction.
+            if (event.currentTarget.matches(':focus-visible')) {
+              runtimeRef.current?.showCaret()
+            }
+          }}
           onBlur={() => runtimeRef.current?.hideCaret()}
           tabIndex={modalOpen ? -1 : 0}
           inert={modalOpen || undefined}
           role="application"
-          aria-label="The tank. Arrow keys aim, Enter uses the selected tool, Tab moves between fish, I inspects the fish under the target."
+          aria-label="The tank. Arrow keys aim, Enter uses the selected tool, N and P step between fish, I inspects the fish under the target, Tab leaves the tank."
           aria-describedby="tank-caret-status"
           data-testid="tank-canvas"
         />
@@ -407,7 +441,7 @@ export default function GameRoot() {
                         ? 'bg-amber-400/90'
                         : 'bg-red-400/90'
                 }`}
-                style={{ width: `${Math.round(hud.worstPollution * 100)}%` }}
+                style={{ width: `${Math.round(hud.murkiness * 100)}%` }}
               />
             </span>
           </span>
@@ -425,10 +459,7 @@ export default function GameRoot() {
             data-testid="journal-toggle"
             aria-label="Tank Journal"
             aria-expanded={journalOpen}
-            onClick={() => {
-              setJournalOpen((open) => !open)
-              setHelpOpen(false)
-            }}
+            onClick={() => openOnly(journalOpen ? 'none' : 'journal')}
             className="rounded-full border border-white/10 bg-slate-900/60 px-2.5 py-1 text-slate-300 hover:bg-slate-800/60"
           >
             📖
@@ -438,10 +469,7 @@ export default function GameRoot() {
             data-testid="help-toggle"
             aria-label="How to play"
             aria-expanded={helpOpen}
-            onClick={() => {
-              setHelpOpen((open) => !open)
-              setJournalOpen(false)
-            }}
+            onClick={() => openOnly(helpOpen ? 'none' : 'help')}
             className="rounded-full border border-white/10 bg-slate-900/60 px-2.5 py-1 text-slate-300 hover:bg-slate-800/60"
           >
             ?

@@ -129,7 +129,7 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
     waste: [...state.world.with('waste')].sort((a, b) => a.id - b.id).map(position),
     eggs: [...state.world.with('egg')].sort((a, b) => a.id - b.id).map(position),
     water: {
-      worstPollution: Math.max(...cells),
+      worstPollution: sim.worstPollution(),
       meanPollution,
     },
     shop: sim.shopOffers().map((offer) => ({ ...offer })),

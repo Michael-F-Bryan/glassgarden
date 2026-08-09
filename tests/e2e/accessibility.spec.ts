@@ -60,7 +60,7 @@ test('a keyboard player can move between residents and inspect one', async ({ pa
   await startScenario(page, 'fresh', 503)
   await page.getByTestId('tank-canvas').focus()
 
-  await page.keyboard.press('Tab') // jump the caret to the first resident
+  await page.keyboard.press('n') // step the caret to the first resident
   await expect(page.locator('#tank-caret-status')).toContainText('Target over')
 
   await page.keyboard.press('i')
@@ -129,8 +129,9 @@ test('icon-only controls carry accessible names', async ({ page }) => {
 
   await expect(page.getByRole('button', { name: 'Tank Journal' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'How to play' })).toBeVisible()
-  // The tank itself explains its own keyboard controls.
+  // The tank itself explains its own keyboard controls, including the way out.
   await expect(page.getByTestId('tank-canvas')).toHaveAttribute('aria-label', /Arrow keys aim/)
+  await expect(page.getByTestId('tank-canvas')).toHaveAttribute('aria-label', /Tab leaves the tank/)
 })
 
 test('the away summary is announced as a labelled dialog and dismissed by Escape', async ({
@@ -143,4 +144,67 @@ test('the away summary is announced as a labelled dialog and dismissed by Escape
   await expect(away).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(away).not.toBeVisible()
+})
+
+test('the tank never traps the keyboard: Tab still leaves it', async ({ page }) => {
+  await startScenario(page, 'fresh', 509)
+  const canvas = page.getByTestId('tank-canvas')
+  await canvas.focus()
+  expect(await focused(page)).toBe('tank-canvas')
+
+  // Tab must move focus onward, not be swallowed for in-tank navigation.
+  await page.keyboard.press('Tab')
+  expect(await focused(page)).not.toBe('tank-canvas')
+
+  // Shift+Tab comes back the other way, and Escape is a second way out.
+  await canvas.focus()
+  await page.keyboard.press('Shift+Tab')
+  expect(await focused(page)).not.toBe('tank-canvas')
+
+  await canvas.focus()
+  await page.keyboard.press('Escape')
+  expect(await focused(page)).not.toBe('tank-canvas')
+})
+
+test('a mouse click does not leave a phantom keyboard target on the tank', async ({ page }) => {
+  await startScenario(page, 'fresh', 510)
+  const canvas = page.getByTestId('tank-canvas')
+  const box = (await canvas.boundingBox())!
+
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 3)
+
+  // The click focuses the canvas, but aiming belongs to the pointer now.
+  expect(await focused(page)).toBe('tank-canvas')
+  await expect(page.locator('#tank-caret-status')).toHaveText('')
+})
+
+test('only one overlay is ever open at a time', async ({ page }) => {
+  await startScenario(page, 'fresh', 511)
+
+  // Inspect a resident, then open the journal: the inspector must give way.
+  await page.getByTestId('tank-canvas').focus()
+  await page.keyboard.press('n')
+  await page.keyboard.press('i')
+  await expect(page.getByTestId('fish-inspector')).toBeVisible()
+
+  await page.getByTestId('journal-toggle').click()
+  await expect(page.getByTestId('tank-journal')).toBeVisible()
+  await expect(page.getByTestId('fish-inspector')).not.toBeVisible()
+
+  // And help replaces the journal rather than stacking on it.
+  await page.getByTestId('help-toggle').click()
+  await expect(page.getByTestId('help-panel')).toBeVisible()
+  await expect(page.getByTestId('tank-journal')).not.toBeVisible()
+})
+
+test('a modal overlay keeps the header out of the tab order too', async ({ page }) => {
+  await startScenario(page, 'fresh', 512)
+  await page.getByTestId('menu-toggle').click()
+  await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible()
+
+  // Tabbing inside the dialog must not walk out to the header's Menu button.
+  for (let i = 0; i < 6; i += 1) {
+    await page.keyboard.press('Tab')
+    expect(await focused(page)).not.toBe('menu-toggle')
+  }
 })

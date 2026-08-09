@@ -18,8 +18,10 @@ export type HudSnapshot = {
   /** False only until the player's very first pellet; drives the feed hint. */
   fedOnce: boolean
   waterQuality: WaterTier
-  /** Worst water cell in [0, 1], driving the quality meter's fill. */
-  worstPollution: number
+  /** Overall murk in [0, 1], driving the quality meter's fill. Averaged, not
+   * worst-cell: debris on the sand pins one cell at maximum in any mature
+   * tank, which would leave the meter reading "foul" forever. */
+  murkiness: number
   /** Tank Journal entries, newest first, ages pre-formatted for display. */
   journal: { kind: JournalKind; message: string; age: string }[]
   shopItems: ShopItemView[]
@@ -75,7 +77,8 @@ const SHOP_COPY: Record<ShopOfferId, { label: string; description: string }> = {
   },
   spongeFilter: {
     label: 'Sponge filter',
-    description: 'Works dispersed green out of the water between your visits. Clogs as debris builds up on the sand.',
+    description:
+      'Works the dispersed green out of the water between your visits. Clogs as debris builds up on the sand.',
   },
   fish: {
     label: 'Young glimmerfin',
@@ -100,7 +103,7 @@ export const EMPTY_HUD: HudSnapshot = {
   gameOver: false,
   fedOnce: true, // no hint until the real sim reports otherwise
   waterQuality: 'clear',
-  worstPollution: 0,
+  murkiness: 0,
   journal: [],
   shopItems: [],
   residents: [],
@@ -212,7 +215,7 @@ export function buildHudSnapshot(
     gameOver: state.gameOver,
     fedOnce: state.developments.has('fedOnce'),
     waterQuality: describeWater(sim.murkiness(), previousWater),
-    worstPollution: sim.murkiness(),
+    murkiness: sim.murkiness(),
     journal: [...state.journal]
       .reverse()
       .map((entry) => ({
