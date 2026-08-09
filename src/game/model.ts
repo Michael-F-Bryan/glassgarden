@@ -123,8 +123,6 @@ export type Unlocks = {
 }
 
 export const TUNING = {
-  tick: 0.25, // fixed sim timestep, seconds
-
   startingCoins: 30,
   pelletCost: 1,
   siphonCost: 60,
@@ -149,7 +147,7 @@ export const TUNING = {
   babyWeight: 1.0,
   /** Hunger accumulated per second by a full-grown fish (smaller fish less).
    * Recently fed fish (hunger < satiationBelow) digest at satiationFactor. */
-  hungerPerSecondAdult: 1 / 150,
+  hungerPerSecondAdult: 1 / 30,
   satiationBelow: 0.5,
   satiationFactor: 0.45,
   hungerRelievedPerNutrition: 0.38,

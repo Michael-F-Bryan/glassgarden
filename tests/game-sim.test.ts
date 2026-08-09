@@ -7,10 +7,12 @@ import { GameSim } from '@/game/sim'
 import { addEntity, createState, spawnFish, takenNames } from '@/game/state'
 import { maxPollution, pollutionAt } from '@/game/water'
 
+const TEST_STEP = 0.25
+
 function runFor(sim: GameSim, seconds: number, visible = true): GameEvent[] {
   const events: GameEvent[] = []
-  for (let t = 0; t < seconds; t += TUNING.tick) {
-    sim.step(TUNING.tick, visible)
+  for (let t = 0; t < seconds; t += TEST_STEP) {
+    sim.step(TEST_STEP, visible)
     events.push(...sim.drainEvents())
   }
   return events
@@ -46,6 +48,20 @@ describe('fresh game', () => {
     expect(sim.state.coins).toBe(TUNING.startingCoins)
     expect([...sim.state.world.with('waste')]).toHaveLength(0)
     expect(maxPollution(sim.state.water)).toBe(0)
+  })
+})
+
+describe('simulation timing', () => {
+  test('fish move on animation-frame-sized deltas', () => {
+    const sim = GameSim.fresh(43)
+    const fish = onlyFish(sim)
+    fish.position = { x: 300, y: 300 }
+    fish.velocity = { x: 40, y: 0 }
+    fish.fish.activity = { kind: 'wander', target: { x: 900, y: 300 }, idleUntil: 0 }
+
+    sim.step(1 / 60, true)
+
+    expect(fish.position.x).toBeGreaterThan(300)
   })
 })
 
@@ -112,9 +128,9 @@ describe('pollution and sickness', () => {
 
   test('fish sicken in polluted water and recover in clean water', () => {
     const sim = GameSim.fresh(9)
-    for (let t = 0; t < 60; t += TUNING.tick) {
+    for (let t = 0; t < 60; t += TEST_STEP) {
       sim.state.water.cells.fill(0.8)
-      sim.step(TUNING.tick, true)
+      sim.step(TEST_STEP, true)
     }
     const sickness = onlyFish(sim).fish.sickness
     expect(sickness).toBeGreaterThan(0.05)
@@ -203,9 +219,9 @@ describe('breeding', () => {
     const sim = new GameSim(pairedState(107))
     runFor(sim, 25)
     expect([...sim.state.world.with('egg')]).toHaveLength(1)
-    for (let t = 0; t < 80; t += TUNING.tick) {
+    for (let t = 0; t < 80; t += TEST_STEP) {
       sim.state.water.cells.fill(0.6)
-      sim.step(TUNING.tick, true)
+      sim.step(TEST_STEP, true)
     }
     const baby = [...sim.state.world.with('fish')].find((f) => f.fish.generation === 2)!
     expect(baby).toBeDefined()
@@ -219,12 +235,12 @@ describe('critique regressions', () => {
     const sim = GameSim.fresh(701)
     const fish = onlyFish(sim)
     fish.fish.hunger = 1
-    for (let t = 0; t < 120; t += TUNING.tick) {
+    for (let t = 0; t < 120; t += TEST_STEP) {
       if ([...sim.state.world.with('food')].length === 0) {
         sim.state.coins = 10
         sim.dropFood(onlyFish(sim).position.x)
       }
-      sim.step(TUNING.tick, true)
+      sim.step(TEST_STEP, true)
       if (onlyFish(sim).fish.hunger < 0.9) break
     }
     expect(onlyFish(sim).fish.hunger).toBeLessThan(0.9)
@@ -271,9 +287,9 @@ describe('critique regressions', () => {
     sim.state.coins = 10
     sim.dropFood(1100) // far from the fish; left to spoil
     onlyFish(sim).fish.hunger = 0 // keep the fish uninterested
-    for (let t = 0; t < 700; t += TUNING.tick) {
+    for (let t = 0; t < 700; t += TEST_STEP) {
       onlyFish(sim).fish.hunger = 0
-      sim.step(TUNING.tick, true)
+      sim.step(TEST_STEP, true)
     }
     expect([...sim.state.world.with('waste')]).toHaveLength(0)
     expect([...sim.state.world.with('food')]).toHaveLength(0)
@@ -301,7 +317,7 @@ describe('critique regressions', () => {
     const sim = new GameSim(pairedState(717, { hunger: 0.9 }))
     sim.state.ownsFeeder = true
     sim.state.coins = 0
-    sim.step(TUNING.tick, true)
+    sim.step(TEST_STEP, true)
     expect([...sim.state.world.with('food')]).toHaveLength(0)
   })
 

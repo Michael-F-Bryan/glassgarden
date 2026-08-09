@@ -37,7 +37,6 @@ export type ShopItem = {
  */
 export class GameSim {
   readonly state: GameState
-  private accumulator = 0
 
   constructor(state: GameState) {
     this.state = state
@@ -51,14 +50,9 @@ export class GameSim {
   step(realDt: number, visible: boolean): void {
     // A background tab throttles rAF; clamp any single hop so one frame never
     // fast-forwards the tank. Larger gaps go through advanceOffline().
-    this.accumulator += Math.min(realDt, 2)
-    const flags = { visible, offline: false }
-    let ticks = 0
-    while (this.accumulator >= TUNING.tick && ticks < 40) {
-      stepTick(this.state, TUNING.tick, flags)
-      this.accumulator -= TUNING.tick
-      ticks += 1
-    }
+    const dt = Math.min(realDt, 2)
+    if (dt <= 0) return
+    stepTick(this.state, dt, { visible, offline: false })
   }
 
   /**
