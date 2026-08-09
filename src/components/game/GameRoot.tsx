@@ -7,9 +7,10 @@ import {
   normaliseDevSpeed,
   type GlassgardenDevTools,
 } from '@/game/devtools'
+import { loadFromStorage, RECOVERY_KEY, saveToStorage } from '@/game/browser-save'
 import { TANK, TUNING, type Fish, type GameEvent, type JournalKind } from '@/game/model'
 import { TankRenderer } from '@/game/render'
-import { deserialize, parseSave, SAVE_KEY, serialize } from '@/game/save'
+import { hydrate, serialize } from '@/game/save'
 import { GameSim, type OfflineSummary, type ShopItem } from '@/game/sim'
 import { pollutionAt } from '@/game/water'
 
@@ -221,6 +222,13 @@ export function buildHudSnapshot(
   }
 }
 
+/** Boot-time notices queued for the first frame's event delivery. Module
+ * scope, not effect scope: in dev, React strict mode remounts the effect
+ * after the first mount has already consumed an invalid save and autosaved a
+ * fresh valid one, so an effect-local queue would silently drop the recovery
+ * warning the player most needs to see. */
+const pendingBootEvents: GameEvent[] = []
+
 export default function GameRoot() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const simRef = useRef<GameSim | null>(null)
@@ -294,18 +302,25 @@ export default function GameRoot() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    let sim: GameSim | null = null
-    const stored = window.localStorage.getItem(SAVE_KEY)
-    if (stored) {
-      const save = parseSave(stored)
-      if (save) {
-        sim = new GameSim(deserialize(save))
-        const awaySeconds = (Date.now() - save.savedAtMs) / 1000
-        // Emits an awaySummary event delivered on the first frame.
-        if (awaySeconds > 90) sim.advanceOffline(awaySeconds)
+    let sim: GameSim
+    const loaded = loadFromStorage(window.localStorage)
+    if (loaded.kind === 'loaded') {
+      sim = new GameSim(hydrate(loaded.document))
+      const awaySeconds = (Date.now() - loaded.document.savedAtMs) / 1000
+      // Emits an awaySummary event delivered on the first frame.
+      if (awaySeconds > 90) sim.advanceOffline(awaySeconds)
+    } else {
+      sim = GameSim.fresh(Date.now() >>> 0)
+      if (loaded.kind !== 'empty') {
+        // loadFromStorage already preserved the unreadable payload under the
+        // recovery key; say so instead of pretending this is a first visit.
+        pendingBootEvents.push({
+          type: 'toast',
+          tone: 'warning',
+          message: `Your saved tank could not be read, so this one starts fresh. The old data is kept in your browser under “${RECOVERY_KEY}”.`,
+        })
       }
     }
-    if (!sim) sim = GameSim.fresh(Date.now() >>> 0)
     simRef.current = sim
 
     let simSpeed = 1
@@ -330,15 +345,13 @@ export default function GameRoot() {
     const ctx = canvas.getContext('2d')!
 
     const save = () => {
-      try {
-        window.localStorage.setItem(SAVE_KEY, JSON.stringify(serialize(sim!.state, Date.now())))
-      } catch (error) {
-        // Quota or privacy-mode failure: the game stays playable, unsaved.
-        console.warn('Glassgarden: could not save', error)
+      // Quota or privacy-mode failure: the game stays playable, unsaved.
+      if (!saveToStorage(window.localStorage, serialize(sim.state, Date.now()))) {
+        console.warn('Glassgarden: could not save')
       }
     }
     const refreshHud = () =>
-      setHud((previous) => buildHudSnapshot(sim!, selectedFishRef.current, previous.waterQuality))
+      setHud((previous) => buildHudSnapshot(sim, selectedFishRef.current, previous.waterQuality))
     refreshHudRef.current = refreshHud
 
     /** Atomic session replacement: everything the old session owned —
@@ -365,7 +378,7 @@ export default function GameRoot() {
     let devTools: GlassgardenDevTools | undefined
     if (process.env.NODE_ENV === 'development') {
       devTools = createGlassgardenDevTools({
-        getSim: () => sim!,
+        getSim: () => sim,
         replaceSim: replaceSession,
         getSpeed: () => simSpeed,
         setSpeed: (next) => {
@@ -417,19 +430,23 @@ export default function GameRoot() {
       const dt = (nowMs - lastFrameMs) / 1000
       lastFrameMs = nowMs
 
-      // Any real gap (background tab, sleep, reload) runs at the slowed,
-      // clamped away-time rate; the modal only appears for longer absences.
+      // One gap policy: a real absence (background tab, sleep) over five
+      // seconds runs the slowed, capped away-time catch-up; anything shorter
+      // is simulated in full at the fixed tick — nothing is discarded.
       if (!pausedRef.current) {
         if (dt > 5) {
-          sim!.advanceOffline(dt)
+          sim.advanceOffline(dt)
         } else {
-          sim!.step(dt * simSpeed, document.visibilityState === 'visible')
+          sim.advanceElapsed(
+            dt * simSpeed,
+            document.visibilityState === 'visible' ? 'visible' : 'background',
+          )
         }
-        applyEvents(sim!.drainEvents())
+        applyEvents([...pendingBootEvents.splice(0), ...sim.drainEvents()])
       }
 
       ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
-      renderer.draw(ctx, sim!.state, {
+      renderer.draw(ctx, sim.state, {
         realTime: nowMs / 1000,
         selectedFishId: selectedFishRef.current,
         hoverFishId: hoverFishRef.current,
