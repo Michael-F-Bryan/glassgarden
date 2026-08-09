@@ -1,0 +1,104 @@
+/**
+ * Equipment the player owns, as typed stages rather than booleans.
+ *
+ * Each stage is concrete executable data: cost, throughput, and what it
+ * unlocks next. Systems and balance tests read the same profiles, so a
+ * feeder's advertised capacity is the number the simulation actually
+ * delivers. Adding a stage means adding a profile entry, not a branch in
+ * every module.
+ */
+
+export type FeederStage = 'none' | 'drip' | 'twin' | 'rotary'
+export type FilterStage = 'none' | 'sponge'
+
+export type Equipment = {
+  siphon: boolean
+  feeder: FeederStage
+  filter: FilterStage
+}
+
+export function createEquipment(): Equipment {
+  return { siphon: false, feeder: 'none', filter: 'none' }
+}
+
+export type FeederProfile = {
+  /** Sim seconds between pellets when fish are hungry enough to need one. */
+  dropSeconds: number
+  cost: number
+  /** Mature residents this throughput is designed to hold below distress.
+   * Balance tests assert against this number, so it cannot drift silently. */
+  supportsResidents: number
+  /**
+   * How many points along the tank the feeder drops from. Rate alone is not
+   * enough: a single spout feeds whichever fish happen to live near it while
+   * one at the far end starves in a tank that is overall well fed. Bigger
+   * equipment spreads its food as well as dropping it faster.
+   */
+  spouts: number
+}
+
+/**
+ * A mature resident gains hunger at `hungerPerSecondAdult` and each pellet
+ * relieves `hungerRelievedPerNutrition`, so one resident needs a pellet
+ * roughly every 11 seconds. The drop intervals below are chosen to cover
+ * their stated populations with a small margin.
+ */
+export const FEEDER_PROFILES: Record<Exclude<FeederStage, 'none'>, FeederProfile> = {
+  drip: { dropSeconds: 3, cost: 250, supportsResidents: 3, spouts: 1 },
+  twin: { dropSeconds: 1.5, cost: 650, supportsResidents: 8, spouts: 2 },
+  rotary: { dropSeconds: 0.75, cost: 1_500, supportsResidents: 12, spouts: 4 },
+}
+
+/**
+ * Where the next pellet falls. A single-spout feeder always drips into the
+ * same corner, so fish must come to it; wider equipment has spouts spread
+ * across the tank and uses the one nearest the fish that needs feeding.
+ */
+export function feederDropX(profile: FeederProfile, towardX: number, tankWidth: number): number {
+  if (profile.spouts <= 1) return tankWidth - 80
+  const margin = 120
+  const span = tankWidth - margin * 2
+  const step = span / (profile.spouts - 1)
+  const index = Math.round((towardX - margin) / step)
+  return margin + step * Math.min(profile.spouts - 1, Math.max(0, index))
+}
+
+export type FilterProfile = {
+  cost: number
+  /** Pollution removed from every water cell per second at full efficiency. */
+  clearPerSecond: number
+  /** Debris count at which efficiency halves — filters clog, so solid waste
+   * still has to be siphoned rather than left for the filter to swallow. */
+  cloggingDebris: number
+}
+
+/**
+ * Clearance is sized against a real tank's load: a dozen fed residents leave
+ * well over a hundred droppings, each leaching pollution every second. The
+ * clogging point is set from that same reality — a tidy tank runs the sponge
+ * near its rated rate, while a neglected one chokes it, so the siphon keeps
+ * mattering instead of being replaced by the filter.
+ */
+export const FILTER_PROFILES: Record<Exclude<FilterStage, 'none'>, FilterProfile> = {
+  sponge: { cost: 550, clearPerSecond: 0.016, cloggingDebris: 45 },
+}
+
+/** The next stage up, or undefined when the line is complete. */
+export function nextFeederStage(stage: FeederStage): Exclude<FeederStage, 'none'> | undefined {
+  if (stage === 'none') return 'drip'
+  if (stage === 'drip') return 'twin'
+  if (stage === 'twin') return 'rotary'
+  return undefined
+}
+
+export function nextFilterStage(stage: FilterStage): Exclude<FilterStage, 'none'> | undefined {
+  return stage === 'none' ? 'sponge' : undefined
+}
+
+export function feederProfile(stage: FeederStage): FeederProfile | undefined {
+  return stage === 'none' ? undefined : FEEDER_PROFILES[stage]
+}
+
+export function filterProfile(stage: FilterStage): FilterProfile | undefined {
+  return stage === 'none' ? undefined : FILTER_PROFILES[stage]
+}

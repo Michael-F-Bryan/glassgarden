@@ -86,7 +86,7 @@ describe('game UI layout', () => {
     const state = createFreshGame(123)
     const sim = new GameSim(state)
     state.coins = 100
-    state.unlocks.siphonInShop = true
+    state.developments.add('siphonOffered')
     sim.buy('siphon')
 
     const journal = buildHudSnapshot(sim, undefined, 'clear').journal

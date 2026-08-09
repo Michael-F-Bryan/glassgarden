@@ -68,7 +68,7 @@ test('loads deterministic scenarios and cleans a dirty tank through the UI', asy
 
   const dirty = await loadScenario(page, 'dirty-tank', 91)
   expect(dirty.waste).toHaveLength(3)
-  expect(dirty.ownsSiphon).toBe(true)
+  expect(dirty.equipment.siphon).toBe(true)
 
   await page.getByTestId('tool-siphon').click()
   await clickTank(page, dirty, dirty.waste[0].x, dirty.waste[0].y)

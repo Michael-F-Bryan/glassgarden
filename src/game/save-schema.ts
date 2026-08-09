@@ -8,6 +8,7 @@
  */
 import { z } from 'zod'
 
+import { DEVELOPMENT_IDS, type DevelopmentId } from './model'
 import type { SaveFile } from './save'
 import { WATER_COLS, WATER_ROWS } from './water'
 
@@ -125,6 +126,18 @@ const JournalEntrySchema = z.object({
   message: z.string(),
 })
 
+const EquipmentSchema = z.object({
+  siphon: z.boolean(),
+  feeder: z.enum(['none', 'drip', 'twin', 'rotary']),
+  filter: z.enum(['none', 'sponge']),
+})
+
+const CareHistorySchema = z.object({
+  feederShortfallSeconds: finite().min(0),
+  siphonUses: z.number().int().min(0),
+  pollutedSeconds: finite().min(0),
+})
+
 export const SaveV1Schema = z.object({
   version: z.literal(1),
   savedAtMs: finite().min(0),
@@ -153,6 +166,28 @@ export const SaveV1Schema = z.object({
 export type SaveFileV1 = z.infer<typeof SaveV1Schema>
 
 /**
+ * V2 replaced V1's ownership booleans and `unlocks` flags with typed
+ * equipment stages, a durable development-id list, and the care history the
+ * hidden developments consult. Entities are unchanged, so a V1 tank keeps
+ * every resident, coin, and journal entry across the migration.
+ */
+export const SaveV2Schema = SaveV1Schema.omit({
+  version: true,
+  ownsSiphon: true,
+  ownsFeeder: true,
+  unlocks: true,
+  pendingEvents: true,
+}).extend({
+  version: z.literal(2),
+  equipment: EquipmentSchema,
+  feederDropCount: z.number().int().min(0).optional(),
+  developments: z.array(z.enum(DEVELOPMENT_IDS as unknown as [DevelopmentId, ...DevelopmentId[]])),
+  care: CareHistorySchema,
+})
+
+export type SaveFileV2 = z.infer<typeof SaveV2Schema>
+
+/**
  * One entity as it appears on the wire. Deliberately NOT the runtime
  * `Entity`: the persisted format keeps a single `fish` blob, while the
  * simulation splits residents into cohesive components. `save.ts` owns the
@@ -161,11 +196,14 @@ export type SaveFileV1 = z.infer<typeof SaveV1Schema>
 export type WireEntity = z.infer<typeof EntitySchema>
 export type WireFish = z.infer<typeof FishSchema>
 
+/** The part of a save the semantic passes care about — shared by V1 and V2. */
+type EntityBearingSave = { entities: WireEntity[]; nextEntityId: number }
+
 /**
  * Hard-reject semantic checks that structural validation alone cannot
  * express. Anything found here means the save cannot be trusted at all.
  */
-export function checkSemantics(save: SaveFileV1): string[] {
+export function checkSemantics(save: EntityBearingSave): string[] {
   const issues: string[] = []
   const seen = new Set<number>()
   for (const entity of save.entities) {
@@ -183,7 +221,7 @@ export function checkSemantics(save: SaveFileV1): string[] {
  * that no longer exists fall back to wandering instead of invalidating an
  * otherwise-healthy tank. Call only after checkSemantics() reports no issues.
  */
-export function normalizeSemantics(save: SaveFileV1): SaveFileV1 {
+export function normalizeSemantics<T extends EntityBearingSave>(save: T): T {
   const maxId = save.entities.reduce((max, entity) => Math.max(max, entity.id), 0)
   const nextEntityId = save.nextEntityId <= maxId ? maxId + 1 : save.nextEntityId
 
@@ -210,32 +248,64 @@ export function normalizeSemantics(save: SaveFileV1): SaveFileV1 {
 }
 
 /**
- * The one place historical/legacy-optional V1 fields are defaulted. Only
- * call this on a save that has already passed checkSemantics()/been through
- * normalizeSemantics() — it does not re-validate structure.
+ * V1 → V2. Ownership booleans become equipment stages, the `unlocks` flags
+ * become durable development ids, and the care history starts empty: a
+ * returning player keeps their tank and equipment, and the next hidden
+ * development is earned from play after the upgrade rather than granted.
  */
-export function migrateV1ToCurrent(save: SaveFileV1): SaveFile {
+export function migrateV1ToV2(save: SaveFileV1): SaveFileV2 {
+  const unlocks = save.unlocks
+  const developments: DevelopmentId[] = []
+  // Pre-flag saves have no fedOnce; a noticeably grown fish proves they fed.
+  if (unlocks.fedOnce ?? unlocks.noticedGrowth) developments.push('fedOnce')
+  if (unlocks.noticedGrowth) developments.push('growthNoticed')
+  if (unlocks.noticedPollution) developments.push('pollutionNoticed')
+  if (unlocks.siphonInShop) developments.push('siphonOffered')
+  if (unlocks.fishInShop) developments.push('fishOffered')
+  if (unlocks.seenEgg) developments.push('eggSeen')
+  // A V1 tank that had been offered or had bought the feeder has already
+  // seen that development; owning one implies it was offered.
+  if ((unlocks.feederInShop ?? false) || save.ownsFeeder) developments.push('dripFeederOffered')
+
   return {
-    version: 1,
+    version: 2,
     savedAtMs: save.savedAtMs,
     time: save.time,
     coins: save.coins,
-    ownsSiphon: save.ownsSiphon,
-    ownsFeeder: save.ownsFeeder ?? false,
+    equipment: {
+      siphon: save.ownsSiphon,
+      feeder: save.ownsFeeder ? 'drip' : 'none',
+      filter: 'none',
+    },
+    developments: sortDevelopments(developments),
+    care: { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0 },
     feederLastDropAt: save.feederLastDropAt ?? 0,
+    feederDropCount: 0,
     fishPurchased: save.fishPurchased,
     retiredNames: save.retiredNames ?? [],
-    unlocks: {
-      ...save.unlocks,
-      feederInShop: save.unlocks.feederInShop ?? false,
-      // Pre-flag saves have no fedOnce; a noticeably grown fish proves they fed.
-      fedOnce: save.unlocks.fedOnce ?? save.unlocks.noticedGrowth,
-    },
     waterCells: save.waterCells.slice(),
     rngState: save.rngState,
     nextEntityId: save.nextEntityId,
     gameOver: save.gameOver,
     entities: save.entities,
     journal: save.journal ?? [],
+  }
+}
+
+/** Stable order, so a save's development list round-trips byte-identically. */
+export function sortDevelopments(ids: readonly DevelopmentId[]): DevelopmentId[] {
+  const unique = [...new Set(ids)]
+  return unique.sort((a, b) => DEVELOPMENT_IDS.indexOf(a) - DEVELOPMENT_IDS.indexOf(b))
+}
+
+/** Fill V2's own legacy-optional fields (none yet) and normalise ordering. */
+export function migrateV2ToCurrent(save: SaveFileV2): SaveFile {
+  return {
+    ...save,
+    developments: sortDevelopments(save.developments),
+    retiredNames: save.retiredNames ?? [],
+    journal: save.journal ?? [],
+    feederLastDropAt: save.feederLastDropAt ?? 0,
+    feederDropCount: save.feederDropCount ?? 0,
   }
 }

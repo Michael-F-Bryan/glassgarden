@@ -1,7 +1,15 @@
+import {
+  FEEDER_PROFILES,
+  FILTER_PROFILES,
+  nextFeederStage,
+  nextFilterStage,
+  type FeederStage,
+} from './equipment'
 import { generateName, randomGenome } from './genome'
 import {
   fishPrice,
   TUNING,
+  type DevelopmentId,
   type Entity,
   type GameEvent,
   type OfflineSummary,
@@ -11,6 +19,8 @@ import {
 import { serialize, type SaveFile } from './save'
 import {
   createFreshGame,
+  discover,
+  hasDiscovered,
   livingFish,
   recordJournal,
   removeEntity,
@@ -22,7 +32,7 @@ import {
   type GameState,
 } from './state'
 import { stepTick, type SimulationMode } from './systems'
-import { clearPollutionNear } from './water'
+import { averagePollution, clearPollutionNear } from './water'
 
 export type { OfflineSummary, StepReport, UiNotification } from './model'
 export type { SimulationMode } from './systems'
@@ -80,7 +90,14 @@ const TICK_BOUNDARY_EPSILON = 1e-9
 /** A domain shop offer: what is purchasable and why it might not be. Labels
  * and descriptions are the UI's to own (see hud.ts). */
 export type ShopOffer = {
-  id: 'siphon' | 'feeder' | 'fish' | 'starterFish'
+  id:
+    | 'siphon'
+    | 'dripFeeder'
+    | 'twinHopper'
+    | 'rotaryFeeder'
+    | 'spongeFilter'
+    | 'fish'
+    | 'starterFish'
   cost: number
   affordable: boolean
   /** Fish offer only: the tank cannot responsibly hold another resident. */
@@ -88,6 +105,41 @@ export type ShopOffer = {
 }
 
 export type ShopOfferId = ShopOffer['id']
+
+type FeederOfferId = 'dripFeeder' | 'twinHopper' | 'rotaryFeeder'
+type FeederStageName = Exclude<FeederStage, 'none'>
+
+/** Each feeder stage's shop id, the development that reveals it, and the
+ * copy shown when it is installed — one table instead of a branch per tier. */
+const FEEDER_OFFER_IDS: Record<FeederStageName, FeederOfferId> = {
+  drip: 'dripFeeder',
+  twin: 'twinHopper',
+  rotary: 'rotaryFeeder',
+}
+
+const FEEDER_STAGE_BY_OFFER: Record<FeederOfferId, FeederStageName> = {
+  dripFeeder: 'drip',
+  twinHopper: 'twin',
+  rotaryFeeder: 'rotary',
+}
+
+const FEEDER_DEVELOPMENTS: Record<FeederStageName, DevelopmentId> = {
+  drip: 'dripFeederOffered',
+  twin: 'twinHopperOffered',
+  rotary: 'rotaryFeederOffered',
+}
+
+const FEEDER_LABELS: Record<FeederStageName, string> = {
+  drip: 'A drip feeder',
+  twin: 'A twin hopper',
+  rotary: 'A rotary feeder',
+}
+
+const FEEDER_PURCHASE_COPY: Record<FeederStageName, string> = {
+  drip: 'Drip feeder installed above the tank. It spends a coin per pellet.',
+  twin: 'The twin hopper takes over — two chambers, twice the rounds. It still spends a coin per pellet.',
+  rotary: 'The rotary feeder turns steadily above the tank, enough for a full house. Every pellet still costs a coin.',
+}
 
 /**
  * Facade over the ECS state: the runtime advances it from the frame loop,
@@ -189,9 +241,19 @@ export class GameSim {
     return summary
   }
 
-  /** Worst water cell, for the HUD's diegetic quality pill. */
+  /** Worst single water cell — the sand under a pile of droppings. */
   worstPollution(): number {
     return Math.max(...this.state.water.cells)
+  }
+
+  /**
+   * Overall murk, for the HUD's diegetic quality pill. Averaged rather than
+   * worst-cell: debris resting on the sand pins one cell at maximum in any
+   * mature tank, which would leave the meter reading "foul" forever and hide
+   * the difference filtration makes. This matches what the renderer tints.
+   */
+  murkiness(): number {
+    return averagePollution(this.state.water)
   }
 
   incomePerSecond(): number {
@@ -204,7 +266,7 @@ export class GameSim {
     if (this.state.gameOver) return { ok: false, reason: 'gameOver' }
     if (this.state.coins < TUNING.pelletCost) return { ok: false, reason: 'unaffordable' }
     this.state.coins -= TUNING.pelletCost
-    this.state.unlocks.fedOnce = true
+    discover(this.state, 'fedOnce')
     spawnPellet(this.state, x)
     return { ok: true, value: undefined, notifications: [] }
   }
@@ -215,7 +277,8 @@ export class GameSim {
    * bits of debris were removed.
    */
   siphonAt(x: number, y: number): ActionResult<number> {
-    if (!this.state.ownsSiphon) return { ok: false, reason: 'unowned' }
+    if (!this.state.equipment.siphon) return { ok: false, reason: 'unowned' }
+    this.state.care.siphonUses += 1
     let removed = 0
     const debris = [
       ...this.state.world.with('waste'),
@@ -235,21 +298,35 @@ export class GameSim {
   shopOffers(): ShopOffer[] {
     const offers: ShopOffer[] = []
     const coins = this.state.coins
-    if (this.state.unlocks.siphonInShop && !this.state.ownsSiphon) {
+    const { equipment } = this.state
+    if (hasDiscovered(this.state, 'siphonOffered') && !equipment.siphon) {
       offers.push({
         id: 'siphon',
         cost: TUNING.siphonCost,
         affordable: coins >= TUNING.siphonCost,
       })
     }
-    if (this.state.unlocks.feederInShop && !this.state.ownsFeeder) {
+    // Exactly one feeder offer at a time: the next stage up, once its own
+    // hidden development has been revealed.
+    const feederUpgrade = nextFeederStage(equipment.feeder)
+    if (feederUpgrade && hasDiscovered(this.state, FEEDER_DEVELOPMENTS[feederUpgrade])) {
+      const profile = FEEDER_PROFILES[feederUpgrade]
       offers.push({
-        id: 'feeder',
-        cost: TUNING.feederCost,
-        affordable: coins >= TUNING.feederCost,
+        id: FEEDER_OFFER_IDS[feederUpgrade],
+        cost: profile.cost,
+        affordable: coins >= profile.cost,
       })
     }
-    if (this.state.unlocks.fishInShop && !this.state.gameOver) {
+    const filterUpgrade = nextFilterStage(equipment.filter)
+    if (filterUpgrade && hasDiscovered(this.state, 'spongeFilterOffered')) {
+      const profile = FILTER_PROFILES[filterUpgrade]
+      offers.push({
+        id: 'spongeFilter',
+        cost: profile.cost,
+        affordable: coins >= profile.cost,
+      })
+    }
+    if (hasDiscovered(this.state, 'fishOffered') && !this.state.gameOver) {
       const cost = fishPrice(this.state.fishPurchased)
       const population = residentCount(this.state) + this.state.world.with('egg').entities.length
       const atCapacity = population >= TUNING.maxPopulation
@@ -278,19 +355,33 @@ export class GameSim {
     this.state.coins -= offer.cost
     const notifications: UiNotification[] = []
     if (offer.id === 'siphon') {
-      this.state.ownsSiphon = true
+      this.state.equipment.siphon = true
       notifications.push({
         tone: 'info',
         message: 'Gravel siphon acquired. Select it, then hold and sweep the sand to clean.',
       })
       recordJournal(this.state, 'purchase', `Bought a gravel siphon for ◉${offer.cost}.`)
-    } else if (offer.id === 'feeder') {
-      this.state.ownsFeeder = true
+    } else if (offer.id === 'dripFeeder' || offer.id === 'twinHopper' || offer.id === 'rotaryFeeder') {
+      const stage = FEEDER_STAGE_BY_OFFER[offer.id]
+      this.state.equipment.feeder = stage
+      // Each tier earns its own upgrade: the strain that revealed this one
+      // does not carry over to the next.
+      this.state.care.feederShortfallSeconds = 0
+      this.state.feederLastDropAt = this.state.time
+      notifications.push({ tone: 'info', message: FEEDER_PURCHASE_COPY[stage] })
+      recordJournal(
+        this.state,
+        'purchase',
+        `Installed ${FEEDER_LABELS[stage].toLowerCase()} for ◉${offer.cost}.`,
+      )
+    } else if (offer.id === 'spongeFilter') {
+      this.state.equipment.filter = 'sponge'
       notifications.push({
         tone: 'info',
-        message: 'Drip feeder installed above the tank. It spends a coin per pellet.',
+        message:
+          'The sponge filter hums away in the corner, working the water. It clogs as debris piles up, so keep the sand clear.',
       })
-      recordJournal(this.state, 'purchase', `Installed a drip feeder for ◉${offer.cost}.`)
+      recordJournal(this.state, 'purchase', `Installed a sponge filter for ◉${offer.cost}.`)
     } else if (offer.id === 'fish') {
       this.state.fishPurchased += 1
       const genome = randomGenome(this.state.rng, this.state.rng.range(18, 34))

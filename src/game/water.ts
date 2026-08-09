@@ -48,6 +48,13 @@ export function clearPollutionNear(grid: WaterGrid, position: Vec2, fraction: nu
   grid.cells[index] *= 1 - fraction
 }
 
+/** Filtration: pull a flat amount out of every cell, never below clean. */
+export function clearPollutionEverywhere(grid: WaterGrid, amount: number): void {
+  for (let index = 0; index < grid.cells.length; index += 1) {
+    grid.cells[index] = Math.max(0, grid.cells[index] - amount)
+  }
+}
+
 export function maxPollution(grid: WaterGridView): number {
   return Math.max(...grid.cells)
 }

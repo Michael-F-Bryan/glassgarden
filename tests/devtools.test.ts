@@ -30,7 +30,7 @@ describe('development scenarios', () => {
     expect(firstFresh).toEqual(secondFresh)
 
     const dirty = createDevSnapshot(createDevScenario('dirty-tank', 91))
-    expect(dirty.ownsSiphon).toBe(true)
+    expect(dirty.equipment.siphon).toBe(true)
     expect(dirty.waste.length).toBeGreaterThanOrEqual(3)
     expect(dirty.water.worstPollution).toBeGreaterThan(0.3)
 

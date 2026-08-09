@@ -1,3 +1,10 @@
+import {
+  feederDropX,
+  feederProfile,
+  filterProfile,
+  nextFeederStage,
+  nextFilterStage,
+} from './equipment'
 import { generateName, inheritGenome } from './genome'
 import {
   fishLength,
@@ -8,7 +15,9 @@ import {
 } from './model'
 import {
   addEntity,
+  discover,
   emit,
+  hasDiscovered,
   livingFish,
   recordJournal,
   removeEntity,
@@ -20,6 +29,7 @@ import {
 } from './state'
 import {
   addPollution,
+  clearPollutionEverywhere,
   maxPollution,
   pollutionAt,
   randomWaterPoint,
@@ -53,9 +63,10 @@ export function stepTick(state: GameState, dt: number, mode: SimulationMode): vo
   sicknessSystem(state, dt, mode)
   healthSystem(state, dt, mode)
   breedingSystem(state)
-  feederSystem(state)
+  feederSystem(state, dt)
+  filtrationSystem(state, dt)
   economySystem(state, dt)
-  developmentSystem(state)
+  developmentSystem(state, dt)
   cleanupSystem(state, dt)
 }
 
@@ -76,26 +87,89 @@ function hungerSystem(state: GameState, dt: number, mode: SimulationMode): void 
 
 const EAT_HUNGER_CUTOFF = 0.08
 
+/** Hunger difference below which two fish count as equally hungry, so
+ * proximity decides which of them chases a contested pellet. */
+const HUNGER_PRIORITY_MARGIN = 0.05
+
 function edibleFood(state: GameState): Entity[] {
   return sortedById(state.world.with('food')).filter((entity) => !entity.food!.spoiled)
 }
 
-function nearestEdibleFood(state: GameState, from: Vec2): Entity | undefined {
+/**
+ * The pellet a fish should swim for: the nearest one it can win.
+ *
+ * Contested food goes to the hungrier fish. Distance alone is not enough —
+ * a comfortable fish that happens to be nearer would otherwise intercept
+ * every pellet the feeder dropped for a starving one, which starved a
+ * resident in a tank that was overall well fed. A fish only defers to a
+ * claimant that is closer *and* at least as hungry as it is.
+ */
+function nearestEdibleFood(
+  state: GameState,
+  seeker: SteerableEntity,
+  claims: FoodClaims,
+): Entity | undefined {
+  const from = seeker.position
+  const hunger = seeker.physiology.hunger
   let best: Entity | undefined
   let bestDistance = Infinity
   for (const entity of edibleFood(state)) {
     const distance = Math.hypot(entity.position.x - from.x, entity.position.y - from.y)
-    if (distance < bestDistance) {
-      best = entity
-      bestDistance = distance
+    if (distance >= bestDistance) continue
+    const claimantId = claims.get(entity.id)
+    if (claimantId !== undefined && claimantId !== seeker.id) {
+      const claimant = state.byId.get(claimantId)
+      const claimantHunger = claimant?.physiology?.hunger ?? 1
+      const claimantDistance = claimant
+        ? Math.hypot(entity.position.x - claimant.position.x, entity.position.y - claimant.position.y)
+        : Infinity
+      // Need comes first, proximity only breaks ties between equals.
+      const claimantWins =
+        claimantHunger > hunger + HUNGER_PRIORITY_MARGIN ||
+        (Math.abs(claimantHunger - hunger) <= HUNGER_PRIORITY_MARGIN && claimantDistance < distance)
+      if (claimantWins) continue
     }
+    best = entity
+    bestDistance = distance
   }
   return best
 }
 
+/** Displace whoever was heading for this pellet, so two fish never race for
+ * the same one; the loser re-evaluates on the next tick. */
+function displaceClaimant(state: GameState, claims: FoodClaims, foodId: number, winnerId: number): void {
+  const loserId = claims.get(foodId)
+  if (loserId === undefined || loserId === winnerId) return
+  const loser = state.byId.get(loserId)
+  if (loser?.behaviour?.activity.kind === 'seekFood' && loser.behaviour.activity.foodId === foodId) {
+    loser.behaviour.activity = wanderActivity(state)
+  }
+}
+
+/** Food ids already being swum towards this tick, keyed by the fish. */
+type FoodClaims = Map<number, number>
+
+function collectFoodClaims(state: GameState): FoodClaims {
+  const claims: FoodClaims = new Map()
+  for (const entity of state.world.with('behaviour')) {
+    const activity = entity.behaviour.activity
+    if (activity.kind === 'seekFood') claims.set(activity.foodId, entity.id)
+  }
+  return claims
+}
+
+/** Move a fish's claim to a new pellet (or drop it when it stops seeking). */
+function reclaim(claims: FoodClaims, fishId: number, foodId: number | undefined): void {
+  for (const [food, holder] of claims) {
+    if (holder === fishId) claims.delete(food)
+  }
+  if (foodId !== undefined) claims.set(foodId, fishId)
+}
+
 function movementSystem(state: GameState, dt: number): void {
+  const claims = collectFoodClaims(state)
   for (const entity of sortedById(state.world.with('behaviour', 'physiology', 'genome'))) {
-    steerFish(state, entity, dt)
+    steerFish(state, entity, dt, claims)
   }
   for (const entity of state.world.with('food')) {
     sinkToSand(entity, dt, 26, TANK.sandTop + 6, () => (entity.food.restingOnSand = true))
@@ -126,7 +200,12 @@ function sinkToSand(entity: Entity, dt: number, speed: number, restY: number, on
 
 type SteerableEntity = Entity & Required<Pick<Entity, 'behaviour' | 'physiology' | 'genome'>>
 
-function steerFish(state: GameState, entity: SteerableEntity, dt: number): void {
+function steerFish(
+  state: GameState,
+  entity: SteerableEntity,
+  dt: number,
+  claims: FoodClaims,
+): void {
   const behaviour = entity.behaviour
   const body = entity.physiology
   const maturity = Math.min(1, body.weight / entity.genome.maxWeight)
@@ -138,17 +217,29 @@ function steerFish(state: GameState, entity: SteerableEntity, dt: number): void 
   const starving = body.hunger >= 0.999
   const gravelyIll = body.sickness >= 0.75
   if (starving || gravelyIll) {
-    const food = starving ? nearestEdibleFood(state, entity.position) : undefined
+    const food = starving ? nearestEdibleFood(state, entity, claims) : undefined
+    if (food) displaceClaimant(state, claims, food.id, entity.id)
     behaviour.activity = food ? { kind: 'seekFood', foodId: food.id } : { kind: 'distress' }
+    reclaim(claims, entity.id, food?.id)
   } else if (behaviour.activity.kind === 'court') {
+    // Courtship yields to a real appetite: no fish should starve mid-dance.
     const partner = state.byId.get(behaviour.activity.partnerId)
-    if (!partner?.resident) behaviour.activity = wanderActivity(state)
+    if (!partner?.resident || body.hunger > TUNING.distressHungerAbove) {
+      behaviour.activity = wanderActivity(state)
+    }
   } else if (body.hunger > TUNING.seekFoodAbove) {
-    const food = nearestEdibleFood(state, entity.position)
-    if (food) behaviour.activity = { kind: 'seekFood', foodId: food.id }
-    else if (behaviour.activity.kind === 'seekFood') behaviour.activity = wanderActivity(state)
+    const food = nearestEdibleFood(state, entity, claims)
+    if (food) {
+      displaceClaimant(state, claims, food.id, entity.id)
+      behaviour.activity = { kind: 'seekFood', foodId: food.id }
+      reclaim(claims, entity.id, food.id)
+    } else if (behaviour.activity.kind === 'seekFood') {
+      behaviour.activity = wanderActivity(state)
+      reclaim(claims, entity.id, undefined)
+    }
   } else if (behaviour.activity.kind === 'seekFood' || behaviour.activity.kind === 'distress') {
     behaviour.activity = wanderActivity(state)
+    reclaim(claims, entity.id, undefined)
   }
 
   let desired: Vec2 = { x: 0, y: 0 }
@@ -416,8 +507,7 @@ function breedingSystem(state: GameState): void {
     partner.breeding.cooldownUntil = state.time + TUNING.breedingCooldownSeconds
     behaviour.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
     partner.behaviour.activity = { kind: 'wander', target: { ...partner.position }, idleUntil: 0 }
-    if (!state.unlocks.seenEgg) {
-      state.unlocks.seenEgg = true
+    if (discover(state, 'eggSeen')) {
       emit(state, {
         type: 'toast',
         tone: 'development',
@@ -452,19 +542,58 @@ function breedingSystem(state: GameState): void {
   b.behaviour.activity = { kind: 'court', partnerId: a.id, until }
 }
 
-/** The drip feeder drops a pellet for hungry fish, spending player coins. */
-function feederSystem(state: GameState): void {
-  if (!state.ownsFeeder || state.coins < TUNING.pelletCost) return
-  if (state.time - state.feederLastDropAt < TUNING.feederDropSeconds) return
-  const hungry = livingFish(state).filter(
-    (entity) => entity.physiology.hunger > TUNING.feederFeedsAbove,
-  )
-  if (hungry.length === 0) return
-  const pellets = [...state.world.with('food')].filter((e) => !e.food.spoiled).length
-  if (pellets >= hungry.length) return
+/**
+ * The feeder drops a pellet for hungry fish, spending player coins. Faster
+ * equipment shortens the interval but never scatters food: a pellet is only
+ * dropped for a hungry fish that has not already earmarked one, so
+ * automation does not become a pollution generator. Counting total pellets
+ * instead would leave a fish waiting indefinitely whenever the food already
+ * in the water is all spoken for by others.
+ *
+ * Every moment a hungry fish is left waiting is recorded as the shortfall
+ * that eventually reveals the next feeder tier.
+ */
+function feederSystem(state: GameState, dt: number): void {
+  const profile = feederProfile(state.equipment.feeder)
+  if (!profile) return
+
+  const waiting = livingFish(state).filter((entity) => {
+    if (entity.physiology.hunger <= TUNING.feederFeedsAbove) return false
+    const activity = entity.behaviour.activity
+    if (activity.kind !== 'seekFood') return true
+    const target = state.byId.get(activity.foodId)
+    return !target?.food || target.food.spoiled
+  })
+  const behind = waiting.length > 0
+  if (behind) state.care.feederShortfallSeconds += dt
+
+  if (!behind || state.coins < TUNING.pelletCost) return
+  if (state.time - state.feederLastDropAt < profile.dropSeconds) return
   state.coins -= TUNING.pelletCost
   state.feederLastDropAt = state.time
-  spawnPellet(state, TANK.width - 80)
+  // Drop from whichever spout is nearest the hungriest waiting fish, so food
+  // arrives where it is needed instead of always in the same corner.
+  const neediest = waiting.reduce((worst, entity) =>
+    entity.physiology.hunger > worst.physiology.hunger ? entity : worst,
+  )
+  spawnPellet(state, feederDropX(profile, neediest.position.x, TANK.width))
+  state.feederDropCount += 1
+}
+
+/**
+ * A filter pulls dispersed pollution out of the water column. It clogs as
+ * solid debris accumulates, so it buys headroom without retiring the siphon:
+ * a tank left full of droppings filters at a fraction of its rated rate, and
+ * the droppings themselves still have to be lifted out by hand.
+ */
+function filtrationSystem(state: GameState, dt: number): void {
+  const profile = filterProfile(state.equipment.filter)
+  if (!profile) return
+  const debris =
+    state.world.with('waste').entities.length +
+    [...state.world.with('food')].filter((entity) => entity.food!.spoiled).length
+  const efficiency = profile.cloggingDebris / (profile.cloggingDebris + debris)
+  clearPollutionEverywhere(state.water, profile.clearPerSecond * efficiency * dt)
 }
 
 function economySystem(state: GameState, dt: number): void {
@@ -472,16 +601,28 @@ function economySystem(state: GameState, dt: number): void {
   state.coins += (TUNING.incomeFloor + TUNING.incomePerGram * totalWeight) * dt
 }
 
-function developmentSystem(state: GameState): void {
-  const unlocks = state.unlocks
-  if (!unlocks.noticedGrowth) {
+/**
+ * The one place hidden developments are revealed. Every branch reads the
+ * pressure the player created — growth, murk, population, a feeder falling
+ * behind, repeated cleaning — and announces what changed in observable
+ * terms. Thresholds and counters never appear in the copy: the player is
+ * told the hopper empties as fast as it turns, not that they crossed 75
+ * seconds of shortfall.
+ */
+function developmentSystem(state: GameState, dt: number): void {
+  // Sustained murk is one of the two routes to filtration; record it before
+  // anything else this tick can clear the water.
+  if (maxPollution(state.water) >= TUNING.pollutionNoticedAt) {
+    state.care.pollutedSeconds += dt
+  }
+
+  if (!hasDiscovered(state, 'growthNoticed')) {
     const grown = livingFish(state).find(
       (entity) =>
         entity.resident.generation === 1 &&
         entity.physiology.weight >= TUNING.starterWeight * TUNING.growthNoticedAtMultiple,
     )
-    if (grown) {
-      unlocks.noticedGrowth = true
+    if (grown && discover(state, 'growthNoticed')) {
       emit(state, {
         type: 'toast',
         tone: 'development',
@@ -490,9 +631,13 @@ function developmentSystem(state: GameState): void {
       recordJournal(state, 'development', `${grown.resident.name} grew noticeably bigger.`)
     }
   }
-  if (!unlocks.noticedPollution && maxPollution(state.water) >= TUNING.pollutionNoticedAt) {
-    unlocks.noticedPollution = true
-    unlocks.siphonInShop = true
+
+  if (
+    !hasDiscovered(state, 'pollutionNoticed') &&
+    maxPollution(state.water) >= TUNING.pollutionNoticedAt
+  ) {
+    discover(state, 'pollutionNoticed')
+    discover(state, 'siphonOffered')
     emit(state, {
       type: 'toast',
       tone: 'development',
@@ -505,21 +650,68 @@ function developmentSystem(state: GameState): void {
     })
     recordJournal(state, 'development', 'The water took on its first green tinge.')
   }
-  if (!unlocks.feederInShop && livingFish(state).length >= 3) {
-    unlocks.feederInShop = true
+
+  if (
+    !hasDiscovered(state, 'dripFeederOffered') &&
+    residentCount(state) >= TUNING.feederOfferedAtResidents
+  ) {
+    discover(state, 'dripFeederOffered')
     emit(state, {
       type: 'toast',
       tone: 'info',
-      message: 'The shop has something for busy caretakers: a drip feeder.',
+      message: 'Feeding this many mouths by hand is becoming a chore. The shop has a drip feeder.',
     })
     recordJournal(state, 'development', 'The shop began offering a drip feeder.')
   }
-  if (!unlocks.fishInShop) {
+
+  // Each feeder tier is revealed by the previous one visibly struggling.
+  if (state.care.feederShortfallSeconds >= TUNING.feederStrainForNextTier) {
+    const upgrade = nextFeederStage(state.equipment.feeder)
+    if (upgrade === 'twin' && discover(state, 'twinHopperOffered')) {
+      emit(state, {
+        type: 'toast',
+        tone: 'development',
+        message: 'The drip feeder empties almost as soon as it turns, and there are still hungry mouths waiting. A twin hopper would keep up.',
+      })
+      recordJournal(state, 'development', 'The drip feeder began falling behind the tank.')
+    } else if (upgrade === 'rotary' && discover(state, 'rotaryFeederOffered')) {
+      emit(state, {
+        type: 'toast',
+        tone: 'development',
+        message: 'Even the twin hopper runs dry between rounds now. A rotary feeder could serve a full tank.',
+      })
+      recordJournal(state, 'development', 'The twin hopper began falling behind the tank.')
+    }
+  }
+
+  // Filtration follows either sustained murk or a player who keeps cleaning —
+  // but only once they own a siphon. Offering a filter "for between
+  // cleanings" to someone who has never cleaned makes no sense, and it would
+  // jump the queue ahead of the siphon in the opening.
+  if (
+    !hasDiscovered(state, 'spongeFilterOffered') &&
+    state.equipment.siphon &&
+    nextFilterStage(state.equipment.filter)
+  ) {
+    const cleanedOften = state.care.siphonUses >= TUNING.filterOfferedAfterSiphonUses
+    const murkPersists = state.care.pollutedSeconds >= TUNING.filterOfferedAfterPollutedSeconds
+    if ((cleanedOften || murkPersists) && discover(state, 'spongeFilterOffered')) {
+      emit(state, {
+        type: 'toast',
+        tone: 'development',
+        message: cleanedOften
+          ? 'You have been cleaning this tank a great deal. A sponge filter would work the water between visits.'
+          : 'The green never quite leaves the water now. A sponge filter would work at it continuously.',
+      })
+      recordJournal(state, 'development', 'The shop began offering a sponge filter.')
+    }
+  }
+
+  if (!hasDiscovered(state, 'fishOffered')) {
     const thriving = livingFish(state).find(
       (entity) => entity.physiology.weight >= TUNING.fishUnlockWeight,
     )
-    if (thriving) {
-      unlocks.fishInShop = true
+    if (thriving && discover(state, 'fishOffered')) {
       emit(state, {
         type: 'toast',
         tone: 'development',

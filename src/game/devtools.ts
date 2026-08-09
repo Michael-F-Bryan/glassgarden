@@ -1,11 +1,13 @@
-import { TANK, type OfflineSummary, type Unlocks } from './model'
+import type { Equipment } from './equipment'
+import { TANK, type CareHistory, type DevelopmentId, type OfflineSummary } from './model'
 import { GameSim, type ShopOffer } from './sim'
-import { addEntity, createFreshGame } from './state'
+import { generateName, randomGenome } from './genome'
+import { addEntity, createFreshGame, spawnFish, takenNames } from './state'
 
 export const DEV_TOOLS_VERSION = 1 as const
 export const DEFAULT_DEV_SEED = 42
 
-export type DevScenario = 'fresh' | 'dirty-tank' | 'starving-rescuable'
+export type DevScenario = 'fresh' | 'dirty-tank' | 'starving-rescuable' | 'growing-tank'
 
 export type DevFishSnapshot = {
   id: number
@@ -38,10 +40,10 @@ export type DevSnapshot = {
   time: number
   coins: number
   incomePerSecond: number
-  ownsSiphon: boolean
-  ownsFeeder: boolean
+  equipment: Equipment
   gameOver: boolean
-  unlocks: Unlocks
+  developments: DevelopmentId[]
+  care: CareHistory
   fish: DevFishSnapshot[]
   food: DevFoodSnapshot[]
   waste: DevEntitySnapshot[]
@@ -104,10 +106,10 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
     time: state.time,
     coins: state.coins,
     incomePerSecond: sim.incomePerSecond(),
-    ownsSiphon: state.ownsSiphon,
-    ownsFeeder: state.ownsFeeder,
+    equipment: { ...state.equipment },
     gameOver: state.gameOver,
-    unlocks: { ...state.unlocks },
+    developments: [...state.developments].sort(),
+    care: { ...state.care },
     fish: [...state.world.with('resident', 'physiology', 'behaviour')]
       .sort((a, b) => a.id - b.id)
       .map((entity) => ({
@@ -140,6 +142,37 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
   const state = createFreshGame(seed)
   if (name === 'fresh') return new GameSim(state)
 
+  if (name === 'growing-tank') {
+    // A tank that has already earned its early developments: several mature
+    // residents, a siphon, a drip feeder, and coins to run them. This is the
+    // "developed save" starting point for progression playtesting.
+    state.coins = 900
+    state.equipment.siphon = true
+    state.equipment.feeder = 'drip'
+    for (const id of [
+      'fedOnce',
+      'growthNoticed',
+      'pollutionNoticed',
+      'siphonOffered',
+      'fishOffered',
+      'dripFeederOffered',
+    ] as const) {
+      state.developments.add(id)
+    }
+    const starter = [...state.world.with('physiology')][0]
+    starter.physiology.weight = 22
+    for (let i = 0; i < 5; i += 1) {
+      spawnFish(state, {
+        genome: randomGenome(state.rng, state.rng.range(20, 30)),
+        name: generateName(state.rng, takenNames(state)),
+        weight: state.rng.range(16, 24),
+        generation: 1,
+        hunger: state.rng.range(0.2, 0.45),
+      })
+    }
+    return new GameSim(state)
+  }
+
   const fish = [...state.world.with('physiology', 'behaviour')][0]
   if (name === 'starving-rescuable') {
     fish.physiology.hunger = 1
@@ -149,9 +182,9 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
   }
 
   state.coins = 100
-  state.ownsSiphon = true
-  state.unlocks.siphonInShop = true
-  state.unlocks.noticedPollution = true
+  state.equipment.siphon = true
+  state.developments.add('siphonOffered')
+  state.developments.add('pollutionNoticed')
   state.water.cells.fill(0.4)
   fish.physiology.sickness = 0.35
   for (const x of [360, 600, 840]) {

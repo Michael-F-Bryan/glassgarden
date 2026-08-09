@@ -249,7 +249,7 @@ describe('game runtime', () => {
     expect(lastView(views).tool).toBe('feed')
 
     const equippedState = createFreshGame(12)
-    equippedState.ownsSiphon = true
+    equippedState.equipment.siphon = true
     runtime.replace(new GameSim(equippedState))
     runtime.setTool('siphon')
     expect(lastView(views).tool).toBe('siphon')
@@ -266,7 +266,7 @@ describe('game runtime', () => {
 
     const dirtyState = createFreshGame(11)
     const dirty = new GameSim(dirtyState)
-    dirtyState.ownsSiphon = true
+    dirtyState.equipment.siphon = true
     runtime.replace(dirty)
     runtime.setTool('siphon')
     runtime.selectFish(lastView(views).hud.residents[0].id)
@@ -280,7 +280,7 @@ describe('game runtime', () => {
     expect(view.toasts).toHaveLength(0)
     expect(h.presenter.transientResets).toBe(resetsBefore + 1)
     // The replacement saved the new session, not the old one.
-    expect(JSON.parse(h.storage.getItem(SAVE_KEY)!).ownsSiphon).toBe(false)
+    expect(JSON.parse(h.storage.getItem(SAVE_KEY)!).equipment.siphon).toBe(false)
     runtime.stop()
   })
 

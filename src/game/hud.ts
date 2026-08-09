@@ -61,9 +61,21 @@ const SHOP_COPY: Record<ShopOfferId, { label: string; description: string }> = {
     label: 'Gravel siphon',
     description: 'Clean up droppings and spoiled food before they foul the water.',
   },
-  feeder: {
+  dripFeeder: {
     label: 'Drip feeder',
-    description: 'Drops a pellet for hungry fish while you are busy elsewhere. Uses your coins.',
+    description: 'Drops a pellet for hungry fish while you are busy elsewhere. Suits a small tank. Uses your coins.',
+  },
+  twinHopper: {
+    label: 'Twin hopper',
+    description: 'Two chambers, twice the rounds — enough for a busy tank. Still a coin per pellet.',
+  },
+  rotaryFeeder: {
+    label: 'Rotary feeder',
+    description: 'Turns steadily all day and can keep a full tank fed. Still a coin per pellet.',
+  },
+  spongeFilter: {
+    label: 'Sponge filter',
+    description: 'Works dispersed green out of the water between your visits. Clogs as debris builds up on the sand.',
   },
   fish: {
     label: 'Young glimmerfin',
@@ -182,11 +194,11 @@ export function buildHudSnapshot(
     criticalNames: fishEntities
       .filter((entity) => entity.physiology.hunger >= 0.999 || entity.physiology.sickness >= 0.75)
       .map((entity) => entity.resident.name),
-    ownsSiphon: state.ownsSiphon,
+    ownsSiphon: state.equipment.siphon,
     gameOver: state.gameOver,
-    fedOnce: state.unlocks.fedOnce,
-    waterQuality: describeWater(sim.worstPollution(), previousWater),
-    worstPollution: sim.worstPollution(),
+    fedOnce: state.developments.has('fedOnce'),
+    waterQuality: describeWater(sim.murkiness(), previousWater),
+    worstPollution: sim.murkiness(),
     journal: [...state.journal]
       .reverse()
       .map((entry) => ({

@@ -21,7 +21,7 @@ export default defineConfig({
   webServer: {
     command: 'pnpm dev:e2e',
     url: 'http://127.0.0.1:3100',
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
 })

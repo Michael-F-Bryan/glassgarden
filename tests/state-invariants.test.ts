@@ -45,8 +45,8 @@ function pairedState(seed: number): GameState {
 function dirtyTankState(seed: number): GameState {
   const state = createFreshGame(seed)
   state.coins = 100
-  state.ownsSiphon = true
-  state.unlocks.siphonInShop = true
+  state.equipment.siphon = true
+  state.developments.add('siphonOffered')
   for (const x of [360, 600, 840]) {
     addEntity(state, {
       position: { x, y: TANK.sandTop - 6 },
@@ -72,7 +72,7 @@ describe('construction and growth', () => {
     sim.dropFood(TANK.width / 2 + 40)
     assertStateInvariants(state)
 
-    state.unlocks.fishInShop = true
+    state.developments.add('fishOffered')
     state.coins = 10_000
     expect(sim.buy('fish').ok).toBe(true)
     expect(sim.buy('fish').ok).toBe(true)

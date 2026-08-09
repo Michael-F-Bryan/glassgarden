@@ -184,6 +184,58 @@ export type GameEvent =
   | { type: 'birth'; name: string }
   | { type: 'gameOver' }
 
+/**
+ * A hidden development the tank has revealed. Durable and one-shot: once an
+ * id is discovered it stays discovered, so a development never re-announces
+ * itself after a reload. Ids are the save's vocabulary — renaming one is a
+ * save migration, not a refactor.
+ */
+export type DevelopmentId =
+  | 'fedOnce'
+  | 'growthNoticed'
+  | 'pollutionNoticed'
+  | 'siphonOffered'
+  | 'fishOffered'
+  | 'eggSeen'
+  | 'dripFeederOffered'
+  | 'twinHopperOffered'
+  | 'rotaryFeederOffered'
+  | 'spongeFilterOffered'
+
+export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
+  'fedOnce',
+  'growthNoticed',
+  'pollutionNoticed',
+  'siphonOffered',
+  'fishOffered',
+  'eggSeen',
+  'dripFeederOffered',
+  'twinHopperOffered',
+  'rotaryFeederOffered',
+  'spongeFilterOffered',
+]
+
+/**
+ * The evidence hidden developments actually consult — nothing speculative.
+ * These are pressures the player creates by playing, so an unlock can be
+ * explained by what they were doing rather than by a formula on screen.
+ */
+export type CareHistory = {
+  /** Sim seconds the current feeder spent unable to keep up with demand.
+   * Reset when a faster feeder is installed, so each tier is judged on its
+   * own strain rather than inheriting the last one's. */
+  feederShortfallSeconds: number
+  /** How many times the player has swept the siphon. */
+  siphonUses: number
+  /** Sim seconds the tank has spent above the pollution the player noticed. */
+  pollutedSeconds: number
+}
+
+export function createCareHistory(): CareHistory {
+  return { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0 }
+}
+
+/** @deprecated Legacy V1 save shape only; the runtime uses DevelopmentId. */
 export type Unlocks = {
   /** The player has dropped food at least once; gates the first-feed hint. */
   fedOnce: boolean
@@ -200,16 +252,19 @@ export const TUNING = {
   startingCoins: 30,
   pelletCost: 1,
   siphonCost: 60,
-  feederCost: 400,
-  /** Drip feeder: one pellet per interval when a fish is hungry enough. */
-  feederDropSeconds: 8,
-  feederFeedsAbove: 0.55,
+  /** Feeders drop a pellet for a fish this hungry. Set well below distress:
+   * a fish still has to swim to the pellet, and hunger keeps climbing while
+   * it does, so feeding at the last moment leaves automated tanks hovering
+   * at the distress warning. Drop intervals and costs live in
+   * FEEDER_PROFILES (equipment.ts). */
+  feederFeedsAbove: 0.4,
   /** Escalating fish shop prices; breeding must take over after these. */
   fishPrices: [120, 300, 750, 1900],
   fishPriceBeyond: 4500,
   starterFishCost: 25,
-  /** Coins per second: floor + rate * total fish weight in grams. */
-  incomeFloor: 0.12,
+  /** Coins per second: floor + rate * total fish weight in grams. The floor
+   * carries the opening, where there is barely any fish mass to earn from. */
+  incomeFloor: 0.28,
   incomePerGram: 0.055,
 
   pelletNutrition: 1,
@@ -258,7 +313,9 @@ export const TUNING = {
   breedingMaxSickness: 0.25,
   breedingMaxPollution: 0.2,
   breedingCooldownSeconds: 240,
-  courtshipSeconds: 20,
+  /** A courting fish ignores food, and hunger climbs the whole time, so the
+   * dance must be short enough that romance never starves a resident. */
+  courtshipSeconds: 10,
   eggHatchSeconds: 60,
   /** Eggs incubating above this pollution hatch stunted, less resilient fry. */
   murkyEggPollution: 0.4,
@@ -268,6 +325,16 @@ export const TUNING = {
   growthNoticedAtMultiple: 2, // starter weight vs its hatch weight
   pollutionNoticedAt: 0.18,
   fishUnlockWeight: 8,
+  /** The drip feeder is offered once the tank holds this many residents. */
+  feederOfferedAtResidents: 3,
+  /** Sim seconds of a feeder failing to keep up before the next tier is
+   * offered. Measured per tier: installing a feeder resets the count. */
+  feederStrainForNextTier: 75,
+  /** Either repeated manual cleaning or long-running murk reveals the filter,
+   * once the player owns a siphon. The murk route is deliberately slow: it
+   * stands for a tank that keeps greening up despite maintenance. */
+  filterOfferedAfterSiphonUses: 10,
+  filterOfferedAfterPollutedSeconds: 900,
 
   /** Oldest journal entries fall off past this, bounding the save file. */
   journalMaxEntries: 120,

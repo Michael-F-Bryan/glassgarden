@@ -1,3 +1,4 @@
+import type { FeederStage } from './equipment'
 import { fishLength, TANK, type Entity } from './model'
 import type { GameReadModel } from './state'
 import { averagePollution, WATER_COLS, WATER_ROWS } from './water'
@@ -148,28 +149,63 @@ export class TankRenderer {
     for (const entity of state.world.with('remains')) this.drawRemains(ctx, entity, state.time)
 
     this.drawKelp(ctx, realTime, false)
-    if (state.ownsFeeder) this.drawFeeder(ctx)
+    if (state.equipment.feeder !== 'none') this.drawFeeder(ctx, state.equipment.feeder)
+    if (state.equipment.filter !== 'none') this.drawFilter(ctx, realTime)
     this.drawPuffs(ctx, realTime)
     this.drawCoinFloats(ctx, realTime)
     this.drawBubbles(ctx, realTime)
     this.drawSurface(ctx, realTime)
   }
 
-  private drawFeeder(ctx: CanvasRenderingContext2D): void {
+  /** Each feeder stage reads as a bigger machine: one chamber, two, then a
+   * wide rotary drum, so an upgrade is visible on the glass, not just in a
+   * menu. */
+  private drawFeeder(ctx: CanvasRenderingContext2D, stage: FeederStage): void {
+    const chambers = stage === 'rotary' ? 3 : stage === 'twin' ? 2 : 1
+    const halfWidth = 18 + chambers * 8
     ctx.save()
     ctx.translate(TANK.width - 80, TANK.waterTop - 12)
     ctx.fillStyle = '#31404d'
     ctx.beginPath()
-    ctx.roundRect(-26, -14, 52, 26, 6)
+    ctx.roundRect(-halfWidth, -14, halfWidth * 2, 26, 6)
     ctx.fill()
     ctx.fillStyle = '#4b5d6b'
-    ctx.beginPath()
-    ctx.roundRect(-20, -10, 40, 10, 4)
-    ctx.fill()
+    for (let i = 0; i < chambers; i += 1) {
+      const spacing = (halfWidth * 2 - 12) / chambers
+      const x = -halfWidth + 6 + spacing * i
+      ctx.beginPath()
+      ctx.roundRect(x, -10, spacing - 4, 10, 4)
+      ctx.fill()
+    }
     ctx.fillStyle = '#e8b04b'
     ctx.beginPath()
     ctx.arc(0, 16, 3, 0, Math.PI * 2)
     ctx.fill()
+    ctx.restore()
+  }
+
+  /** The sponge filter: a squat cylinder in the far corner with a slow
+   * bubble column, so filtration is visibly present in the tank. */
+  private drawFilter(ctx: CanvasRenderingContext2D, realTime: number): void {
+    ctx.save()
+    ctx.translate(56, TANK.sandTop - 46)
+    ctx.fillStyle = '#5b6f63'
+    ctx.beginPath()
+    ctx.roundRect(-16, 0, 32, 46, 7)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(20, 34, 30, 0.5)'
+    for (let i = 0; i < 4; i += 1) {
+      ctx.fillRect(-13, 7 + i * 10, 26, 3)
+    }
+    ctx.fillStyle = '#3a4a53'
+    ctx.fillRect(-4, -14, 8, 16)
+    ctx.fillStyle = 'rgba(226, 244, 246, 0.5)'
+    for (let i = 0; i < 3; i += 1) {
+      const phase = (realTime * 0.5 + i * 0.33) % 1
+      ctx.beginPath()
+      ctx.arc(Math.sin(phase * 7 + i) * 3, -16 - phase * 40, 2.2 * (1 - phase * 0.5), 0, Math.PI * 2)
+      ctx.fill()
+    }
     ctx.restore()
   }
 

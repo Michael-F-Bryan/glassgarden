@@ -1,12 +1,16 @@
 import { World } from 'miniplex'
 
-import type { Entity, JournalEntry, Unlocks } from './model'
+import type { Equipment } from './equipment'
+import type { CareHistory, DevelopmentId, Entity, JournalEntry } from './model'
 import { createRng } from './rng'
 import {
   checkSemantics,
-  migrateV1ToCurrent,
+  migrateV1ToV2,
+  migrateV2ToCurrent,
   normalizeSemantics,
   SaveV1Schema,
+  SaveV2Schema,
+  sortDevelopments,
   type WireEntity,
   type WireFish,
 } from './save-schema'
@@ -18,16 +22,17 @@ export const SAVE_KEY = 'glassgarden-save'
  * this into a GameState — reaching hydrate always goes through decodeSave's
  * validation first, whether directly or via the deprecated deserialize(). */
 export type SaveFile = {
-  version: 1
+  version: 2
   savedAtMs: number
   time: number
   coins: number
-  ownsSiphon: boolean
-  ownsFeeder: boolean
+  equipment: Equipment
+  developments: DevelopmentId[]
+  care: CareHistory
   feederLastDropAt: number
+  feederDropCount: number
   fishPurchased: number
   retiredNames: string[]
-  unlocks: Unlocks
   waterCells: number[]
   rngState: number
   nextEntityId: number
@@ -158,16 +163,17 @@ function fromWire(wire: WireEntity): Entity {
 
 export function serialize(state: GameState, savedAtMs: number): SaveFile {
   return {
-    version: 1,
+    version: 2,
     savedAtMs,
     time: state.time,
     coins: state.coins,
-    ownsSiphon: state.ownsSiphon,
-    ownsFeeder: state.ownsFeeder,
+    equipment: { ...state.equipment },
+    developments: sortDevelopments([...state.developments]),
+    care: { ...state.care },
     feederLastDropAt: state.feederLastDropAt,
+    feederDropCount: state.feederDropCount,
     fishPurchased: state.fishPurchased,
     retiredNames: state.retiredNames.slice(),
-    unlocks: { ...state.unlocks },
     waterCells: state.water.cells.slice(),
     rngState: state.rng.state(),
     nextEntityId: state.nextEntityId,
@@ -193,12 +199,13 @@ export function hydrate(document: SaveFile): GameState {
     nextEntityId: document.nextEntityId,
     time: document.time,
     coins: document.coins,
-    ownsSiphon: document.ownsSiphon,
-    ownsFeeder: document.ownsFeeder,
+    equipment: { ...document.equipment },
+    developments: new Set(document.developments),
+    care: { ...document.care },
     feederLastDropAt: document.feederLastDropAt,
+    feederDropCount: document.feederDropCount,
     fishPurchased: document.fishPurchased,
     retiredNames: document.retiredNames.slice(),
-    unlocks: { ...document.unlocks },
     water: { cells: document.waterCells.slice() },
     rng: createRng(document.rngState),
     // Notifications are deliberately not durable: the internal collector
@@ -221,10 +228,13 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
     return { kind: 'invalid', raw, issues: ['save is not a JSON object'] }
   }
   const version = (parsed as { version?: unknown }).version
-  if (version !== 1) {
+  if (version !== 1 && version !== 2) {
     return { kind: 'unsupported', raw, version }
   }
-  const structural = SaveV1Schema.safeParse(parsed)
+  // Each version validates against its own schema, then migrates forward
+  // through the chain to the current document shape.
+  const structural =
+    version === 1 ? SaveV1Schema.safeParse(parsed) : SaveV2Schema.safeParse(parsed)
   if (!structural.success) {
     return { kind: 'invalid', raw, issues: structural.error.issues.map(formatIssue) }
   }
@@ -232,8 +242,10 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
   if (semanticIssues.length > 0) {
     return { kind: 'invalid', raw, issues: semanticIssues }
   }
-  const normalized = normalizeSemantics(structural.data)
-  const document = migrateV1ToCurrent(normalized)
+  const document =
+    structural.data.version === 1
+      ? migrateV2ToCurrent(migrateV1ToV2(normalizeSemantics(structural.data)))
+      : migrateV2ToCurrent(normalizeSemantics(structural.data))
   return { kind: 'loaded', document }
 }
 

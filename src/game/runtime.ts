@@ -254,7 +254,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
    * the save happens only once the new session is coherent. */
   const replace = (next: GameSim) => {
     cancelGesture()
-    if (tool === 'siphon' && !next.read.ownsSiphon) tool = 'feed'
+    if (tool === 'siphon' && !next.read.equipment.siphon) tool = 'feed'
     hoverFishId = undefined
     selectedFishId = undefined
     affordWarnAtMs = 0
@@ -409,7 +409,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     },
 
     setTool(next) {
-      if (next === 'siphon' && !sim?.read.ownsSiphon) return
+      if (next === 'siphon' && !sim?.read.equipment.siphon) return
       tool = next
       publish()
     },

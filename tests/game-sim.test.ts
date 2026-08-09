@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 
 import { generateName, randomGenome } from '@/game/genome'
 import { TUNING, type StepReport, type UiNotification } from '@/game/model'
-import { decodeSave, deserialize, hydrate, parseSave, serialize } from '@/game/save'
+import { decodeSave, deserialize, hydrate, parseSave } from '@/game/save'
 import { GameSim } from '@/game/sim'
 import {
   addEntity,
@@ -69,23 +69,15 @@ describe('fresh game', () => {
 
   test('the first pellet retires the first-feed hint, permanently', () => {
     const sim = GameSim.fresh(42)
-    expect(sim.read.unlocks.fedOnce).toBe(false)
+    expect(sim.read.developments.has('fedOnce')).toBe(false)
 
     sim.dropFood(600)
 
-    expect(sim.read.unlocks.fedOnce).toBe(true)
+    expect(sim.read.developments.has('fedOnce')).toBe(true)
     const resumed = new GameSim(deserialize(sim.toSave(1_000)))
-    expect(resumed.read.unlocks.fedOnce).toBe(true)
+    expect(resumed.read.developments.has('fedOnce')).toBe(true)
   })
 
-  test('pre-fedOnce saves infer feeding from a noticeably grown fish', () => {
-    const state = createFreshGame(42)
-    state.unlocks.noticedGrowth = true
-    const save = serialize(state, 1_000)
-    delete (save.unlocks as Partial<typeof save.unlocks>).fedOnce
-
-    expect(deserialize(save).unlocks.fedOnce).toBe(true)
-  })
 })
 
 describe('simulation timing', () => {
@@ -135,7 +127,7 @@ describe('feeding and growth', () => {
       notifications.push(...runFor(sim, 8).notifications)
     }
     expect(onlyFish(sim).physiology.weight).toBeGreaterThan(3.5)
-    expect(sim.read.unlocks.noticedGrowth).toBe(true)
+    expect(sim.read.developments.has('growthNoticed')).toBe(true)
     expect(
       notifications.some((n) => n.tone === 'development' && /bigger/.test(n.message)),
     ).toBe(true)
@@ -164,7 +156,7 @@ describe('pollution and sickness', () => {
     }
     const result = runFor(sim, 240)
     expect(maxPollution(state.water)).toBeGreaterThan(0.1)
-    expect(state.unlocks.siphonInShop).toBe(true)
+    expect(state.developments.has('siphonOffered')).toBe(true)
     expect(
       result.notifications.some((n) => n.tone === 'development' && /green/.test(n.message)),
     ).toBe(true)
@@ -189,10 +181,10 @@ describe('pollution and sickness', () => {
     const sim = new GameSim(state)
     // Scenario is specifically "no siphon owned yet", so pin the failure reason.
     expect(sim.siphonAt(600, 600)).toMatchObject({ ok: false, reason: 'unowned' })
-    state.unlocks.siphonInShop = true
+    state.developments.add('siphonOffered')
     state.coins = 100
     expect(sim.buy('siphon').ok).toBe(true)
-    expect(state.ownsSiphon).toBe(true)
+    expect(state.equipment.siphon).toBe(true)
     addEntity(state, {
       position: { x: 600, y: 609 },
       velocity: { x: 0, y: 0 },
@@ -223,7 +215,7 @@ describe('economy and population', () => {
     const sim = new GameSim(state)
     onlyFish(sim).physiology.weight = TUNING.fishUnlockWeight + 0.1
     const result = runFor(sim, 1)
-    expect(state.unlocks.fishInShop).toBe(true)
+    expect(state.developments.has('fishOffered')).toBe(true)
     expect(result.notifications.some((n) => n.tone === 'development')).toBe(true)
 
     state.coins = 500
@@ -357,7 +349,7 @@ describe('critique regressions', () => {
   test('the drip feeder feeds hungry fish automatically, spending coins', () => {
     const state = pairedState(715, { hunger: 0.9 })
     const sim = new GameSim(state)
-    state.ownsFeeder = true
+    state.equipment.feeder = 'drip'
     state.coins = 50
     const coinsBefore = state.coins
     runFor(sim, 60)
@@ -369,7 +361,7 @@ describe('critique regressions', () => {
   test('the feeder does nothing without coins', () => {
     const state = pairedState(717, { hunger: 0.9 })
     const sim = new GameSim(state)
-    state.ownsFeeder = true
+    state.equipment.feeder = 'drip'
     state.coins = 0
     sim.advanceElapsed(TEST_STEP, 'visible')
     expect([...state.world.with('food')]).toHaveLength(0)
@@ -391,7 +383,7 @@ describe('critique regressions', () => {
   test('the shop refuses fish at the population cap', () => {
     const state = createFreshGame(711)
     const sim = new GameSim(state)
-    state.unlocks.fishInShop = true
+    state.developments.add('fishOffered')
     state.coins = 100_000
     for (let i = 0; i < TUNING.maxPopulation - 1; i += 1) {
       spawnFish(state, {
@@ -445,13 +437,13 @@ describe('neglect, death, and game over', () => {
   test('game over keeps coins and equipment, and a new starter fish resumes play', () => {
     const state = createFreshGame(203)
     const sim = new GameSim(state)
-    state.ownsSiphon = true
+    state.equipment.siphon = true
     state.coins = 40
     onlyFish(sim).physiology.hunger = 1
     onlyFish(sim).physiology.health = 0.05
     runFor(sim, 300)
     expect(state.gameOver).toBe(true)
-    expect(state.ownsSiphon).toBe(true)
+    expect(state.equipment.siphon).toBe(true)
     const coinsAfterDeath = state.coins
     expect(coinsAfterDeath).toBeGreaterThan(0)
 
@@ -550,10 +542,10 @@ describe('persistence', () => {
 
   test('parseSave rejects malformed and foreign saves', () => {
     expect(parseSave('not json')).toBeUndefined()
-    expect(parseSave('{"version":2}')).toBeUndefined()
+    expect(parseSave('{"version":99}')).toBeUndefined()
     const sim = GameSim.fresh(503)
     const roundTripped = parseSave(JSON.stringify(sim.toSave(5)))
-    expect(roundTripped?.version).toBe(1)
+    expect(roundTripped?.version).toBe(2)
   })
 })
 
@@ -565,7 +557,7 @@ describe('tank journal', () => {
     expect(state.journal[0].kind).toBe('arrival')
 
     state.coins = 100
-    state.unlocks.siphonInShop = true
+    state.developments.add('siphonOffered')
     expect(sim.buy('siphon').ok).toBe(true)
     expect(state.journal.at(-1)).toMatchObject({ kind: 'purchase' })
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import { loadFromStorage, RECOVERY_KEY, saveToStorage } from '@/game/browser-save'
-import { decodeSave, hydrate, SAVE_KEY, serialize, type SaveFile } from '@/game/save'
+import { decodeSave, hydrate, SAVE_KEY, serialize } from '@/game/save'
 import { GameSim } from '@/game/sim'
 
 /** Minimal in-memory Storage fake — no jsdom/localStorage mock theatre. */
@@ -23,6 +23,77 @@ function memoryStorage(overrides?: Partial<Storage>): Storage {
     ...overrides,
   }
   return storage
+}
+
+/** A complete, valid V1 save as the pre-equipment build wrote them: one
+ * resident and one pellet. Tests mutate a copy to describe the tank they
+ * mean, so migration is proven against the real historical shape rather
+ * than against something the current serializer produced. */
+function v1Fixture() {
+  return {
+    version: 1 as const,
+    savedAtMs: 1_000,
+    time: 12.5,
+    coins: 42.5,
+    ownsSiphon: false,
+    ownsFeeder: false as boolean | undefined,
+    feederLastDropAt: 0 as number | undefined,
+    fishPurchased: 0,
+    retiredNames: [] as string[] | undefined,
+    unlocks: {
+      fedOnce: false as boolean | undefined,
+      noticedGrowth: false,
+      noticedPollution: false,
+      siphonInShop: false,
+      fishInShop: false,
+      feederInShop: false as boolean | undefined,
+      seenEgg: false,
+    },
+    waterCells: new Array(84).fill(0.05) as number[],
+    rngState: 123_456,
+    nextEntityId: 3,
+    gameOver: false,
+    journal: [] as { atSim: number; kind: string; message: string }[] | undefined,
+    entities: [
+      {
+        position: { x: 600, y: 300 },
+        velocity: { x: 1, y: 0 },
+        fish: {
+          name: 'Pella',
+          genome: {
+            hue: 200,
+            saturation: 0.7,
+            maxWeight: 26,
+            finShape: 'fan',
+            finFlair: 0.5,
+            bodyAspect: 0.45,
+            pattern: 'plain',
+            patternIntensity: 0.2,
+            speed: 40,
+            resilience: 0.5,
+          },
+          weight: 4,
+          hunger: 0.3,
+          sickness: 0,
+          health: 1,
+          ageSeconds: 30,
+          generation: 1,
+          hatchedInMurkyWater: false,
+          digesting: 0.5,
+          breedingCooldownUntil: 0,
+          activity: { kind: 'wander', target: { x: 700, y: 300 }, idleUntil: 20 },
+          facing: 1,
+        },
+        id: 1,
+      },
+      {
+        position: { x: 500, y: 100 },
+        velocity: { x: 0, y: 0 },
+        food: { nutrition: 1, spoilsAt: 50, spoiled: false, restingOnSand: false },
+        id: 2,
+      },
+    ],
+  }
 }
 
 describe('decodeSave: regressions from the persistence boundary probe', () => {
@@ -65,8 +136,8 @@ describe('decodeSave: structural and semantic validation', () => {
     expect(decodeSave('null').kind).toBe('invalid')
     expect(decodeSave('42').kind).toBe('invalid')
 
-    const unsupported = decodeSave(JSON.stringify({ version: 2 }))
-    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 2 })
+    const unsupported = decodeSave(JSON.stringify({ version: 3 }))
+    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 3 })
   })
 
   test('duplicate entity ids are rejected', () => {
@@ -143,77 +214,11 @@ describe('the wire format is independent of runtime components', () => {
     expect(wireFish.fish!.genome.hue).toEqual(expect.any(Number))
     expect(wireFish).not.toHaveProperty('resident')
     expect(wireFish).not.toHaveProperty('physiology')
-    expect(document.version).toBe(1)
+    expect(document.version).toBe(2)
   })
 
   test('a V1 save written before the component split still loads and runs', () => {
-    // Captured from the pre-split serializer: one resident, one pellet.
-    const legacy = {
-      version: 1,
-      savedAtMs: 1_000,
-      time: 12.5,
-      coins: 42.5,
-      ownsSiphon: false,
-      ownsFeeder: false,
-      feederLastDropAt: 0,
-      fishPurchased: 0,
-      retiredNames: [],
-      unlocks: {
-        fedOnce: true,
-        noticedGrowth: false,
-        noticedPollution: false,
-        siphonInShop: false,
-        fishInShop: false,
-        feederInShop: false,
-        seenEgg: false,
-      },
-      waterCells: new Array(84).fill(0.05),
-      rngState: 123_456,
-      nextEntityId: 3,
-      gameOver: false,
-      journal: [],
-      entities: [
-        {
-          position: { x: 600, y: 300 },
-          velocity: { x: 1, y: 0 },
-          fish: {
-            name: 'Pella',
-            genome: {
-              hue: 200,
-              saturation: 0.7,
-              maxWeight: 26,
-              finShape: 'fan',
-              finFlair: 0.5,
-              bodyAspect: 0.45,
-              pattern: 'plain',
-              patternIntensity: 0.2,
-              speed: 40,
-              resilience: 0.5,
-            },
-            weight: 4,
-            hunger: 0.3,
-            sickness: 0,
-            health: 1,
-            ageSeconds: 30,
-            generation: 1,
-            hatchedInMurkyWater: false,
-            digesting: 0.5,
-            breedingCooldownUntil: 0,
-            activity: { kind: 'wander', target: { x: 700, y: 300 }, idleUntil: 20 },
-            facing: 1,
-          },
-          id: 1,
-        },
-        {
-          position: { x: 500, y: 100 },
-          velocity: { x: 0, y: 0 },
-          food: { nutrition: 1, spoilsAt: 50, spoiled: false, restingOnSand: false },
-          id: 2,
-        },
-      ],
-    }
-
-    const result = decodeSave(JSON.stringify(legacy))
+    const result = decodeSave(JSON.stringify(v1Fixture()))
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
 
@@ -224,7 +229,7 @@ describe('the wire format is independent of runtime components', () => {
     expect(resident.behaviour!.activity.kind).toBe('wander')
     expect(resident.breeding!.cooldownUntil).toBe(0)
 
-    // It keeps simulating, and writing it back produces the same V1 shape.
+    // It keeps simulating, and writing it back produces the current format.
     const sim = new GameSim(state)
     sim.advanceElapsed(1, 'visible')
     expect(sim.toSave(2_000).entities.find((entity) => entity.fish)!.fish!.name).toBe('Pella')
@@ -259,41 +264,109 @@ describe('round-trip and migration determinism', () => {
     expect(result.document).not.toHaveProperty('pendingEvents')
   })
 
-  test('a historical minimal V1 fixture with no journal, feeder fields, or fedOnce migrates with documented defaults', () => {
-    const save = GameSim.fresh(201).toSave(1_000) as Partial<SaveFile>
+  test('a minimal V1 save with no journal, feeder fields, or fedOnce migrates with documented defaults', () => {
+    const save = v1Fixture()
     delete save.journal
     delete save.retiredNames
     delete save.feederLastDropAt
     delete save.ownsFeeder
-    delete (save.unlocks as Partial<SaveFile['unlocks']>).feederInShop
-    delete (save.unlocks as Partial<SaveFile['unlocks']>).fedOnce
+    delete save.unlocks.feederInShop
+    delete save.unlocks.fedOnce
 
     const result = decodeSave(JSON.stringify(save))
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
 
+    expect(result.document.version).toBe(2)
     expect(result.document.journal).toEqual([])
     expect(result.document.retiredNames).toEqual([])
     expect(result.document.feederLastDropAt).toBe(0)
-    expect(result.document.ownsFeeder).toBe(false)
-    expect(result.document.unlocks.feederInShop).toBe(false)
+    expect(result.document.equipment).toEqual({ siphon: false, feeder: 'none', filter: 'none' })
+    expect(result.document.developments).not.toContain('dripFeederOffered')
     // No noticedGrowth either in this fixture, so fedOnce infers false.
-    expect(result.document.unlocks.fedOnce).toBe(false)
+    expect(result.document.developments).not.toContain('fedOnce')
+    expect(result.document.care).toEqual({
+      feederShortfallSeconds: 0,
+      siphonUses: 0,
+      pollutedSeconds: 0,
+    })
 
-    // Re-migrating the same fixture again reaches the identical document.
-    const again = decodeSave(JSON.stringify(save))
-    expect(again).toEqual(result)
+    // Re-migrating the same fixture reaches the identical document.
+    expect(decodeSave(JSON.stringify(save))).toEqual(result)
   })
 
-  test('a historical fixture with noticedGrowth but no fedOnce infers fedOnce true', () => {
-    const save = GameSim.fresh(202).toSave(1_000) as Partial<SaveFile>
-    save.unlocks!.noticedGrowth = true
-    delete (save.unlocks as Partial<SaveFile['unlocks']>).fedOnce
+  test('a V1 save with noticedGrowth but no fedOnce infers fedOnce', () => {
+    const save = v1Fixture()
+    save.unlocks.noticedGrowth = true
+    delete save.unlocks.fedOnce
 
     const result = decodeSave(JSON.stringify(save))
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
-    expect(result.document.unlocks.fedOnce).toBe(true)
+    expect(result.document.developments).toContain('fedOnce')
+    expect(result.document.developments).toContain('growthNoticed')
+  })
+
+  test('a developed V1 tank keeps its equipment, unlocks, residents, and history', () => {
+    const save = v1Fixture()
+    save.ownsSiphon = true
+    save.ownsFeeder = true
+    save.coins = 812.5
+    save.fishPurchased = 2
+    save.retiredNames = ['Wisp']
+    save.journal = [{ atSim: 5, kind: 'arrival', message: 'Pella arrived in the bare tank.' }]
+    save.unlocks = {
+      fedOnce: true,
+      noticedGrowth: true,
+      noticedPollution: true,
+      siphonInShop: true,
+      fishInShop: true,
+      feederInShop: true,
+      seenEgg: true,
+    }
+
+    const result = decodeSave(JSON.stringify(save))
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+    const document = result.document
+
+    // Equipment carries over as typed stages; a V1 feeder is the drip stage.
+    expect(document.equipment).toEqual({ siphon: true, feeder: 'drip', filter: 'none' })
+    expect(document.developments).toEqual([
+      'fedOnce',
+      'growthNoticed',
+      'pollutionNoticed',
+      'siphonOffered',
+      'fishOffered',
+      'eggSeen',
+      'dripFeederOffered',
+    ])
+    expect(document.coins).toBe(812.5)
+    expect(document.fishPurchased).toBe(2)
+    expect(document.retiredNames).toEqual(['Wisp'])
+    expect(document.journal).toHaveLength(1)
+    expect(document.entities).toHaveLength(save.entities.length)
+
+    // The migrated tank is playable and re-saves in the current format.
+    const sim = new GameSim(hydrate(document))
+    sim.advanceElapsed(1, 'visible')
+    expect(sim.toSave(2_000).version).toBe(2)
+    expect(sim.read.equipment.feeder).toBe('drip')
+
+    // Migration is deterministic: the same V1 bytes always land identically.
+    expect(decodeSave(JSON.stringify(save))).toEqual(result)
+  })
+
+  test('a V1 tank that never owned a feeder does not inherit one', () => {
+    const save = v1Fixture()
+    save.ownsFeeder = false
+    save.unlocks.feederInShop = false
+
+    const result = decodeSave(JSON.stringify(save))
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+    expect(result.document.equipment.feeder).toBe('none')
+    expect(result.document.developments).not.toContain('dripFeederOffered')
   })
 })
 

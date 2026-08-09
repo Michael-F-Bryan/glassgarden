@@ -1,17 +1,20 @@
 import { World } from 'miniplex'
 
 import { generateName, randomGenome } from './genome'
+import { createEquipment, type Equipment } from './equipment'
 import {
+  createCareHistory,
   RESIDENT_COMPONENTS,
   TANK,
   TUNING,
+  type CareHistory,
+  type DevelopmentId,
   type Entity,
   type GameEvent,
   type Genome,
   type JournalEntry,
   type JournalKind,
   type ResidentEntity,
-  type Unlocks,
   type Vec2,
 } from './model'
 import { createRng, type Rng } from './rng'
@@ -32,13 +35,18 @@ export type GameState = {
   /** Sim seconds since the aquarium began. */
   time: number
   coins: number
-  ownsSiphon: boolean
-  ownsFeeder: boolean
+  /** What the player owns, as typed stages. */
+  equipment: Equipment
   feederLastDropAt: number
+  /** Drops so far, so a multi-spout feeder steps across the tank. */
+  feederDropCount: number
   fishPurchased: number
   /** Names of the departed, kept so newcomers don't wear them. */
   retiredNames: string[]
-  unlocks: Unlocks
+  /** Hidden developments already revealed; one-shot and durable. */
+  developments: Set<DevelopmentId>
+  /** Evidence the hidden developments consult. */
+  care: CareHistory
   water: WaterGrid
   rng: Rng
   events: GameEvent[]
@@ -57,10 +65,10 @@ export type GameReadModel = {
   byId: ReadonlyMap<number, Entity>
   readonly time: number
   readonly coins: number
-  readonly ownsSiphon: boolean
-  readonly ownsFeeder: boolean
+  readonly equipment: Readonly<Equipment>
   readonly fishPurchased: number
-  readonly unlocks: Readonly<Unlocks>
+  readonly developments: ReadonlySet<DevelopmentId>
+  readonly care: Readonly<CareHistory>
   water: { readonly cells: readonly number[] }
   readonly journal: readonly JournalEntry[]
   readonly gameOver: boolean
@@ -73,20 +81,13 @@ export function createState(seed: number): GameState {
     nextEntityId: 1,
     time: 0,
     coins: TUNING.startingCoins,
-    ownsSiphon: false,
-    ownsFeeder: false,
+    equipment: createEquipment(),
     feederLastDropAt: 0,
+    feederDropCount: 0,
     fishPurchased: 0,
     retiredNames: [],
-    unlocks: {
-      fedOnce: false,
-      noticedGrowth: false,
-      noticedPollution: false,
-      siphonInShop: false,
-      fishInShop: false,
-      feederInShop: false,
-      seenEgg: false,
-    },
+    developments: new Set(),
+    care: createCareHistory(),
     water: createWaterGrid(),
     rng: createRng(seed),
     events: [],
@@ -178,6 +179,21 @@ export function removeEntity(state: GameState, entity: Entity): void {
 
 export function emit(state: GameState, event: GameEvent): void {
   state.events.push(event)
+}
+
+/**
+ * Reveal a hidden development exactly once. Returns false when it was
+ * already discovered, so callers cannot announce the same development twice
+ * across a reload.
+ */
+export function discover(state: GameState, id: DevelopmentId): boolean {
+  if (state.developments.has(id)) return false
+  state.developments.add(id)
+  return true
+}
+
+export function hasDiscovered(state: GameState, id: DevelopmentId): boolean {
+  return state.developments.has(id)
 }
 
 /** Every living resident in id order, so callers iterate identically before
