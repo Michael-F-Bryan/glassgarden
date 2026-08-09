@@ -571,6 +571,10 @@ export default function GameRoot() {
     .sort((a, b) => TOAST_PRIORITY[a.tone] - TOAST_PRIORITY[b.tone] || b.key - a.key)
     .slice(0, 3)
 
+  const dismissToast = (key: number) => {
+    setToasts((current) => current.filter((toast) => toast.key !== key))
+  }
+
   const buy = (itemId: ShopItem['id']) => {
     simRef.current?.buy(itemId)
     refreshHudRef.current()
@@ -699,10 +703,15 @@ export default function GameRoot() {
           data-ui-anchor="bottom-left"
         >
           {visibleToasts.map((toast) => (
-            <div
+            // The stack stays click-transparent; only the toast itself takes
+            // the pointer, because a click on it now means "dismiss".
+            <button
+              type="button"
               key={toast.key}
               data-testid={`toast-${toast.tone}`}
-              className={`pointer-events-none max-w-full rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+              title="Dismiss"
+              onClick={() => dismissToast(toast.key)}
+              className={`pointer-events-auto max-w-full cursor-pointer rounded-xl border px-4 py-2 text-left text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-bottom-2 duration-300 ${
                 toast.tone === 'development'
                   ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
                   : toast.tone === 'warning'
@@ -712,7 +721,7 @@ export default function GameRoot() {
             >
               {toast.tone === 'development' && <span className="mr-2 text-base">✦</span>}
               {toast.message}
-            </div>
+            </button>
           ))}
         </div>
 
