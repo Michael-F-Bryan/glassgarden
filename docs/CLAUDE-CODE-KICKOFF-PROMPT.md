@@ -16,6 +16,8 @@ The interviews are a creative handoff, not an implementation specification. Pres
 
 The concrete feeding, growth, waste, pollution, economy, population, and breeding ideas are a strong starting point. Adapt, simplify, replace, or extend specific mechanics when doing so produces a more coherent and enjoyable game.
 
+Keep these product boundaries stable while adapting the mechanics: the first playable is desktop-first; away-time progress must stay slowed, capped, or otherwise recoverable so absence cannot cause catastrophic loss; fatal neglect may occur only while the player is present, after clear warning and continued neglect; and prove one complete care-to-visible-development path before investing in later lifecycle, social, or content breadth. Mechanics and progression around those boundaries remain adaptable.
+
 Use a proper entity–component–system (ECS) architecture for the simulation and game logic rather than accumulating ad hoc state and behaviour in UI components. The ECS should own entities, component data, and systems; presentation should observe it and issue player intents. Choose a suitable TypeScript ECS implementation and concrete component/system boundaries based on the game as it develops—do not build a generic engine beyond Glassgarden’s actual needs.
 
 ## Visual assets
@@ -23,6 +25,8 @@ Use a proper entity–component–system (ECS) architecture for the simulation a
 You have confirmed access on this workstation to OpenAI image generation through the Hermes tools MCP server. In Claude Code the tool is `mcp__hermes-tools__image_generate`. Use it when custom textures, sprites, visual references, or source artwork would materially improve the game; do not stop or ask Michael merely because artwork is needed.
 
 Treat generated images as candidates, not production-ready assets. Copy accepted outputs into the repository because provider URLs and Hermes cache paths are not durable project storage. Verify actual dimensions, alpha transparency, cropping, edge quality, web optimisation, and appearance at in-game scale. For tiled textures, test the real edges for visible seams rather than trusting “seamless” in a prompt. Build coherent families from selected references and deterministic variations instead of accumulating unrelated generations.
+
+Record provenance for every accepted asset: for generated art, the generation source/model and prompt or equivalent reproducible source metadata; for non-generated art, its licence and canonical source; and for procedural art, its repository-owned source. Do not commit temporary or cache files, or reference them or provider URLs from runtime code.
 
 The MCP boundary owns authentication. Never inspect, print, copy, or commit its credentials. If the tool is unavailable or a generation fails, continue with procedural artwork or clearly licensed assets and recorded provenance rather than blocking the build or shipping unexplained third-party art.
 
@@ -44,7 +48,7 @@ If an approach or delegated task fails, inspect its artefacts and evidence, iden
 
 ## Feedback loop
 
-Run the development server locally and use a headless browser against that local instance for iterative validation. Repeatedly play from both a fresh start and a developed aquarium. Use screenshots, rendered DOM inspection, browser logs, and interaction checks where useful. Judge the experience as a player, not only as its implementer:
+Before substantive game implementation, run the development server locally and verify or establish a working headless-browser capability against it. This browser path is non-waivable: use it for interaction, console, rendered DOM, and screenshot checks. If it cannot be established, treat that as a genuine blocker; do not silently waive it or imply that browser evidence exists. Repeatedly play from both a fresh start and a developed aquarium. Judge the experience as a player, not only as its implementer:
 
 - Is it obvious what to do without exposing hidden formulas?
 - Does care produce visible, attributable change?
@@ -61,12 +65,12 @@ Do not wait for GitHub Actions or GitHub Pages between development milestones, a
 
 The run is complete only when:
 
-- the intended care-to-development experience works end to end;
-- the game survives repeated browser playtesting from fresh and progressed states;
-- playtesting has visibly improved game feel and presentation;
+- the complete care-to-visible-development causal slice passes fresh-start and progressed-state browser playtests;
+- no unresolved material gameplay, UX, visual, or technical defect remains;
+- one final fresh-context critique finds no unresolved material issue;
 - automated tests, lint, type-checking, and the production static export pass;
-- the deployed GitHub Pages build works at `https://michael-f-bryan.github.io/glassgarden/`; and
-- Michael can open that URL and reasonably expect to have fun playing it.
+- the exact deployed URL `https://michael-f-bryan.github.io/glassgarden/` returns successfully, representative JavaScript, CSS, and image assets resolve under `/glassgarden/`, and the deployed gameplay flow is exercised; and
+- the final handover reports evidence supporting likely enjoyment and honest limitations, treating fun as subjective rather than claiming that Michael’s enjoyment has been proven.
 
 Work directly on `main`. After each significant feature or coherent milestone, run the relevant local checks, commit the tested change, and push it to GitHub as a durable checkpoint. Continue working immediately against the local development server; ordinary checkpoint pushes do not require waiting for CI or Pages deployment.
 
