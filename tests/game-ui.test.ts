@@ -48,14 +48,14 @@ describe('game UI layout', () => {
 
   test('fish roster summarises weight and mood with an emoji', () => {
     const sim = GameSim.fresh(123)
-    const fish = [...sim.read.world.with('fish')][0].fish
-    fish.hunger = 0.9
+    const fish = [...sim.read.world.with('resident', 'physiology')][0]
+    fish.physiology.hunger = 0.9
 
     const resident = buildHudSnapshot(sim, undefined, 'clear').residents[0]
 
     expect(resident).toMatchObject({
-      name: fish.name,
-      weightGrams: fish.weight,
+      name: fish.resident.name,
+      weightGrams: fish.physiology.weight,
       mood: 'very hungry',
       moodEmoji: '😟',
     })

@@ -2,7 +2,14 @@ import { World } from 'miniplex'
 
 import type { Entity, JournalEntry, Unlocks } from './model'
 import { createRng } from './rng'
-import { checkSemantics, migrateV1ToCurrent, normalizeSemantics, SaveV1Schema } from './save-schema'
+import {
+  checkSemantics,
+  migrateV1ToCurrent,
+  normalizeSemantics,
+  SaveV1Schema,
+  type WireEntity,
+  type WireFish,
+} from './save-schema'
 import type { GameState } from './state'
 
 export const SAVE_KEY = 'glassgarden-save'
@@ -25,7 +32,7 @@ export type SaveFile = {
   rngState: number
   nextEntityId: number
   gameOver: boolean
-  entities: Entity[]
+  entities: WireEntity[]
   journal: JournalEntry[]
 }
 
@@ -34,6 +41,120 @@ export type LoadResult =
   | { kind: 'loaded'; document: SaveFile }
   | { kind: 'invalid'; raw: string; issues: string[] }
   | { kind: 'unsupported'; raw: string; version: unknown }
+
+/**
+ * Runtime entity → wire entity. Residents collapse into the V1 `fish` blob;
+ * everything else is already wire-shaped.
+ */
+function toWire(entity: Entity): WireEntity {
+  const base = {
+    id: entity.id,
+    position: { ...entity.position },
+    velocity: { ...entity.velocity },
+  }
+  if (entity.resident && entity.genome && entity.physiology && entity.behaviour && entity.breeding) {
+    return {
+      ...base,
+      fish: {
+        name: entity.resident.name,
+        genome: { ...entity.genome },
+        weight: entity.physiology.weight,
+        hunger: entity.physiology.hunger,
+        sickness: entity.physiology.sickness,
+        health: entity.physiology.health,
+        ageSeconds: entity.physiology.ageSeconds,
+        generation: entity.resident.generation,
+        parents: entity.resident.parents ? [...entity.resident.parents] : undefined,
+        hatchedInMurkyWater: entity.resident.hatchedInMurkyWater,
+        digesting: entity.physiology.digesting,
+        breedingCooldownUntil: entity.breeding.cooldownUntil,
+        activity: structuredClone(entity.behaviour.activity),
+        criticalSince: entity.physiology.criticalSince,
+        lastWarningAt: entity.physiology.lastWarningAt,
+        facing: entity.behaviour.facing,
+      },
+    }
+  }
+  if (entity.remains) {
+    // V1 stores a whole fish inside remains. A corpse only animates from its
+    // name, colours, and size, so the rest is written as neutral filler; a
+    // legacy corpse's stale body values normalise away on first load.
+    return {
+      ...base,
+      remains: {
+        expiresAt: entity.remains.expiresAt,
+        fish: {
+          name: entity.remains.name,
+          genome: { ...entity.remains.genome },
+          weight: entity.remains.weight,
+          hunger: 0,
+          sickness: 0,
+          health: 0,
+          ageSeconds: 0,
+          generation: 1,
+          hatchedInMurkyWater: false,
+          digesting: 0,
+          breedingCooldownUntil: 0,
+          activity: { kind: 'distress' },
+          facing: 1,
+        },
+      },
+    }
+  }
+  if (entity.food) return { ...base, food: { ...entity.food } }
+  if (entity.waste) return { ...base, waste: { ...entity.waste } }
+  if (entity.egg) return { ...base, egg: structuredClone(entity.egg) }
+  throw new Error(`serialize: entity ${entity.id} has no archetype component`)
+}
+
+/** Wire entity → runtime entity, expanding the `fish` blob into components. */
+function fromWire(wire: WireEntity): Entity {
+  const base: Entity = {
+    id: wire.id,
+    position: { ...wire.position },
+    velocity: { ...wire.velocity },
+  }
+  const fish: WireFish | undefined = wire.fish
+  if (fish) {
+    return {
+      ...base,
+      resident: {
+        name: fish.name,
+        generation: fish.generation,
+        parents: fish.parents ? [fish.parents[0], fish.parents[1]] : undefined,
+        hatchedInMurkyWater: fish.hatchedInMurkyWater,
+      },
+      genome: { ...fish.genome },
+      physiology: {
+        weight: fish.weight,
+        hunger: fish.hunger,
+        sickness: fish.sickness,
+        health: fish.health,
+        ageSeconds: fish.ageSeconds,
+        digesting: fish.digesting,
+        criticalSince: fish.criticalSince,
+        lastWarningAt: fish.lastWarningAt,
+      },
+      behaviour: { activity: structuredClone(fish.activity), facing: fish.facing },
+      breeding: { cooldownUntil: fish.breedingCooldownUntil },
+    }
+  }
+  if (wire.remains) {
+    return {
+      ...base,
+      remains: {
+        name: wire.remains.fish.name,
+        genome: { ...wire.remains.fish.genome },
+        weight: wire.remains.fish.weight,
+        expiresAt: wire.remains.expiresAt,
+      },
+    }
+  }
+  if (wire.food) return { ...base, food: { ...wire.food } }
+  if (wire.waste) return { ...base, waste: { ...wire.waste } }
+  if (wire.egg) return { ...base, egg: structuredClone(wire.egg) }
+  throw new Error(`hydrate: entity ${wire.id} has no archetype component`)
+}
 
 export function serialize(state: GameState, savedAtMs: number): SaveFile {
   return {
@@ -51,9 +172,7 @@ export function serialize(state: GameState, savedAtMs: number): SaveFile {
     rngState: state.rng.state(),
     nextEntityId: state.nextEntityId,
     gameOver: state.gameOver,
-    entities: [...state.world.entities]
-      .sort((a, b) => a.id - b.id)
-      .map((entity) => structuredClone(entity)),
+    entities: [...state.world.entities].sort((a, b) => a.id - b.id).map(toWire),
     journal: state.journal.map((entry) => ({ ...entry })),
   }
 }
@@ -64,7 +183,7 @@ export function hydrate(document: SaveFile): GameState {
   const world = new World<Entity>()
   const byId = new Map<number, Entity>()
   for (const raw of document.entities) {
-    const entity = structuredClone(raw)
+    const entity = fromWire(raw)
     world.add(entity)
     byId.set(entity.id, entity)
   }

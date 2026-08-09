@@ -54,7 +54,7 @@ describe('decodeSave: regressions from the persistence boundary probe', () => {
     const resumed = new GameSim(hydrate(result.document))
     expect(resumed.dropFood(600).ok).toBe(true)
     expect([...resumed.read.world.entities].filter((entity) => entity.id === fishId)).toHaveLength(1)
-    expect(resumed.read.byId.get(fishId)?.fish).toBeDefined()
+    expect(resumed.read.byId.get(fishId)?.resident).toBeDefined()
   })
 })
 
@@ -98,8 +98,8 @@ describe('decodeSave: structural and semantic validation', () => {
 
   test('a fish activity referencing a food entity that no longer exists normalises to wander instead of rejecting', () => {
     const sim = GameSim.fresh(104)
-    const fish = [...sim.read.world.with('fish')][0]
-    fish.fish.activity = { kind: 'seekFood', foodId: 999_999 }
+    const fish = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
+    fish.behaviour.activity = { kind: 'seekFood', foodId: 999_999 }
     const save = sim.toSave(1_000)
 
     const result = decodeSave(JSON.stringify(save))
@@ -112,8 +112,8 @@ describe('decodeSave: structural and semantic validation', () => {
 
   test('a fish courting a partner that no longer exists normalises to wander instead of rejecting', () => {
     const sim = GameSim.fresh(105)
-    const fish = [...sim.read.world.with('fish')][0]
-    fish.fish.activity = { kind: 'court', partnerId: 999_999, until: 100 }
+    const fish = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
+    fish.behaviour.activity = { kind: 'court', partnerId: 999_999, until: 100 }
     const save = sim.toSave(1_000)
 
     const result = decodeSave(JSON.stringify(save))
@@ -122,6 +122,112 @@ describe('decodeSave: structural and semantic validation', () => {
 
     const resumedFish = result.document.entities.find((entity) => entity.id === fish.id)!
     expect(resumedFish.fish!.activity.kind).toBe('wander')
+  })
+})
+
+describe('the wire format is independent of runtime components', () => {
+  test('a resident is still persisted as one V1 fish blob', () => {
+    const sim = GameSim.fresh(210)
+    const document = sim.toSave(1_000)
+    const wireFish = document.entities.find((entity) => entity.fish)!
+
+    // The runtime splits residents into components; the wire keeps V1's
+    // single blob, so existing saves stay readable without a version bump.
+    expect(wireFish.fish).toMatchObject({
+      name: expect.any(String),
+      weight: expect.any(Number),
+      hunger: expect.any(Number),
+      breedingCooldownUntil: expect.any(Number),
+      facing: expect.any(Number),
+    })
+    expect(wireFish.fish!.genome.hue).toEqual(expect.any(Number))
+    expect(wireFish).not.toHaveProperty('resident')
+    expect(wireFish).not.toHaveProperty('physiology')
+    expect(document.version).toBe(1)
+  })
+
+  test('a V1 save written before the component split still loads and runs', () => {
+    // Captured from the pre-split serializer: one resident, one pellet.
+    const legacy = {
+      version: 1,
+      savedAtMs: 1_000,
+      time: 12.5,
+      coins: 42.5,
+      ownsSiphon: false,
+      ownsFeeder: false,
+      feederLastDropAt: 0,
+      fishPurchased: 0,
+      retiredNames: [],
+      unlocks: {
+        fedOnce: true,
+        noticedGrowth: false,
+        noticedPollution: false,
+        siphonInShop: false,
+        fishInShop: false,
+        feederInShop: false,
+        seenEgg: false,
+      },
+      waterCells: new Array(84).fill(0.05),
+      rngState: 123_456,
+      nextEntityId: 3,
+      gameOver: false,
+      journal: [],
+      entities: [
+        {
+          position: { x: 600, y: 300 },
+          velocity: { x: 1, y: 0 },
+          fish: {
+            name: 'Pella',
+            genome: {
+              hue: 200,
+              saturation: 0.7,
+              maxWeight: 26,
+              finShape: 'fan',
+              finFlair: 0.5,
+              bodyAspect: 0.45,
+              pattern: 'plain',
+              patternIntensity: 0.2,
+              speed: 40,
+              resilience: 0.5,
+            },
+            weight: 4,
+            hunger: 0.3,
+            sickness: 0,
+            health: 1,
+            ageSeconds: 30,
+            generation: 1,
+            hatchedInMurkyWater: false,
+            digesting: 0.5,
+            breedingCooldownUntil: 0,
+            activity: { kind: 'wander', target: { x: 700, y: 300 }, idleUntil: 20 },
+            facing: 1,
+          },
+          id: 1,
+        },
+        {
+          position: { x: 500, y: 100 },
+          velocity: { x: 0, y: 0 },
+          food: { nutrition: 1, spoilsAt: 50, spoiled: false, restingOnSand: false },
+          id: 2,
+        },
+      ],
+    }
+
+    const result = decodeSave(JSON.stringify(legacy))
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+
+    const state = hydrate(result.document)
+    const resident = [...state.world.with('resident')][0]
+    expect(resident.resident.name).toBe('Pella')
+    expect(resident.physiology!.weight).toBe(4)
+    expect(resident.behaviour!.activity.kind).toBe('wander')
+    expect(resident.breeding!.cooldownUntil).toBe(0)
+
+    // It keeps simulating, and writing it back produces the same V1 shape.
+    const sim = new GameSim(state)
+    sim.advanceElapsed(1, 'visible')
+    expect(sim.toSave(2_000).entities.find((entity) => entity.fish)!.fish!.name).toBe('Pella')
   })
 })
 

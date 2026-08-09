@@ -32,6 +32,10 @@ const KELP = [
   { x: 1120, height: 220, fronds: 3 },
 ]
 
+/** What the renderer needs from a living resident. */
+type DrawableResident = Entity &
+  Required<Pick<Entity, 'resident' | 'genome' | 'physiology' | 'behaviour'>>
+
 type SiphonPuff = { x: number; y: number; at: number }
 type CoinFloat = { x: number; y: number; at: number }
 
@@ -131,7 +135,9 @@ export class TankRenderer {
     for (const entity of state.world.with('waste')) this.drawWaste(ctx, entity)
     for (const entity of state.world.with('food')) this.drawFood(ctx, entity)
 
-    const fishEntities = [...state.world.with('fish')].sort((a, b) => a.position.y - b.position.y)
+    const fishEntities = [...state.world.with('resident', 'genome', 'physiology', 'behaviour')].sort(
+      (a, b) => a.position.y - b.position.y,
+    )
     for (const entity of fishEntities) {
       const highlighted = entity.id === options.selectedFishId || entity.id === options.hoverFishId
       this.drawFish(ctx, entity, realTime, highlighted)
@@ -470,11 +476,11 @@ export class TankRenderer {
 
   private drawFish(
     ctx: CanvasRenderingContext2D,
-    entity: Entity,
+    entity: DrawableResident,
     realTime: number,
     highlighted: boolean,
   ): void {
-    const fish = entity.fish!
+    const fish = { ...entity.physiology, ...entity.behaviour, genome: entity.genome }
     const length = fishLength(fish.weight)
     const height = (length * fish.genome.bodyAspect) / 2
     const speed = Math.hypot(entity.velocity.x, entity.velocity.y)
@@ -642,13 +648,13 @@ export class TankRenderer {
     }
   }
 
-  private drawNameplate(ctx: CanvasRenderingContext2D, entity: Entity): void {
-    const fish = entity.fish!
-    const y = entity.position.y - fishLength(fish.weight) * fish.genome.bodyAspect - 30
+  private drawNameplate(ctx: CanvasRenderingContext2D, entity: DrawableResident): void {
+    const y =
+      entity.position.y - fishLength(entity.physiology.weight) * entity.genome.bodyAspect - 30
     ctx.save()
     ctx.font = '600 14px Nunito, system-ui, sans-serif'
     ctx.textAlign = 'center'
-    const label = fish.name
+    const label = entity.resident.name
     const width = ctx.measureText(label).width + 16
     ctx.fillStyle = 'rgba(8, 25, 34, 0.72)'
     ctx.beginPath()
@@ -661,15 +667,14 @@ export class TankRenderer {
 
   private drawRemains(ctx: CanvasRenderingContext2D, entity: Entity, simTime: number): void {
     const remains = entity.remains!
-    const fish = remains.fish
     const alpha = Math.max(0, Math.min(1, (remains.expiresAt - simTime) / 6))
-    const length = fishLength(fish.weight)
-    const height = (length * fish.genome.bodyAspect) / 2
+    const length = fishLength(remains.weight)
+    const height = (length * remains.genome.bodyAspect) / 2
     ctx.save()
     ctx.globalAlpha = alpha * 0.8
     ctx.translate(entity.position.x, entity.position.y)
     ctx.scale(1, -1)
-    ctx.fillStyle = `hsl(${fish.genome.hue}, 12%, 62%)`
+    ctx.fillStyle = `hsl(${remains.genome.hue}, 12%, 62%)`
     ctx.beginPath()
     ctx.ellipse(0, 0, length / 2, height, 0, 0, Math.PI * 2)
     ctx.fill()

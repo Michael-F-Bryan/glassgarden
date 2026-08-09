@@ -83,34 +83,34 @@ describe('gap handling', () => {
 describe('mode contracts', () => {
   test("'offline' clamps hunger and sickness at their ceilings and never kills", () => {
     const sim = GameSim.fresh(401)
-    const fish = [...sim.read.world.with('fish')][0]
-    fish.fish.hunger = 0.99
-    fish.fish.sickness = 0.9
+    const fish = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
+    fish.physiology.hunger = 0.99
+    fish.physiology.sickness = 0.9
 
     sim.advanceElapsed(TUNING.offlineMaxSimSeconds, 'offline')
 
-    const after = [...sim.read.world.with('fish')][0]
-    expect(after.fish.hunger).toBeLessThanOrEqual(TUNING.offlineHungerCeiling)
-    expect(after.fish.sickness).toBeLessThanOrEqual(TUNING.offlineSicknessCeiling)
+    const after = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
+    expect(after.physiology.hunger).toBeLessThanOrEqual(TUNING.offlineHungerCeiling)
+    expect(after.physiology.sickness).toBeLessThanOrEqual(TUNING.offlineSicknessCeiling)
     expect(sim.read.gameOver).toBe(false)
   })
 
   test("'background' never kills, even under sustained critical neglect", () => {
     const sim = GameSim.fresh(402)
-    const fish = [...sim.read.world.with('fish')][0]
-    fish.fish.hunger = 1
-    fish.fish.health = 0.001
+    const fish = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
+    fish.physiology.hunger = 1
+    fish.physiology.health = 0.001
 
     sim.advanceElapsed(600, 'background')
 
-    expect([...sim.read.world.with('fish')]).toHaveLength(1)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(1)
     expect(sim.read.gameOver).toBe(false)
   })
 
   test("'visible' retains warned death after sustained neglect", () => {
     const sim = GameSim.fresh(403)
-    const fish = [...sim.read.world.with('fish')][0]
-    fish.fish.hunger = 1
+    const fish = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
+    fish.physiology.hunger = 1
 
     const { report, notifications } = sim.advanceElapsed(400, 'visible')
 
@@ -118,7 +118,7 @@ describe('mode contracts', () => {
       notifications.some((n) => n.tone === 'warning' && /starving/.test(n.message)),
     ).toBe(true)
     expect(report.deaths.length).toBeGreaterThan(0)
-    expect([...sim.read.world.with('fish')]).toHaveLength(0)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(0)
     expect(sim.read.gameOver).toBe(true)
   })
 })

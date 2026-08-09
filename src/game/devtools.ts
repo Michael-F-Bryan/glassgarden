@@ -108,18 +108,18 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
     ownsFeeder: state.ownsFeeder,
     gameOver: state.gameOver,
     unlocks: { ...state.unlocks },
-    fish: [...state.world.with('fish')]
+    fish: [...state.world.with('resident', 'physiology', 'behaviour')]
       .sort((a, b) => a.id - b.id)
       .map((entity) => ({
         ...position(entity),
-        name: entity.fish.name,
-        weight: entity.fish.weight,
-        hunger: entity.fish.hunger,
-        sickness: entity.fish.sickness,
-        health: entity.fish.health,
-        generation: entity.fish.generation,
-        parents: entity.fish.parents ? [...entity.fish.parents] : undefined,
-        activity: entity.fish.activity.kind,
+        name: entity.resident.name,
+        weight: entity.physiology.weight,
+        hunger: entity.physiology.hunger,
+        sickness: entity.physiology.sickness,
+        health: entity.physiology.health,
+        generation: entity.resident.generation,
+        parents: entity.resident.parents ? ([...entity.resident.parents] as [string, string]) : undefined,
+        activity: entity.behaviour.activity.kind,
       })),
     food: [...state.world.with('food')]
       .sort((a, b) => a.id - b.id)
@@ -140,11 +140,11 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
   const state = createFreshGame(seed)
   if (name === 'fresh') return new GameSim(state)
 
-  const fish = [...state.world.with('fish')][0]
+  const fish = [...state.world.with('physiology', 'behaviour')][0]
   if (name === 'starving-rescuable') {
-    fish.fish.hunger = 1
-    fish.fish.health = 0.4
-    fish.fish.activity = { kind: 'distress' }
+    fish.physiology.hunger = 1
+    fish.physiology.health = 0.4
+    fish.behaviour.activity = { kind: 'distress' }
     return new GameSim(state)
   }
 
@@ -153,7 +153,7 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
   state.unlocks.siphonInShop = true
   state.unlocks.noticedPollution = true
   state.water.cells.fill(0.4)
-  fish.fish.sickness = 0.35
+  fish.physiology.sickness = 0.35
   for (const x of [360, 600, 840]) {
     addEntity(state, {
       position: { x, y: TANK.sandTop - 6 },

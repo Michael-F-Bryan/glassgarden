@@ -1,11 +1,18 @@
 import { generateName, inheritGenome } from './genome'
-import { fishLength, TANK, TUNING, type Entity, type Vec2 } from './model'
+import {
+  fishLength,
+  TANK,
+  TUNING,
+  type Entity,
+  type Vec2,
+} from './model'
 import {
   addEntity,
   emit,
   livingFish,
   recordJournal,
   removeEntity,
+  residentCount,
   spawnFish,
   spawnPellet,
   takenNames,
@@ -53,16 +60,16 @@ export function stepTick(state: GameState, dt: number, mode: SimulationMode): vo
 }
 
 function hungerSystem(state: GameState, dt: number, mode: SimulationMode): void {
-  for (const entity of sortedById(state.world.with('fish'))) {
-    const fish = entity.fish
-    fish.ageSeconds += dt
-    const maturity = Math.min(1, fish.weight / fish.genome.maxWeight)
-    const satiation = fish.hunger < TUNING.satiationBelow ? TUNING.satiationFactor : 1
+  for (const entity of sortedById(state.world.with('physiology', 'genome'))) {
+    const body = entity.physiology
+    body.ageSeconds += dt
+    const maturity = Math.min(1, body.weight / entity.genome.maxWeight)
+    const satiation = body.hunger < TUNING.satiationBelow ? TUNING.satiationFactor : 1
     const rate = TUNING.hungerPerSecondAdult * (0.45 + 0.55 * maturity) * satiation
     const ceiling = mode === 'offline' ? TUNING.offlineHungerCeiling : 1
-    fish.hunger = Math.min(ceiling, fish.hunger + rate * dt)
-    if (fish.hunger >= 1) {
-      fish.weight = Math.max(0.5, fish.weight - 0.005 * dt)
+    body.hunger = Math.min(ceiling, body.hunger + rate * dt)
+    if (body.hunger >= 1) {
+      body.weight = Math.max(0.5, body.weight - 0.005 * dt)
     }
   }
 }
@@ -87,7 +94,7 @@ function nearestEdibleFood(state: GameState, from: Vec2): Entity | undefined {
 }
 
 function movementSystem(state: GameState, dt: number): void {
-  for (const entity of sortedById(state.world.with('fish'))) {
+  for (const entity of sortedById(state.world.with('behaviour', 'physiology', 'genome'))) {
     steerFish(state, entity, dt)
   }
   for (const entity of state.world.with('food')) {
@@ -117,36 +124,39 @@ function sinkToSand(entity: Entity, dt: number, speed: number, restY: number, on
   entity.velocity.x *= 1 - Math.min(1, 0.6 * dt)
 }
 
-function steerFish(state: GameState, entity: Entity, dt: number): void {
-  const fish = entity.fish!
-  const maturity = Math.min(1, fish.weight / fish.genome.maxWeight)
-  const speedScale = (0.55 + 0.45 * maturity) * (1 - 0.5 * fish.sickness)
-  const cruise = fish.genome.speed * speedScale
+type SteerableEntity = Entity & Required<Pick<Entity, 'behaviour' | 'physiology' | 'genome'>>
+
+function steerFish(state: GameState, entity: SteerableEntity, dt: number): void {
+  const behaviour = entity.behaviour
+  const body = entity.physiology
+  const maturity = Math.min(1, body.weight / entity.genome.maxWeight)
+  const speedScale = (0.55 + 0.45 * maturity) * (1 - 0.5 * body.sickness)
+  const cruise = entity.genome.speed * speedScale
 
   // Re-evaluate what the fish wants to do. A starving fish must still chase
   // food — the death warning exists so the player can rescue it by feeding.
-  const starving = fish.hunger >= 0.999
-  const gravelyIll = fish.sickness >= 0.75
+  const starving = body.hunger >= 0.999
+  const gravelyIll = body.sickness >= 0.75
   if (starving || gravelyIll) {
     const food = starving ? nearestEdibleFood(state, entity.position) : undefined
-    fish.activity = food ? { kind: 'seekFood', foodId: food.id } : { kind: 'distress' }
-  } else if (fish.activity.kind === 'court') {
-    const partner = state.byId.get(fish.activity.partnerId)
-    if (!partner?.fish) fish.activity = wanderActivity(state)
-  } else if (fish.hunger > TUNING.seekFoodAbove) {
+    behaviour.activity = food ? { kind: 'seekFood', foodId: food.id } : { kind: 'distress' }
+  } else if (behaviour.activity.kind === 'court') {
+    const partner = state.byId.get(behaviour.activity.partnerId)
+    if (!partner?.resident) behaviour.activity = wanderActivity(state)
+  } else if (body.hunger > TUNING.seekFoodAbove) {
     const food = nearestEdibleFood(state, entity.position)
-    if (food) fish.activity = { kind: 'seekFood', foodId: food.id }
-    else if (fish.activity.kind === 'seekFood') fish.activity = wanderActivity(state)
-  } else if (fish.activity.kind === 'seekFood' || fish.activity.kind === 'distress') {
-    fish.activity = wanderActivity(state)
+    if (food) behaviour.activity = { kind: 'seekFood', foodId: food.id }
+    else if (behaviour.activity.kind === 'seekFood') behaviour.activity = wanderActivity(state)
+  } else if (behaviour.activity.kind === 'seekFood' || behaviour.activity.kind === 'distress') {
+    behaviour.activity = wanderActivity(state)
   }
 
   let desired: Vec2 = { x: 0, y: 0 }
-  const activity = fish.activity
+  const activity = behaviour.activity
   if (activity.kind === 'wander') {
     const distance = Math.hypot(activity.target.x - entity.position.x, activity.target.y - entity.position.y)
     if (distance < 24 && state.time >= activity.idleUntil) {
-      fish.activity = wanderActivity(state)
+      behaviour.activity = wanderActivity(state)
     } else if (distance >= 24) {
       desired = toward(entity.position, activity.target, cruise * 0.5)
     }
@@ -155,7 +165,7 @@ function steerFish(state: GameState, entity: Entity, dt: number): void {
     if (food?.food && !food.food.spoiled) {
       desired = toward(entity.position, food.position, cruise)
     } else {
-      fish.activity = wanderActivity(state)
+      behaviour.activity = wanderActivity(state)
     }
   } else if (activity.kind === 'court') {
     const partner = state.byId.get(activity.partnerId)
@@ -180,10 +190,10 @@ function steerFish(state: GameState, entity: Entity, dt: number): void {
   entity.position.x += entity.velocity.x * dt
   entity.position.y += entity.velocity.y * dt
 
-  const halfLength = fishLength(fish.weight) / 2
+  const halfLength = fishLength(body.weight) / 2
   entity.position.x = clamp(entity.position.x, halfLength, TANK.width - halfLength)
   entity.position.y = clamp(entity.position.y, TANK.waterTop + 20, TANK.sandTop - 10)
-  if (Math.abs(entity.velocity.x) > 3) fish.facing = entity.velocity.x > 0 ? 1 : -1
+  if (Math.abs(entity.velocity.x) > 3) behaviour.facing = entity.velocity.x > 0 ? 1 : -1
 }
 
 function wanderActivity(state: GameState) {
@@ -206,35 +216,36 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function eatingSystem(state: GameState): void {
-  for (const entity of sortedById(state.world.with('fish'))) {
-    const fish = entity.fish
-    if (fish.activity.kind !== 'seekFood' || fish.hunger < EAT_HUNGER_CUTOFF) continue
-    const food = state.byId.get(fish.activity.foodId)
+  for (const entity of sortedById(state.world.with('behaviour', 'physiology', 'genome'))) {
+    const behaviour = entity.behaviour
+    const body = entity.physiology
+    if (behaviour.activity.kind !== 'seekFood' || body.hunger < EAT_HUNGER_CUTOFF) continue
+    const food = state.byId.get(behaviour.activity.foodId)
     if (!food?.food || food.food.spoiled) continue
-    const reach = Math.max(12, fishLength(fish.weight) * 0.4)
+    const reach = Math.max(12, fishLength(body.weight) * 0.4)
     const distance = Math.hypot(food.position.x - entity.position.x, food.position.y - entity.position.y)
     if (distance > reach) continue
 
     const nutrition = food.food.nutrition
     removeEntity(state, food)
-    fish.hunger = Math.max(0, fish.hunger - TUNING.hungerRelievedPerNutrition * nutrition)
-    const headroom = Math.max(0, 1 - fish.weight / fish.genome.maxWeight)
-    const healthFactor = 1 - 0.6 * fish.sickness
-    fish.weight += TUNING.growthPerNutrition * nutrition * headroom * healthFactor
-    fish.digesting += nutrition
-    fish.activity = wanderActivity(state)
+    body.hunger = Math.max(0, body.hunger - TUNING.hungerRelievedPerNutrition * nutrition)
+    const headroom = Math.max(0, 1 - body.weight / entity.genome.maxWeight)
+    const healthFactor = 1 - 0.6 * body.sickness
+    body.weight += TUNING.growthPerNutrition * nutrition * headroom * healthFactor
+    body.digesting += nutrition
+    behaviour.activity = wanderActivity(state)
   }
 }
 
 function digestionSystem(state: GameState): void {
-  for (const entity of sortedById(state.world.with('fish'))) {
-    const fish = entity.fish
-    if (fish.digesting < TUNING.digestionPerDropping) continue
-    fish.digesting -= TUNING.digestionPerDropping
+  for (const entity of sortedById(state.world.with('physiology'))) {
+    const body = entity.physiology
+    if (body.digesting < TUNING.digestionPerDropping) continue
+    body.digesting -= TUNING.digestionPerDropping
     addEntity(state, {
       position: { x: entity.position.x, y: entity.position.y + 8 },
       velocity: { x: state.rng.range(-6, 6), y: 0 },
-      waste: { size: 0.6 + fish.weight * 0.05, restingOnSand: false },
+      waste: { size: 0.6 + body.weight * 0.05, restingOnSand: false },
     })
   }
 }
@@ -254,68 +265,77 @@ function waterSystem(state: GameState, dt: number): void {
 }
 
 function sicknessSystem(state: GameState, dt: number, mode: SimulationMode): void {
-  for (const entity of sortedById(state.world.with('fish'))) {
-    const fish = entity.fish
+  for (const entity of sortedById(state.world.with('physiology', 'genome'))) {
+    const body = entity.physiology
     const pollution = pollutionAt(state.water, entity.position)
     if (pollution > TUNING.sicknessAbovePollution) {
       const exposure = (pollution - TUNING.sicknessAbovePollution) / (1 - TUNING.sicknessAbovePollution)
-      const susceptibility = 1 - 0.7 * fish.genome.resilience
+      const susceptibility = 1 - 0.7 * entity.genome.resilience
       const ceiling = mode === 'offline' ? TUNING.offlineSicknessCeiling : 1
-      fish.sickness = Math.min(
+      body.sickness = Math.min(
         ceiling,
-        fish.sickness + exposure * susceptibility * TUNING.sicknessPerSecondAtFullPollution * dt,
+        body.sickness + exposure * susceptibility * TUNING.sicknessPerSecondAtFullPollution * dt,
       )
     } else {
-      fish.sickness = Math.max(0, fish.sickness - TUNING.sicknessRecoveryPerSecond * dt)
+      body.sickness = Math.max(0, body.sickness - TUNING.sicknessRecoveryPerSecond * dt)
     }
   }
 }
 
 function healthSystem(state: GameState, dt: number, mode: SimulationMode): void {
-  for (const entity of sortedById(state.world.with('fish'))) {
-    const fish = entity.fish!
+  for (const entity of sortedById(state.world.with('physiology', 'resident', 'genome'))) {
+    const body = entity.physiology
     const distressed =
-      fish.hunger > TUNING.distressHungerAbove || fish.sickness > TUNING.distressSicknessAbove
-    const critical = fish.hunger >= 0.999 || fish.sickness >= 0.75
+      body.hunger > TUNING.distressHungerAbove || body.sickness > TUNING.distressSicknessAbove
+    const critical = body.hunger >= 0.999 || body.sickness >= 0.75
 
-    if (distressed && (fish.lastWarningAt === undefined || state.time - fish.lastWarningAt > 45)) {
-      fish.lastWarningAt = state.time
-      const cause = fish.hunger > TUNING.distressHungerAbove ? 'is starving — drop some food' : 'feels sick — the water needs cleaning'
-      emit(state, { type: 'toast', tone: 'warning', message: `${fish.name} ${cause}!` })
+    if (distressed && (body.lastWarningAt === undefined || state.time - body.lastWarningAt > 45)) {
+      body.lastWarningAt = state.time
+      const cause = body.hunger > TUNING.distressHungerAbove ? 'is starving — drop some food' : 'feels sick — the water needs cleaning'
+      emit(state, { type: 'toast', tone: 'warning', message: `${entity.resident.name} ${cause}!` })
     }
-    if (!distressed) fish.lastWarningAt = undefined
+    if (!distressed) body.lastWarningAt = undefined
 
     // Fatal neglect is gated to 'visible': the player must be able to see
     // the tank for a death to occur.
     if (critical && mode === 'visible') {
-      if (fish.criticalSince === undefined) fish.criticalSince = state.time
-      fish.health = Math.max(0, fish.health - TUNING.healthLossPerSecond * dt)
-      const warnedLongEnough = state.time - fish.criticalSince >= TUNING.warningGraceSeconds
-      if (fish.health <= 0 && warnedLongEnough) {
+      if (body.criticalSince === undefined) body.criticalSince = state.time
+      body.health = Math.max(0, body.health - TUNING.healthLossPerSecond * dt)
+      const warnedLongEnough = state.time - body.criticalSince >= TUNING.warningGraceSeconds
+      if (body.health <= 0 && warnedLongEnough) {
         dieOf(state, entity)
       }
     } else if (!critical) {
-      fish.criticalSince = undefined
-      if (fish.hunger < 0.5 && fish.sickness < 0.3) {
-        fish.health = Math.min(1, fish.health + TUNING.healthRegenPerSecond * dt)
+      body.criticalSince = undefined
+      if (body.hunger < 0.5 && body.sickness < 0.3) {
+        body.health = Math.min(1, body.health + TUNING.healthRegenPerSecond * dt)
       }
     }
   }
 }
 
-function dieOf(state: GameState, entity: Entity): void {
-  const fish = entity.fish!
+type DyingEntity = Entity & Required<Pick<Entity, 'resident' | 'physiology' | 'genome'>>
+
+function dieOf(state: GameState, entity: DyingEntity): void {
+  const name = entity.resident.name
   removeEntity(state, entity)
+  // Remains keep only what the corpse animation draws; the live components
+  // die with the fish.
   addEntity(state, {
     position: { ...entity.position },
     velocity: { x: 0, y: 0 },
-    remains: { fish, expiresAt: state.time + TUNING.remainsLingerSeconds },
+    remains: {
+      name,
+      genome: entity.genome,
+      weight: entity.physiology.weight,
+      expiresAt: state.time + TUNING.remainsLingerSeconds,
+    },
   })
-  state.retiredNames.push(fish.name)
+  state.retiredNames.push(name)
   if (state.retiredNames.length > 40) state.retiredNames.shift()
-  emit(state, { type: 'death', name: fish.name })
-  emit(state, { type: 'toast', tone: 'warning', message: `${fish.name} has died.` })
-  recordJournal(state, 'death', `${fish.name} died.`)
+  emit(state, { type: 'death', name })
+  emit(state, { type: 'toast', tone: 'warning', message: `${name} has died.` })
+  recordJournal(state, 'death', `${name} died.`)
   // An incubating egg means the tank is not actually lost yet.
   if (livingFish(state).length === 0 && state.world.with('egg').entities.length === 0) {
     state.gameOver = true
@@ -348,54 +368,54 @@ function breedingSystem(state: GameState): void {
       position: { x: entity.position.x, y: entity.position.y - 30 },
       hunger: 0.5,
     })
-    emit(state, { type: 'birth', name: baby.fish!.name })
+    emit(state, { type: 'birth', name: baby.resident.name })
     emit(state, {
       type: 'toast',
       tone: 'development',
       message: murky
-        ? `The egg hatched — welcome, ${baby.fish!.name}. The murky water has left them small and delicate.`
-        : `The egg hatched — welcome, ${baby.fish!.name}. You can see both parents in their colours.`,
+        ? `The egg hatched — welcome, ${baby.resident.name}. The murky water has left them small and delicate.`
+        : `The egg hatched — welcome, ${baby.resident.name}. You can see both parents in their colours.`,
     })
     recordJournal(
       state,
       'birth',
-      `${baby.fish!.name} hatched — child of ${egg.parents[0]} & ${egg.parents[1]}.${
+      `${baby.resident.name} hatched — child of ${egg.parents[0]} & ${egg.parents[1]}.${
         murky ? ' The murky water left them small and delicate.' : ''
       }`,
     )
   }
 
   // Complete courtships whose dance has finished.
-  for (const entity of sortedById(state.world.with('fish'))) {
-    const fish = entity.fish
-    if (fish.activity.kind !== 'court' || state.time < fish.activity.until) continue
-    const partner = state.byId.get(fish.activity.partnerId)
+  for (const entity of sortedById(state.world.with('behaviour', 'breeding', 'resident', 'genome'))) {
+    const behaviour = entity.behaviour
+    if (behaviour.activity.kind !== 'court' || state.time < behaviour.activity.until) continue
+    const partner = state.byId.get(behaviour.activity.partnerId)
     const reciprocal =
-      partner?.fish?.activity.kind === 'court' && partner.fish.activity.partnerId === entity.id
-    if (!partner?.fish || !reciprocal) {
-      fish.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
+      partner?.behaviour?.activity.kind === 'court' && partner.behaviour.activity.partnerId === entity.id
+    if (!partner?.resident || !partner.behaviour || !partner.breeding || !partner.genome || !reciprocal) {
+      behaviour.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
       continue
     }
     const midpoint = {
       x: (entity.position.x + partner.position.x) / 2,
       y: (entity.position.y + partner.position.y) / 2,
     }
-    const generation = Math.max(fish.generation, partner.fish.generation) + 1
+    const generation = Math.max(entity.resident.generation, partner.resident.generation) + 1
     addEntity(state, {
       position: midpoint,
       velocity: { x: 0, y: 0 },
       egg: {
         hatchAt: state.time + TUNING.eggHatchSeconds,
-        genome: inheritGenome(state.rng, fish.genome, partner.fish.genome),
-        parents: [fish.name, partner.fish.name],
+        genome: inheritGenome(state.rng, entity.genome, partner.genome),
+        parents: [entity.resident.name, partner.resident.name],
         generation,
         peakPollution: pollutionAt(state.water, midpoint),
       },
     })
-    fish.breedingCooldownUntil = state.time + TUNING.breedingCooldownSeconds
-    partner.fish.breedingCooldownUntil = state.time + TUNING.breedingCooldownSeconds
-    fish.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
-    partner.fish.activity = { kind: 'wander', target: { ...partner.position }, idleUntil: 0 }
+    entity.breeding.cooldownUntil = state.time + TUNING.breedingCooldownSeconds
+    partner.breeding.cooldownUntil = state.time + TUNING.breedingCooldownSeconds
+    behaviour.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
+    partner.behaviour.activity = { kind: 'wander', target: { ...partner.position }, idleUntil: 0 }
     if (!state.unlocks.seenEgg) {
       state.unlocks.seenEgg = true
       emit(state, {
@@ -406,28 +426,30 @@ function breedingSystem(state: GameState): void {
     } else {
       emit(state, { type: 'toast', tone: 'info', message: 'Another egg rests on the sand.' })
     }
-    recordJournal(state, 'development', `${fish.name} & ${partner.fish.name} left an egg on the sand.`)
+    recordJournal(
+      state,
+      'development',
+      `${entity.resident.name} & ${partner.resident.name} left an egg on the sand.`,
+    )
   }
 
   // Pair up newly eligible couples.
-  const population = state.world.with('fish').entities.length + state.world.with('egg').entities.length
+  const population = residentCount(state) + state.world.with('egg').entities.length
   if (population >= TUNING.maxPopulation) return
-  const eligible = livingFish(state).filter((entity) => {
-    const fish = entity.fish!
-    return (
-      fish.activity.kind !== 'court' &&
-      fish.weight >= fish.genome.maxWeight * TUNING.breedingMinWeightFraction &&
-      fish.hunger < TUNING.breedingMaxHunger &&
-      fish.sickness < TUNING.breedingMaxSickness &&
-      state.time >= fish.breedingCooldownUntil &&
-      pollutionAt(state.water, entity.position) < TUNING.breedingMaxPollution
-    )
-  })
+  const eligible = livingFish(state).filter(
+    (entity) =>
+      entity.behaviour.activity.kind !== 'court' &&
+      entity.physiology.weight >= entity.genome.maxWeight * TUNING.breedingMinWeightFraction &&
+      entity.physiology.hunger < TUNING.breedingMaxHunger &&
+      entity.physiology.sickness < TUNING.breedingMaxSickness &&
+      state.time >= entity.breeding.cooldownUntil &&
+      pollutionAt(state.water, entity.position) < TUNING.breedingMaxPollution,
+  )
   if (eligible.length < 2) return
   const [a, b] = eligible
   const until = state.time + TUNING.courtshipSeconds
-  a.fish!.activity = { kind: 'court', partnerId: b.id, until }
-  b.fish!.activity = { kind: 'court', partnerId: a.id, until }
+  a.behaviour.activity = { kind: 'court', partnerId: b.id, until }
+  b.behaviour.activity = { kind: 'court', partnerId: a.id, until }
 }
 
 /** The drip feeder drops a pellet for hungry fish, spending player coins. */
@@ -435,7 +457,7 @@ function feederSystem(state: GameState): void {
   if (!state.ownsFeeder || state.coins < TUNING.pelletCost) return
   if (state.time - state.feederLastDropAt < TUNING.feederDropSeconds) return
   const hungry = livingFish(state).filter(
-    (entity) => entity.fish!.hunger > TUNING.feederFeedsAbove,
+    (entity) => entity.physiology.hunger > TUNING.feederFeedsAbove,
   )
   if (hungry.length === 0) return
   const pellets = [...state.world.with('food')].filter((e) => !e.food.spoiled).length
@@ -446,7 +468,7 @@ function feederSystem(state: GameState): void {
 }
 
 function economySystem(state: GameState, dt: number): void {
-  const totalWeight = livingFish(state).reduce((sum, entity) => sum + entity.fish!.weight, 0)
+  const totalWeight = livingFish(state).reduce((sum, entity) => sum + entity.physiology.weight, 0)
   state.coins += (TUNING.incomeFloor + TUNING.incomePerGram * totalWeight) * dt
 }
 
@@ -455,17 +477,17 @@ function developmentSystem(state: GameState): void {
   if (!unlocks.noticedGrowth) {
     const grown = livingFish(state).find(
       (entity) =>
-        entity.fish!.generation === 1 &&
-        entity.fish!.weight >= TUNING.starterWeight * TUNING.growthNoticedAtMultiple,
+        entity.resident.generation === 1 &&
+        entity.physiology.weight >= TUNING.starterWeight * TUNING.growthNoticedAtMultiple,
     )
     if (grown) {
       unlocks.noticedGrowth = true
       emit(state, {
         type: 'toast',
         tone: 'development',
-        message: `${grown.fish!.name} looks noticeably bigger than when they arrived. Bigger fish eat more — and leave more behind.`,
+        message: `${grown.resident.name} looks noticeably bigger than when they arrived. Bigger fish eat more — and leave more behind.`,
       })
-      recordJournal(state, 'development', `${grown.fish!.name} grew noticeably bigger.`)
+      recordJournal(state, 'development', `${grown.resident.name} grew noticeably bigger.`)
     }
   }
   if (!unlocks.noticedPollution && maxPollution(state.water) >= TUNING.pollutionNoticedAt) {
@@ -493,15 +515,21 @@ function developmentSystem(state: GameState): void {
     recordJournal(state, 'development', 'The shop began offering a drip feeder.')
   }
   if (!unlocks.fishInShop) {
-    const thriving = livingFish(state).find((entity) => entity.fish!.weight >= TUNING.fishUnlockWeight)
+    const thriving = livingFish(state).find(
+      (entity) => entity.physiology.weight >= TUNING.fishUnlockWeight,
+    )
     if (thriving) {
       unlocks.fishInShop = true
       emit(state, {
         type: 'toast',
         tone: 'development',
-        message: `Word is spreading about ${thriving.fish!.name}. The shop can now source another glimmerfin.`,
+        message: `Word is spreading about ${thriving.resident.name}. The shop can now source another glimmerfin.`,
       })
-      recordJournal(state, 'development', `Word spread about ${thriving.fish!.name}; the shop can source another glimmerfin.`)
+      recordJournal(
+        state,
+        'development',
+        `Word spread about ${thriving.resident.name}; the shop can source another glimmerfin.`,
+      )
     }
   }
 }

@@ -1,4 +1,4 @@
-import { TUNING, type Fish, type JournalKind } from './model'
+import { TUNING, type Behaviour, type Genome, type JournalKind, type Physiology } from './model'
 import type { GameSim, ShopOfferId } from './sim'
 import { pollutionAt } from './water'
 
@@ -94,31 +94,31 @@ export const EMPTY_HUD: HudSnapshot = {
   residents: [],
 }
 
-function describeMood(fish: Fish, pollution = 0): string {
-  if (fish.hunger >= 0.999) return 'starving'
-  if (fish.sickness >= 0.75) return 'gravely ill'
-  if (fish.sickness > 0.4) return 'sick'
-  if (fish.hunger > 0.85) return 'very hungry'
-  if (fish.hunger > 0.5) return 'peckish'
+function describeMood(body: Physiology, behaviour: Behaviour, pollution = 0): string {
+  if (body.hunger >= 0.999) return 'starving'
+  if (body.sickness >= 0.75) return 'gravely ill'
+  if (body.sickness > 0.4) return 'sick'
+  if (body.hunger > 0.85) return 'very hungry'
+  if (body.hunger > 0.5) return 'peckish'
   if (pollution > TUNING.sicknessAbovePollution) return 'uneasy in the murk'
-  if (fish.activity.kind === 'court') return 'smitten'
+  if (behaviour.activity.kind === 'court') return 'smitten'
   return 'content'
 }
 
-function moodEmoji(fish: Fish, pollution = 0): string {
-  if (fish.sickness >= 0.75) return '🤢'
-  if (fish.sickness > 0.4) return '🤒'
-  if (fish.hunger >= 0.999) return '😫'
-  if (fish.hunger > 0.85) return '😟'
-  if (fish.hunger > 0.5) return '😐'
+function moodEmoji(body: Physiology, behaviour: Behaviour, pollution = 0): string {
+  if (body.sickness >= 0.75) return '🤢'
+  if (body.sickness > 0.4) return '🤒'
+  if (body.hunger >= 0.999) return '😫'
+  if (body.hunger > 0.85) return '😟'
+  if (body.hunger > 0.5) return '😐'
   if (pollution > TUNING.sicknessAbovePollution) return '😖'
-  if (fish.activity.kind === 'court') return '🥰'
-  if (fish.activity.kind === 'distress') return '😰'
+  if (behaviour.activity.kind === 'court') return '🥰'
+  if (behaviour.activity.kind === 'distress') return '😰'
   return '😊'
 }
 
-function describeStage(fish: Fish): string {
-  const maturity = fish.weight / fish.genome.maxWeight
+function describeStage(body: Physiology, genome: Genome): string {
+  const maturity = body.weight / genome.maxWeight
   if (maturity < 0.2) return 'fry'
   if (maturity < TUNING.breedingMinWeightFraction) return 'juvenile'
   return 'adult'
@@ -166,7 +166,9 @@ export function buildHudSnapshot(
   previousWater: WaterTier,
 ): HudSnapshot {
   const state = sim.read
-  const fishEntities = [...state.world.with('fish')].sort((a, b) => a.id - b.id)
+  const fishEntities = [...state.world.with('resident', 'genome', 'physiology', 'behaviour')].sort(
+    (a, b) => a.id - b.id,
+  )
   const selected = selectedFishId !== undefined ? state.byId.get(selectedFishId) : undefined
   return {
     coins: Math.floor(state.coins),
@@ -174,12 +176,12 @@ export function buildHudSnapshot(
     fishCount: fishEntities.length,
     distressedCount: fishEntities.filter(
       (entity) =>
-        entity.fish.hunger > TUNING.distressHungerAbove ||
-        entity.fish.sickness > TUNING.distressSicknessAbove,
+        entity.physiology.hunger > TUNING.distressHungerAbove ||
+        entity.physiology.sickness > TUNING.distressSicknessAbove,
     ).length,
     criticalNames: fishEntities
-      .filter((entity) => entity.fish.hunger >= 0.999 || entity.fish.sickness >= 0.75)
-      .map((entity) => entity.fish.name),
+      .filter((entity) => entity.physiology.hunger >= 0.999 || entity.physiology.sickness >= 0.75)
+      .map((entity) => entity.resident.name),
     ownsSiphon: state.ownsSiphon,
     gameOver: state.gameOver,
     fedOnce: state.unlocks.fedOnce,
@@ -203,27 +205,32 @@ export function buildHudSnapshot(
       const pollution = pollutionAt(state.water, entity.position)
       return {
         id: entity.id,
-        name: entity.fish.name,
-        hue: entity.fish.genome.hue,
-        saturation: entity.fish.genome.saturation,
-        weightGrams: entity.fish.weight,
-        mood: describeMood(entity.fish, pollution),
-        moodEmoji: moodEmoji(entity.fish, pollution),
+        name: entity.resident.name,
+        hue: entity.genome.hue,
+        saturation: entity.genome.saturation,
+        weightGrams: entity.physiology.weight,
+        mood: describeMood(entity.physiology, entity.behaviour, pollution),
+        moodEmoji: moodEmoji(entity.physiology, entity.behaviour, pollution),
       }
     }),
-    selectedFish: selected?.fish
-      ? {
-          id: selected.id,
-          name: selected.fish.name,
-          generation: selected.fish.generation,
-          stage: describeStage(selected.fish),
-          mood: describeMood(selected.fish, pollutionAt(state.water, selected.position)),
-          weightGrams: selected.fish.weight,
-          age: formatAge(selected.fish.ageSeconds),
-          origin: selected.fish.parents ? 'hatched' : 'arrived',
-          parents: selected.fish.parents,
-          hatchedInMurkyWater: selected.fish.hatchedInMurkyWater,
-        }
-      : undefined,
+    selectedFish:
+      selected?.resident && selected.genome && selected.physiology && selected.behaviour
+        ? {
+            id: selected.id,
+            name: selected.resident.name,
+            generation: selected.resident.generation,
+            stage: describeStage(selected.physiology, selected.genome),
+            mood: describeMood(
+              selected.physiology,
+              selected.behaviour,
+              pollutionAt(state.water, selected.position),
+            ),
+            weightGrams: selected.physiology.weight,
+            age: formatAge(selected.physiology.ageSeconds),
+            origin: selected.resident.parents ? 'hatched' : 'arrived',
+            parents: selected.resident.parents,
+            hatchedInMurkyWater: selected.resident.hatchedInMurkyWater,
+          }
+        : undefined,
   }
 }

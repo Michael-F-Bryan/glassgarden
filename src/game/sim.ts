@@ -14,6 +14,7 @@ import {
   livingFish,
   recordJournal,
   removeEntity,
+  residentCount,
   spawnFish,
   spawnPellet,
   takenNames,
@@ -176,7 +177,7 @@ export class GameSim {
       developments: notifications
         .filter((notification) => notification.tone === 'development')
         .map((notification) => notification.message),
-      companion: livingFish(this.state)[0]?.fish!.name,
+      companion: livingFish(this.state)[0]?.resident.name,
     }
     if (summary.simulatedSeconds > 10) {
       recordJournal(
@@ -194,7 +195,7 @@ export class GameSim {
   }
 
   incomePerSecond(): number {
-    const totalWeight = livingFish(this.state).reduce((sum, e) => sum + e.fish!.weight, 0)
+    const totalWeight = livingFish(this.state).reduce((sum, e) => sum + e.physiology.weight, 0)
     return TUNING.incomeFloor + TUNING.incomePerGram * totalWeight
   }
 
@@ -250,8 +251,7 @@ export class GameSim {
     }
     if (this.state.unlocks.fishInShop && !this.state.gameOver) {
       const cost = fishPrice(this.state.fishPurchased)
-      const population =
-        this.state.world.with('fish').entities.length + this.state.world.with('egg').entities.length
+      const population = residentCount(this.state) + this.state.world.with('egg').entities.length
       const atCapacity = population >= TUNING.maxPopulation
       offers.push({
         id: 'fish',
@@ -301,8 +301,12 @@ export class GameSim {
         generation: 1,
         hunger: 0.15, // arrives well fed; a crisis on arrival reads as a rip-off
       })
-      notifications.push({ tone: 'info', message: `${fish.fish!.name} has joined the tank.` })
-      recordJournal(this.state, 'arrival', `${fish.fish!.name} joined the tank for ◉${offer.cost}.`)
+      notifications.push({ tone: 'info', message: `${fish.resident.name} has joined the tank.` })
+      recordJournal(
+        this.state,
+        'arrival',
+        `${fish.resident.name} joined the tank for ◉${offer.cost}.`,
+      )
     } else {
       this.state.gameOver = false
       const fish = spawnFish(this.state, {
@@ -312,8 +316,15 @@ export class GameSim {
         generation: 1,
         hunger: 0.5,
       })
-      notifications.push({ tone: 'info', message: `${fish.fish!.name} settles into the quiet tank.` })
-      recordJournal(this.state, 'arrival', `${fish.fish!.name} settled into the quiet tank — a new beginning.`)
+      notifications.push({
+        tone: 'info',
+        message: `${fish.resident.name} settles into the quiet tank.`,
+      })
+      recordJournal(
+        this.state,
+        'arrival',
+        `${fish.resident.name} settled into the quiet tank — a new beginning.`,
+      )
     }
     return { ok: true, value: undefined, notifications }
   }
@@ -321,9 +332,9 @@ export class GameSim {
   fishAt(x: number, y: number): Entity | undefined {
     let best: Entity | undefined
     let bestDistance = Infinity
-    for (const entity of this.state.world.with('fish')) {
+    for (const entity of this.state.world.with('resident', 'physiology')) {
       const distance = Math.hypot(entity.position.x - x, entity.position.y - y)
-      const reach = Math.max(30, entity.fish.weight * 2)
+      const reach = Math.max(30, entity.physiology.weight * 2)
       if (distance < reach && distance < bestDistance) {
         best = entity
         bestDistance = distance

@@ -34,7 +34,7 @@ function runFor(sim: GameSim, seconds: number, visible = true): RunResult {
 }
 
 function onlyFish(sim: GameSim) {
-  const fish = [...sim.read.world.with('fish')]
+  const fish = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]
   expect(fish.length).toBeGreaterThan(0)
   return fish[0]
 }
@@ -56,12 +56,12 @@ function pairedState(seed: number, options?: { hunger?: number }) {
 describe('fresh game', () => {
   test('starts with a bare tank, one gently peckish starter fish, and starting coins', () => {
     const sim = GameSim.fresh(42)
-    const fish = [...sim.read.world.with('fish')]
+    const fish = [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]
     expect(fish).toHaveLength(1)
     // Peckish enough to chase the first pellet, nowhere near a crisis.
-    expect(fish[0].fish.hunger).toBeGreaterThan(TUNING.seekFoodAbove)
-    expect(fish[0].fish.hunger).toBeLessThan(TUNING.distressHungerAbove)
-    expect(fish[0].fish.weight).toBe(TUNING.starterWeight)
+    expect(fish[0].physiology.hunger).toBeGreaterThan(TUNING.seekFoodAbove)
+    expect(fish[0].physiology.hunger).toBeLessThan(TUNING.distressHungerAbove)
+    expect(fish[0].physiology.weight).toBe(TUNING.starterWeight)
     expect(sim.read.coins).toBe(TUNING.startingCoins)
     expect([...sim.read.world.with('waste')]).toHaveLength(0)
     expect(maxPollution(sim.read.water)).toBe(0)
@@ -94,7 +94,7 @@ describe('simulation timing', () => {
     const fish = onlyFish(sim)
     fish.position = { x: 300, y: 300 }
     fish.velocity = { x: 40, y: 0 }
-    fish.fish.activity = { kind: 'wander', target: { x: 900, y: 300 }, idleUntil: 0 }
+    fish.behaviour.activity = { kind: 'wander', target: { x: 900, y: 300 }, idleUntil: 0 }
 
     // A single animation-frame-sized delta (1/60s) is smaller than the fixed
     // simulation quantum (1/30s); it accumulates rather than ticking
@@ -109,11 +109,11 @@ describe('simulation timing', () => {
 describe('feeding and growth', () => {
   test('a hungry fish swims to a dropped pellet, eats it, and grows', () => {
     const sim = GameSim.fresh(7)
-    const before = onlyFish(sim).fish.weight
+    const before = onlyFish(sim).physiology.weight
     expect(sim.dropFood(onlyFish(sim).position.x).ok).toBe(true)
     runFor(sim, 40)
     expect([...sim.read.world.with('food')]).toHaveLength(0)
-    expect(onlyFish(sim).fish.weight).toBeGreaterThan(before)
+    expect(onlyFish(sim).physiology.weight).toBeGreaterThan(before)
   })
 
   test('feeding costs coins and is refused when unaffordable', () => {
@@ -134,7 +134,7 @@ describe('feeding and growth', () => {
       sim.dropFood(onlyFish(sim).position.x)
       notifications.push(...runFor(sim, 8).notifications)
     }
-    expect(onlyFish(sim).fish.weight).toBeGreaterThan(3.5)
+    expect(onlyFish(sim).physiology.weight).toBeGreaterThan(3.5)
     expect(sim.read.unlocks.noticedGrowth).toBe(true)
     expect(
       notifications.some((n) => n.tone === 'development' && /bigger/.test(n.message)),
@@ -177,11 +177,11 @@ describe('pollution and sickness', () => {
       state.water.cells.fill(0.8)
       sim.advanceElapsed(TEST_STEP, 'visible')
     }
-    const sickness = onlyFish(sim).fish.sickness
+    const sickness = onlyFish(sim).physiology.sickness
     expect(sickness).toBeGreaterThan(0.05)
     state.water.cells.fill(0)
     runFor(sim, 120)
-    expect(onlyFish(sim).fish.sickness).toBeLessThan(sickness)
+    expect(onlyFish(sim).physiology.sickness).toBeLessThan(sickness)
   })
 
   test('the siphon removes debris and clears local pollution, but only once owned', () => {
@@ -210,7 +210,7 @@ describe('economy and population', () => {
   test('coins accrue faster with more fish mass', () => {
     const light = GameSim.fresh(21)
     const heavy = GameSim.fresh(21)
-    onlyFish(heavy).fish.weight = 20
+    onlyFish(heavy).physiology.weight = 20
     const lightStart = light.read.coins
     const heavyStart = heavy.read.coins
     runFor(light, 60)
@@ -221,7 +221,7 @@ describe('economy and population', () => {
   test('starter growth unlocks fish purchases at an escalating price', () => {
     const state = createFreshGame(31)
     const sim = new GameSim(state)
-    onlyFish(sim).fish.weight = TUNING.fishUnlockWeight + 0.1
+    onlyFish(sim).physiology.weight = TUNING.fishUnlockWeight + 0.1
     const result = runFor(sim, 1)
     expect(state.unlocks.fishInShop).toBe(true)
     expect(result.notifications.some((n) => n.tone === 'development')).toBe(true)
@@ -229,7 +229,7 @@ describe('economy and population', () => {
     state.coins = 500
     expect(sim.shopOffers().find((i) => i.id === 'fish')?.cost).toBe(TUNING.fishPrices[0])
     expect(sim.buy('fish').ok).toBe(true)
-    expect([...state.world.with('fish')]).toHaveLength(2)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(2)
     expect(sim.shopOffers().find((i) => i.id === 'fish')?.cost).toBe(TUNING.fishPrices[1])
   })
 })
@@ -239,17 +239,17 @@ describe('breeding', () => {
     const state = pairedState(101)
     const sim = new GameSim(state)
     const result = runFor(sim, 100)
-    const fish = [...state.world.with('fish')]
+    const fish = [...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]
     expect(fish).toHaveLength(3)
-    const baby = fish.find((f) => f.fish.generation === 2)!
+    const baby = fish.find((f) => f.resident.generation === 2)!
     expect(baby).toBeDefined()
-    expect(baby.fish.parents).toEqual(expect.arrayContaining(['Ada', 'Bez']))
-    expect(baby.fish.name).not.toBe('Ada')
-    expect(baby.fish.name).not.toBe('Bez')
-    expect(baby.fish.genome.maxWeight).toBeGreaterThan(20)
-    expect(baby.fish.genome.maxWeight).toBeLessThan(32)
-    expect(baby.fish.genome.hue).toBeGreaterThanOrEqual(0)
-    expect(baby.fish.genome.hue).toBeLessThan(360)
+    expect(baby.resident.parents).toEqual(expect.arrayContaining(['Ada', 'Bez']))
+    expect(baby.resident.name).not.toBe('Ada')
+    expect(baby.resident.name).not.toBe('Bez')
+    expect(baby.genome.maxWeight).toBeGreaterThan(20)
+    expect(baby.genome.maxWeight).toBeLessThan(32)
+    expect(baby.genome.hue).toBeGreaterThanOrEqual(0)
+    expect(baby.genome.hue).toBeLessThan(360)
     expect(result.report.births.length).toBeGreaterThan(0)
     expect(
       result.notifications.some((n) => n.tone === 'development' && /egg/.test(n.message)),
@@ -273,10 +273,10 @@ describe('breeding', () => {
       state.water.cells.fill(0.6)
       sim.advanceElapsed(TEST_STEP, 'visible')
     }
-    const baby = [...state.world.with('fish')].find((f) => f.fish.generation === 2)!
+    const baby = [...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')].find((f) => f.resident.generation === 2)!
     expect(baby).toBeDefined()
-    expect(baby.fish.hatchedInMurkyWater).toBe(true)
-    expect(baby.fish.genome.maxWeight).toBeLessThan(23)
+    expect(baby.resident.hatchedInMurkyWater).toBe(true)
+    expect(baby.genome.maxWeight).toBeLessThan(23)
   })
 })
 
@@ -285,45 +285,45 @@ describe('critique regressions', () => {
     const state = createFreshGame(701)
     const sim = new GameSim(state)
     const fish = onlyFish(sim)
-    fish.fish.hunger = 1
+    fish.physiology.hunger = 1
     for (let t = 0; t < 120; t += TEST_STEP) {
       if ([...state.world.with('food')].length === 0) {
         state.coins = 10
         sim.dropFood(onlyFish(sim).position.x)
       }
       sim.advanceElapsed(TEST_STEP, 'visible')
-      if (onlyFish(sim).fish.hunger < 0.9) break
+      if (onlyFish(sim).physiology.hunger < 0.9) break
     }
-    expect(onlyFish(sim).fish.hunger).toBeLessThan(0.9)
-    expect([...state.world.with('fish')]).toHaveLength(1)
+    expect(onlyFish(sim).physiology.hunger).toBeLessThan(0.9)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(1)
   })
 
   test('a fish recovered from illness leaves the distress posture', () => {
     const sim = GameSim.fresh(703)
     const fish = onlyFish(sim)
-    fish.fish.hunger = 0.1
-    fish.fish.sickness = 0.8
+    fish.physiology.hunger = 0.1
+    fish.physiology.sickness = 0.8
     runFor(sim, 2)
-    expect(onlyFish(sim).fish.activity.kind).toBe('distress')
-    onlyFish(sim).fish.sickness = 0
+    expect(onlyFish(sim).behaviour.activity.kind).toBe('distress')
+    onlyFish(sim).physiology.sickness = 0
     runFor(sim, 2)
-    expect(onlyFish(sim).fish.activity.kind).not.toBe('distress')
+    expect(onlyFish(sim).behaviour.activity.kind).not.toBe('distress')
   })
 
   test('no game over while an egg is incubating; the hatchling revives the tank', () => {
     const sim = new GameSim(pairedState(705))
     runFor(sim, 25)
     expect([...sim.read.world.with('egg')]).toHaveLength(1)
-    for (const entity of [...sim.read.world.with('fish')]) {
-      entity.fish.hunger = 1
-      entity.fish.health = 0.001
-      entity.fish.criticalSince = sim.read.time - TUNING.warningGraceSeconds - 1
+    for (const entity of [...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]) {
+      entity.physiology.hunger = 1
+      entity.physiology.health = 0.001
+      entity.physiology.criticalSince = sim.read.time - TUNING.warningGraceSeconds - 1
     }
     runFor(sim, 10)
-    expect([...sim.read.world.with('fish')]).toHaveLength(0)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(0)
     expect(sim.read.gameOver).toBe(false)
     runFor(sim, 80)
-    expect([...sim.read.world.with('fish')]).toHaveLength(1)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(1)
     expect(sim.read.gameOver).toBe(false)
     expect(sim.dropFood(600).ok).toBe(true)
   })
@@ -338,9 +338,9 @@ describe('critique regressions', () => {
     })
     state.coins = 10
     sim.dropFood(1100) // far from the fish; left to spoil
-    onlyFish(sim).fish.hunger = 0 // keep the fish uninterested
+    onlyFish(sim).physiology.hunger = 0 // keep the fish uninterested
     for (let t = 0; t < 700; t += TEST_STEP) {
-      onlyFish(sim).fish.hunger = 0
+      onlyFish(sim).physiology.hunger = 0
       sim.advanceElapsed(TEST_STEP, 'visible')
     }
     expect([...state.world.with('waste')]).toHaveLength(0)
@@ -349,9 +349,9 @@ describe('critique regressions', () => {
 
   test('offline catch-up pulls pre-existing sickness down to its ceiling', () => {
     const sim = GameSim.fresh(709)
-    onlyFish(sim).fish.sickness = 1
+    onlyFish(sim).physiology.sickness = 1
     sim.advanceOffline(3600)
-    expect(onlyFish(sim).fish.sickness).toBeLessThanOrEqual(TUNING.offlineSicknessCeiling)
+    expect(onlyFish(sim).physiology.sickness).toBeLessThanOrEqual(TUNING.offlineSicknessCeiling)
   })
 
   test('the drip feeder feeds hungry fish automatically, spending coins', () => {
@@ -361,8 +361,8 @@ describe('critique regressions', () => {
     state.coins = 50
     const coinsBefore = state.coins
     runFor(sim, 60)
-    const fish = [...state.world.with('fish')]
-    expect(Math.max(...fish.map((f) => f.fish.hunger))).toBeLessThan(0.9)
+    const fish = [...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]
+    expect(Math.max(...fish.map((f) => f.physiology.hunger))).toBeLessThan(0.9)
     expect(state.coins).toBeLessThan(coinsBefore + 60 * TUNING.incomeFloor + 60 * TUNING.incomePerGram * 40)
   })
 
@@ -378,14 +378,14 @@ describe('critique regressions', () => {
   test('a dead fish\'s name is not reused for newcomers', () => {
     const state = createFreshGame(719)
     const sim = new GameSim(state)
-    const name = onlyFish(sim).fish.name
-    onlyFish(sim).fish.hunger = 1
-    onlyFish(sim).fish.health = 0.01
+    const name = onlyFish(sim).resident.name
+    onlyFish(sim).physiology.hunger = 1
+    onlyFish(sim).physiology.health = 0.01
     runFor(sim, 300)
     expect(state.gameOver).toBe(true)
     state.coins = 100
     expect(sim.buy('starterFish').ok).toBe(true)
-    expect(onlyFish(sim).fish.name).not.toBe(name)
+    expect(onlyFish(sim).resident.name).not.toBe(name)
   })
 
   test('the shop refuses fish at the population cap', () => {
@@ -405,14 +405,14 @@ describe('critique regressions', () => {
     expect(item?.affordable).toBe(false)
     // Scenario is specifically "at the population cap", so pin the failure reason.
     expect(sim.buy('fish')).toMatchObject({ ok: false, reason: 'atCapacity' })
-    expect([...state.world.with('fish')]).toHaveLength(TUNING.maxPopulation)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(TUNING.maxPopulation)
   })
 })
 
 describe('neglect, death, and game over', () => {
   test('a starving fish is warned, then dies only after sustained visible neglect', () => {
     const sim = GameSim.fresh(201)
-    onlyFish(sim).fish.hunger = 1
+    onlyFish(sim).physiology.hunger = 1
     const result = runFor(sim, 400)
     expect(
       result.notifications.some((n) => n.tone === 'warning' && /starving/.test(n.message)),
@@ -420,25 +420,25 @@ describe('neglect, death, and game over', () => {
     expect(result.report.deaths.length).toBeGreaterThan(0)
     expect(result.report.gameOver).toBe(true)
     expect(sim.read.gameOver).toBe(true)
-    expect([...sim.read.world.with('fish')]).toHaveLength(0)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(0)
   })
 
   test('death takes at least the warning grace period even for a frail fish', () => {
     const sim = GameSim.fresh(207)
     const fish = onlyFish(sim)
-    fish.fish.hunger = 1
-    fish.fish.health = 0.01
+    fish.physiology.hunger = 1
+    fish.physiology.health = 0.01
     runFor(sim, TUNING.warningGraceSeconds - 5)
-    expect([...sim.read.world.with('fish')]).toHaveLength(1)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(1)
     runFor(sim, 30)
-    expect([...sim.read.world.with('fish')]).toHaveLength(0)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(0)
   })
 
   test('no fish dies while the page is hidden', () => {
     const sim = GameSim.fresh(202)
-    onlyFish(sim).fish.hunger = 1
+    onlyFish(sim).physiology.hunger = 1
     runFor(sim, 600, false)
-    expect([...sim.read.world.with('fish')]).toHaveLength(1)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(1)
     expect(sim.read.gameOver).toBe(false)
   })
 
@@ -447,8 +447,8 @@ describe('neglect, death, and game over', () => {
     const sim = new GameSim(state)
     state.ownsSiphon = true
     state.coins = 40
-    onlyFish(sim).fish.hunger = 1
-    onlyFish(sim).fish.health = 0.05
+    onlyFish(sim).physiology.hunger = 1
+    onlyFish(sim).physiology.health = 0.05
     runFor(sim, 300)
     expect(state.gameOver).toBe(true)
     expect(state.ownsSiphon).toBe(true)
@@ -459,7 +459,7 @@ describe('neglect, death, and game over', () => {
     expect(starter).toBeDefined()
     expect(sim.buy('starterFish').ok).toBe(true)
     expect(state.gameOver).toBe(false)
-    expect([...state.world.with('fish')]).toHaveLength(1)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(1)
   })
 
   test('an empty tank still trickles income so recovery is always reachable', () => {
@@ -475,12 +475,12 @@ describe('neglect, death, and game over', () => {
 describe('away time', () => {
   test('offline catch-up is slowed, capped, clamps deterioration, and never kills', () => {
     const sim = GameSim.fresh(401)
-    onlyFish(sim).fish.hunger = 0.99
+    onlyFish(sim).physiology.hunger = 0.99
     const summary = sim.advanceOffline(24 * 3600)
     expect(summary.simulatedSeconds).toBe(TUNING.offlineMaxSimSeconds)
     expect(summary.coinsEarned).toBeGreaterThan(0)
-    expect([...sim.read.world.with('fish')]).toHaveLength(1)
-    expect(onlyFish(sim).fish.hunger).toBeLessThanOrEqual(TUNING.offlineHungerCeiling)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(1)
+    expect(onlyFish(sim).physiology.hunger).toBeLessThanOrEqual(TUNING.offlineHungerCeiling)
     expect(sim.read.gameOver).toBe(false)
   })
 
@@ -488,7 +488,7 @@ describe('away time', () => {
     const sim = new GameSim(pairedState(403))
     const summary = sim.advanceOffline((150 / TUNING.offlineRate) * 1)
     expect(summary.births.length).toBeGreaterThan(0)
-    expect([...sim.read.world.with('fish')]).toHaveLength(3)
+    expect([...sim.read.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(3)
   })
 })
 
@@ -570,9 +570,9 @@ describe('tank journal', () => {
     expect(state.journal.at(-1)).toMatchObject({ kind: 'purchase' })
 
     const fish = onlyFish(sim)
-    fish.fish.hunger = 1
-    fish.fish.health = 0.001
-    fish.fish.criticalSince = -TUNING.warningGraceSeconds
+    fish.physiology.hunger = 1
+    fish.physiology.health = 0.001
+    fish.physiology.criticalSince = -TUNING.warningGraceSeconds
     runFor(sim, 5)
     const kinds = state.journal.map((entry) => entry.kind)
     expect(kinds).toContain('death')

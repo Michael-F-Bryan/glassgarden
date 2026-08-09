@@ -153,6 +153,15 @@ export const SaveV1Schema = z.object({
 export type SaveFileV1 = z.infer<typeof SaveV1Schema>
 
 /**
+ * One entity as it appears on the wire. Deliberately NOT the runtime
+ * `Entity`: the persisted format keeps a single `fish` blob, while the
+ * simulation splits residents into cohesive components. `save.ts` owns the
+ * mapping in both directions.
+ */
+export type WireEntity = z.infer<typeof EntitySchema>
+export type WireFish = z.infer<typeof FishSchema>
+
+/**
  * Hard-reject semantic checks that structural validation alone cannot
  * express. Anything found here means the save cannot be trusted at all.
  */

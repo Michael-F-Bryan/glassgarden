@@ -2,14 +2,15 @@ import { World } from 'miniplex'
 
 import { generateName, randomGenome } from './genome'
 import {
+  RESIDENT_COMPONENTS,
   TANK,
   TUNING,
   type Entity,
-  type Fish,
   type GameEvent,
   type Genome,
   type JournalEntry,
   type JournalKind,
+  type ResidentEntity,
   type Unlocks,
   type Vec2,
 } from './model'
@@ -107,7 +108,9 @@ export function addEntity(state: GameState, entity: Omit<Entity, 'id'>): Entity 
   return withId
 }
 
-const ARCHETYPES = ['fish', 'food', 'waste', 'egg', 'remains'] as const
+/** Kinds an entity can be. A resident is the five resident components
+ * together; every other kind is exactly one component. */
+const NON_RESIDENT_ARCHETYPES = ['food', 'waste', 'egg', 'remains'] as const
 
 /**
  * Development/test invariant check: the promises the rest of the game relies
@@ -125,26 +128,36 @@ export function assertStateInvariants(state: GameState): void {
   for (const entity of state.world.entities) {
     maxId = Math.max(maxId, entity.id)
     if (state.byId.get(entity.id) !== entity) fail(`entity ${entity.id} missing from byId`)
-    const present = ARCHETYPES.filter((key) => entity[key] !== undefined)
-    if (present.length !== 1) {
-      fail(`entity ${entity.id} has ${present.length} archetype components (${present.join(', ')})`)
+
+    const residentParts = RESIDENT_COMPONENTS.filter((key) => entity[key] !== undefined)
+    const otherParts = NON_RESIDENT_ARCHETYPES.filter((key) => entity[key] !== undefined)
+    const isResident = residentParts.length > 0
+    if (isResident && residentParts.length !== RESIDENT_COMPONENTS.length) {
+      const missing = RESIDENT_COMPONENTS.filter((key) => entity[key] === undefined)
+      fail(`resident ${entity.id} is missing ${missing.join(', ')}`)
+    }
+    if (isResident && otherParts.length > 0) {
+      fail(`resident ${entity.id} also carries ${otherParts.join(', ')}`)
+    }
+    if (!isResident && otherParts.length !== 1) {
+      fail(`entity ${entity.id} has ${otherParts.length} archetype components (${otherParts.join(', ') || 'none'})`)
     }
     if (!Number.isFinite(entity.position.x) || !Number.isFinite(entity.position.y)) {
       fail(`entity ${entity.id} has a non-finite position`)
     }
-    const fish = entity.fish
-    if (fish) {
+    const physiology = entity.physiology
+    if (physiology) {
       for (const [name, value] of [
-        ['hunger', fish.hunger],
-        ['sickness', fish.sickness],
-        ['health', fish.health],
+        ['hunger', physiology.hunger],
+        ['sickness', physiology.sickness],
+        ['health', physiology.health],
       ] as const) {
         if (!Number.isFinite(value) || value < 0 || value > 1) {
-          fail(`fish ${entity.id} ${name} is ${value}, outside [0, 1]`)
+          fail(`resident ${entity.id} ${name} is ${value}, outside [0, 1]`)
         }
       }
-      if (!Number.isFinite(fish.weight) || fish.weight <= 0) {
-        fail(`fish ${entity.id} weight is ${fish.weight}`)
+      if (!Number.isFinite(physiology.weight) || physiology.weight <= 0) {
+        fail(`resident ${entity.id} weight is ${physiology.weight}`)
       }
     }
   }
@@ -167,14 +180,20 @@ export function emit(state: GameState, event: GameEvent): void {
   state.events.push(event)
 }
 
-export function livingFish(state: GameState): Entity[] {
-  // id order, so callers iterate identically before and after a save/load.
-  return [...state.world.with('fish')].sort((a, b) => a.id - b.id)
+/** Every living resident in id order, so callers iterate identically before
+ * and after a save/load. Queries all resident components, so the result is
+ * usable by any fish system without further narrowing. */
+export function livingFish(state: GameState): ResidentEntity[] {
+  return [...state.world.with(...RESIDENT_COMPONENTS)].sort((a, b) => a.id - b.id)
+}
+
+export function residentCount(state: GameState): number {
+  return state.world.with('resident').entities.length
 }
 
 export function takenNames(state: GameState): Set<string> {
   const names = new Set<string>(state.retiredNames)
-  for (const entity of state.world.with('fish')) names.add(entity.fish.name)
+  for (const entity of state.world.with('resident')) names.add(entity.resident.name)
   return names
 }
 
@@ -206,32 +225,39 @@ export type SpawnFishOptions = {
   hunger?: number
 }
 
-export function spawnFish(state: GameState, options: SpawnFishOptions): Entity {
+export function spawnFish(state: GameState, options: SpawnFishOptions): ResidentEntity {
   const position = options.position ?? {
     x: state.rng.range(TANK.width * 0.3, TANK.width * 0.7),
     y: state.rng.range(TANK.waterTop + 100, TANK.sandTop - 120),
   }
-  const fish: Fish = {
-    name: options.name,
+  return addEntity(state, {
+    position,
+    velocity: { x: 0, y: 0 },
+    resident: {
+      name: options.name,
+      generation: options.generation,
+      parents: options.parents,
+      hatchedInMurkyWater: options.hatchedInMurkyWater ?? false,
+    },
     genome: options.genome,
-    weight: options.weight,
-    hunger: options.hunger ?? 0.2,
-    sickness: 0,
-    health: 1,
-    ageSeconds: 0,
-    generation: options.generation,
-    parents: options.parents,
-    hatchedInMurkyWater: options.hatchedInMurkyWater ?? false,
-    digesting: 0,
-    breedingCooldownUntil: 0,
-    activity: { kind: 'wander', target: { ...position }, idleUntil: 0 },
-    facing: state.rng.next() < 0.5 ? 1 : -1,
-  }
-  return addEntity(state, { position, velocity: { x: 0, y: 0 }, fish })
+    physiology: {
+      weight: options.weight,
+      hunger: options.hunger ?? 0.2,
+      sickness: 0,
+      health: 1,
+      ageSeconds: 0,
+      digesting: 0,
+    },
+    behaviour: {
+      activity: { kind: 'wander', target: { ...position }, idleUntil: 0 },
+      facing: state.rng.next() < 0.5 ? 1 : -1,
+    },
+    breeding: { cooldownUntil: 0 },
+  }) as ResidentEntity
 }
 
 /** The opening scenario: a bare tank and one small, gently peckish fish. */
-export function spawnStarterFish(state: GameState): Entity {
+export function spawnStarterFish(state: GameState): ResidentEntity {
   const genome = randomGenome(state.rng, TUNING.starterMaxWeight)
   return spawnFish(state, {
     genome,
@@ -248,8 +274,8 @@ export function createFreshGame(seed: number): GameState {
   emit(state, {
     type: 'toast',
     tone: 'info',
-    message: `A small glimmerfin named ${starter.fish!.name} settles into your bare tank. A pinch of food would be a warm welcome.`,
+    message: `A small glimmerfin named ${starter.resident.name} settles into your bare tank. A pinch of food would be a warm welcome.`,
   })
-  recordJournal(state, 'arrival', `${starter.fish!.name} arrived in the bare tank.`)
+  recordJournal(state, 'arrival', `${starter.resident.name} arrived in the bare tank.`)
   return state
 }

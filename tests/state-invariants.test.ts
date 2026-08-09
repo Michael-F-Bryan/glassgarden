@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import { randomGenome } from '@/game/genome'
-import { TANK, TUNING, type Entity } from '@/game/model'
+import { RESIDENT_COMPONENTS, TANK, TUNING, type Entity } from '@/game/model'
 import { decodeSave, hydrate } from '@/game/save'
 import { GameSim } from '@/game/sim'
 import {
@@ -101,14 +101,14 @@ describe('death and remains', () => {
   test('hold immediately after a fish dies and again once remains finish lingering', () => {
     const state = createFreshGame(31)
     const sim = new GameSim(state)
-    const fish = [...state.world.with('fish')][0]
-    fish.fish.hunger = 1
-    fish.fish.health = 0
-    fish.fish.criticalSince = -TUNING.warningGraceSeconds
+    const fish = [...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
+    fish.physiology.hunger = 1
+    fish.physiology.health = 0
+    fish.physiology.criticalSince = -TUNING.warningGraceSeconds
     assertStateInvariants(state)
 
     sim.advanceElapsed(TUNING.simTickSeconds * 2, 'visible')
-    expect([...state.world.with('fish')]).toHaveLength(0)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(0)
     expect([...state.world.with('remains')]).toHaveLength(1)
     assertStateInvariants(state)
 
@@ -126,7 +126,7 @@ describe('breeding: courtship, egg, and hatch', () => {
 
     // A tick pairs the two eligible adults into courtship.
     sim.advanceElapsed(TUNING.simTickSeconds, 'visible')
-    expect([...state.world.with('fish')].some((e) => e.fish.activity.kind === 'court')).toBe(true)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')].some((e) => e.behaviour.activity.kind === 'court')).toBe(true)
     assertStateInvariants(state)
 
     // Courtship completes and an egg is laid.
@@ -137,7 +137,7 @@ describe('breeding: courtship, egg, and hatch', () => {
     // The egg hatches into a generation-2 fry.
     sim.advanceElapsed(TUNING.eggHatchSeconds + 1, 'visible')
     expect([...state.world.with('egg')]).toHaveLength(0)
-    expect([...state.world.with('fish')].some((e) => e.fish.generation === 2)).toBe(true)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')].some((e) => e.resident.generation === 2)).toBe(true)
     assertStateInvariants(state)
   })
 })
@@ -161,7 +161,7 @@ describe('persistence round-trip', () => {
 describe('corruption is caught', () => {
   test('a duplicate entity id trips the byId/world agreement check', () => {
     const state = createFreshGame(61)
-    const original = [...state.world.with('fish')][0]
+    const original = [...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')][0]
     // Bypass addEntity: push a second entity sharing the same id straight
     // into the world without updating byId or nextEntityId.
     const duplicate: Entity = {
@@ -180,5 +180,60 @@ describe('corruption is caught', () => {
     state.nextEntityId = maxId
 
     expect(() => assertStateInvariants(state)).toThrow(/state invariant violated/)
+  })
+
+  test('a resident missing one of its components is rejected', () => {
+    const state = createFreshGame(63)
+    const resident = [...state.world.with('resident')][0]
+    delete (resident as Entity).breeding
+
+    expect(() => assertStateInvariants(state)).toThrow(/missing breeding/)
+  })
+
+  test('a resident that also carries a debris component is rejected', () => {
+    const state = createFreshGame(64)
+    const resident = [...state.world.with('resident')][0]
+    ;(resident as Entity).waste = { size: 1, restingOnSand: false }
+
+    expect(() => assertStateInvariants(state)).toThrow(/also carries waste/)
+  })
+})
+
+describe('resident components', () => {
+  test('a spawned resident carries exactly the five resident components', () => {
+    const state = createFreshGame(65)
+    const resident = [...state.world.with('resident')][0]
+
+    for (const component of RESIDENT_COMPONENTS) {
+      expect(resident[component]).toBeDefined()
+    }
+    expect(resident.food).toBeUndefined()
+    expect(resident.waste).toBeUndefined()
+    expect(resident.egg).toBeUndefined()
+    expect(resident.remains).toBeUndefined()
+    assertStateInvariants(state)
+  })
+
+  test('death replaces the live components with remains that keep only what is drawn', () => {
+    const state = createFreshGame(66)
+    const sim = new GameSim(state)
+    const resident = [...state.world.with('resident', 'genome', 'physiology')][0]
+    const { name } = resident.resident
+    const genomeHue = resident.genome.hue
+    resident.physiology.hunger = 1
+    resident.physiology.health = 0.001
+    resident.physiology.criticalSince = -TUNING.warningGraceSeconds
+
+    sim.advanceElapsed(2, 'visible')
+
+    expect([...state.world.with('resident')]).toHaveLength(0)
+    const remains = [...state.world.with('remains')][0]
+    expect(remains.remains.name).toBe(name)
+    expect(remains.remains.genome.hue).toBe(genomeHue)
+    // The corpse keeps no live body, behaviour, or breeding state.
+    expect(remains.physiology).toBeUndefined()
+    expect(remains.behaviour).toBeUndefined()
+    expect(remains.breeding).toBeUndefined()
+    assertStateInvariants(state)
   })
 })

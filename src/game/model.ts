@@ -38,27 +38,65 @@ export type FishActivity =
   | { kind: 'court'; partnerId: number; until: number }
   | { kind: 'distress' }
 
-export type Fish = {
+/**
+ * Resident components. A living fish carries all five together — see
+ * RESIDENT_COMPONENTS and the state invariants — but each system queries
+ * only the ones it actually reads or writes, so a new lifecycle or social
+ * component later does not widen the systems that ignore it.
+ */
+
+/** Who this fish is: the parts that never change after hatching. */
+export type Resident = {
   name: string
-  genome: Genome
+  generation: number
+  parents?: [string, string]
+  hatchedInMurkyWater: boolean
+}
+
+/** Body state: hunger, condition, growth, and the warned-death clock. */
+export type Physiology = {
   weight: number
   hunger: number // 0 sated .. 1 starving
   sickness: number // 0 healthy .. 1 gravely ill
   health: number // 1 fine .. 0 dead
   ageSeconds: number
-  generation: number
-  parents?: [string, string]
-  hatchedInMurkyWater: boolean
   digesting: number // nutrition awaiting conversion to waste
-  breedingCooldownUntil: number
-  activity: FishActivity
   /** Sim time when this fish entered critical condition, for warned death. */
   criticalSince?: number
   /** Last time a distress warning toast fired for this fish. */
   lastWarningAt?: number
+}
+
+/** What the fish is doing and which way it is pointing. */
+export type Behaviour = {
+  activity: FishActivity
   /** Facing: 1 rightward, -1 leftward (renderer + movement). */
   facing: 1 | -1
 }
+
+/** Readiness to court again. */
+export type Breeding = {
+  cooldownUntil: number
+}
+
+/** Corpse animation: a fish that died, floating up and fading out. Carries
+ * its own copy of what the renderer needs, so the dead entity does not keep
+ * a resident's live components. */
+export type Remains = {
+  name: string
+  genome: Genome
+  weight: number
+  expiresAt: number
+}
+
+/** Every component a living resident must have, for queries and invariants. */
+export const RESIDENT_COMPONENTS = [
+  'resident',
+  'genome',
+  'physiology',
+  'behaviour',
+  'breeding',
+] as const
 
 export type Food = {
   nutrition: number
@@ -86,13 +124,20 @@ export type Entity = {
   id: number
   position: Vec2
   velocity: Vec2
-  fish?: Fish
+  resident?: Resident
+  genome?: Genome
+  physiology?: Physiology
+  behaviour?: Behaviour
+  breeding?: Breeding
   food?: Food
   waste?: Waste
   egg?: Egg
-  /** Corpse animation: fish that died, floating up and fading out. */
-  remains?: { fish: Fish; expiresAt: number }
+  remains?: Remains
 }
+
+/** A living resident, with the components every fish system can rely on. */
+export type ResidentEntity = Entity &
+  Required<Pick<Entity, 'resident' | 'genome' | 'physiology' | 'behaviour' | 'breeding'>>
 
 export type OfflineSummary = {
   awaySeconds: number
