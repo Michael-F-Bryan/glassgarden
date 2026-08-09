@@ -142,6 +142,36 @@ describe('breeding: courtship, egg, and hatch', () => {
   })
 })
 
+describe('remains across a reload', () => {
+  test('a corpse mid-animation survives a save/load and still expires', () => {
+  const state = createFreshGame(909)
+  const sim = new GameSim(state)
+  const fish = [...state.world.with('physiology', 'resident')][0]
+  const name = fish.resident.name
+  fish.physiology.hunger = 1
+  fish.physiology.health = 0.0001
+  fish.physiology.criticalSince = -TUNING.warningGraceSeconds
+  sim.advanceElapsed(1, 'visible')
+
+  const remains = [...state.world.with('remains')]
+  expect(remains).toHaveLength(1)
+  expect(remains[0].remains.name).toBe(name)
+
+  const result = decodeSave(JSON.stringify(sim.toSave(1000)))
+  expect(result.kind).toBe('loaded')
+  if (result.kind !== 'loaded') return
+  const resumed = new GameSim(hydrate(result.document))
+  const carried = [...resumed.read.world.with('remains')]
+  expect(carried).toHaveLength(1)
+  expect(carried[0].remains.name).toBe(name)
+  expect(carried[0].remains.genome.hue).toBeCloseTo(remains[0].remains.genome.hue)
+
+  resumed.advanceElapsed(TUNING.remainsLingerSeconds + 2, 'visible')
+  expect([...resumed.read.world.with('remains')]).toHaveLength(0)
+  expect(resumed.read.gameOver).toBe(true)
+})
+})
+
 describe('persistence round-trip', () => {
   test('hold after serialize -> decodeSave -> hydrate', () => {
     const state = dirtyTankState(51)
