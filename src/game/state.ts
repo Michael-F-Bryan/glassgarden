@@ -1,0 +1,143 @@
+import { World } from 'miniplex'
+
+import { generateName, randomGenome } from './genome'
+import {
+  TANK,
+  TUNING,
+  type Entity,
+  type Fish,
+  type GameEvent,
+  type Genome,
+  type Unlocks,
+  type Vec2,
+} from './model'
+import { createRng, type Rng } from './rng'
+import { createWaterGrid, type WaterGrid } from './water'
+
+/**
+ * The whole mutable simulation: the ECS world plus singleton resources.
+ * Systems mutate this; the UI only reads snapshots and issues intents.
+ */
+export type GameState = {
+  world: World<Entity>
+  byId: Map<number, Entity>
+  nextEntityId: number
+  /** Sim seconds since the aquarium began. */
+  time: number
+  coins: number
+  ownsSiphon: boolean
+  fishPurchased: number
+  unlocks: Unlocks
+  water: WaterGrid
+  rng: Rng
+  events: GameEvent[]
+  gameOver: boolean
+}
+
+export function createState(seed: number): GameState {
+  return {
+    world: new World<Entity>(),
+    byId: new Map(),
+    nextEntityId: 1,
+    time: 0,
+    coins: TUNING.startingCoins,
+    ownsSiphon: false,
+    fishPurchased: 0,
+    unlocks: {
+      noticedGrowth: false,
+      noticedPollution: false,
+      siphonInShop: false,
+      fishInShop: false,
+      seenEgg: false,
+    },
+    water: createWaterGrid(),
+    rng: createRng(seed),
+    events: [],
+    gameOver: false,
+  }
+}
+
+export function addEntity(state: GameState, entity: Omit<Entity, 'id'>): Entity {
+  const withId = { ...entity, id: state.nextEntityId } as Entity
+  state.nextEntityId += 1
+  state.world.add(withId)
+  state.byId.set(withId.id, withId)
+  return withId
+}
+
+export function removeEntity(state: GameState, entity: Entity): void {
+  state.world.remove(entity)
+  state.byId.delete(entity.id)
+}
+
+export function emit(state: GameState, event: GameEvent): void {
+  state.events.push(event)
+}
+
+export function livingFish(state: GameState): Entity[] {
+  return [...state.world.with('fish')]
+}
+
+export function takenNames(state: GameState): Set<string> {
+  const names = new Set<string>()
+  for (const entity of state.world.with('fish')) names.add(entity.fish.name)
+  return names
+}
+
+export type SpawnFishOptions = {
+  genome: Genome
+  name: string
+  weight: number
+  generation: number
+  parents?: [string, string]
+  hatchedInMurkyWater?: boolean
+  position?: Vec2
+  hunger?: number
+}
+
+export function spawnFish(state: GameState, options: SpawnFishOptions): Entity {
+  const position = options.position ?? {
+    x: state.rng.range(TANK.width * 0.3, TANK.width * 0.7),
+    y: state.rng.range(TANK.waterTop + 100, TANK.sandTop - 120),
+  }
+  const fish: Fish = {
+    name: options.name,
+    genome: options.genome,
+    weight: options.weight,
+    hunger: options.hunger ?? 0.2,
+    sickness: 0,
+    health: 1,
+    ageSeconds: 0,
+    generation: options.generation,
+    parents: options.parents,
+    hatchedInMurkyWater: options.hatchedInMurkyWater ?? false,
+    digesting: 0,
+    breedingCooldownUntil: 0,
+    activity: { kind: 'wander', target: { ...position }, idleUntil: 0 },
+    facing: state.rng.next() < 0.5 ? 1 : -1,
+  }
+  return addEntity(state, { position, velocity: { x: 0, y: 0 }, fish })
+}
+
+/** The opening scenario: a bare tank and one small, hungry fish. */
+export function spawnStarterFish(state: GameState): Entity {
+  const genome = randomGenome(state.rng, TUNING.starterMaxWeight)
+  return spawnFish(state, {
+    genome,
+    name: generateName(state.rng, takenNames(state)),
+    weight: TUNING.starterWeight,
+    generation: 1,
+    hunger: 0.6,
+  })
+}
+
+export function createFreshGame(seed: number): GameState {
+  const state = createState(seed)
+  const starter = spawnStarterFish(state)
+  emit(state, {
+    type: 'toast',
+    tone: 'info',
+    message: `A small glimmerfin named ${starter.fish!.name} arrives in your bare tank. They look hungry.`,
+  })
+  return state
+}

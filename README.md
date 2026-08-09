@@ -5,8 +5,8 @@ An aquarium idle game about nurturing a living ecosystem that grows and evolves 
 ## Development
 
 ```sh
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 The app uses Next.js, TypeScript, Tailwind CSS, and shadcn/ui.
@@ -14,10 +14,10 @@ The app uses Next.js, TypeScript, Tailwind CSS, and shadcn/ui.
 ## Checks
 
 ```sh
-npm test
-npm run lint
-npm run typecheck
-npm run build
+pnpm test
+pnpm lint
+pnpm typecheck
+pnpm build
 ```
 
 ## Project direction
