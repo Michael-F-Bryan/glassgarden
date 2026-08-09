@@ -32,10 +32,19 @@ const KELP = [
   { x: 1120, height: 220, fronds: 3 },
 ]
 
+type SiphonPuff = { x: number; y: number; at: number }
+
 export class TankRenderer {
   private pollutionLayer = document.createElement('canvas')
   private bubbles: Bubble[] = []
   private lastBubbleTime: number | undefined
+  private puffs: SiphonPuff[] = []
+
+  /** Cosmetic confirmation that a siphon click landed. */
+  notifySiphon(x: number, y: number): void {
+    this.puffs.push({ x, y, at: performance.now() / 1000 })
+    if (this.puffs.length > 8) this.puffs.shift()
+  }
 
   constructor() {
     this.pollutionLayer.width = WATER_COLS
@@ -78,8 +87,57 @@ export class TankRenderer {
     for (const entity of state.world.with('remains')) this.drawRemains(ctx, entity, state.time)
 
     this.drawKelp(ctx, realTime, false)
+    if (state.ownsFeeder) this.drawFeeder(ctx)
+    this.drawPuffs(ctx, realTime)
     this.drawBubbles(ctx, realTime)
     this.drawSurface(ctx, realTime)
+  }
+
+  private drawFeeder(ctx: CanvasRenderingContext2D): void {
+    ctx.save()
+    ctx.translate(TANK.width - 80, TANK.waterTop - 12)
+    ctx.fillStyle = '#31404d'
+    ctx.beginPath()
+    ctx.roundRect(-26, -14, 52, 26, 6)
+    ctx.fill()
+    ctx.fillStyle = '#4b5d6b'
+    ctx.beginPath()
+    ctx.roundRect(-20, -10, 40, 10, 4)
+    ctx.fill()
+    ctx.fillStyle = '#e8b04b'
+    ctx.beginPath()
+    ctx.arc(0, 16, 3, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+
+  private drawPuffs(ctx: CanvasRenderingContext2D, realTime: number): void {
+    const LIFETIME = 0.6
+    this.puffs = this.puffs.filter((puff) => realTime - puff.at < LIFETIME)
+    for (const puff of this.puffs) {
+      const t = (realTime - puff.at) / LIFETIME
+      ctx.save()
+      ctx.globalAlpha = (1 - t) * 0.7
+      ctx.strokeStyle = 'rgba(220, 240, 250, 0.9)'
+      ctx.lineWidth = 2.5
+      ctx.beginPath()
+      ctx.arc(puff.x, puff.y, 12 + t * 46, 0, Math.PI * 2)
+      ctx.stroke()
+      for (let i = 0; i < 5; i += 1) {
+        const angle = (i / 5) * Math.PI * 2 + puff.x
+        ctx.fillStyle = 'rgba(200, 226, 238, 0.8)'
+        ctx.beginPath()
+        ctx.arc(
+          puff.x + Math.cos(angle) * (10 + t * 34),
+          puff.y + Math.sin(angle) * (8 + t * 26) - t * 18,
+          2.5 * (1 - t),
+          0,
+          Math.PI * 2,
+        )
+        ctx.fill()
+      }
+      ctx.restore()
+    }
   }
 
   private drawWater(ctx: CanvasRenderingContext2D): void {

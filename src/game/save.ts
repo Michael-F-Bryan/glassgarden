@@ -13,7 +13,10 @@ export type SaveFile = {
   time: number
   coins: number
   ownsSiphon: boolean
+  ownsFeeder: boolean
+  feederLastDropAt: number
   fishPurchased: number
+  retiredNames: string[]
   unlocks: Unlocks
   waterCells: number[]
   rngState: number
@@ -31,7 +34,10 @@ export function serialize(state: GameState, savedAtMs: number): SaveFile {
     time: state.time,
     coins: state.coins,
     ownsSiphon: state.ownsSiphon,
+    ownsFeeder: state.ownsFeeder,
+    feederLastDropAt: state.feederLastDropAt,
     fishPurchased: state.fishPurchased,
+    retiredNames: state.retiredNames.slice(),
     unlocks: { ...state.unlocks },
     waterCells: state.water.cells.slice(),
     rngState: state.rng.state(),
@@ -59,8 +65,11 @@ export function deserialize(save: SaveFile): GameState {
     time: save.time,
     coins: save.coins,
     ownsSiphon: save.ownsSiphon,
+    ownsFeeder: save.ownsFeeder ?? false,
+    feederLastDropAt: save.feederLastDropAt ?? 0,
     fishPurchased: save.fishPurchased,
-    unlocks: { ...save.unlocks },
+    retiredNames: (save.retiredNames ?? []).slice(),
+    unlocks: { ...save.unlocks, feederInShop: save.unlocks.feederInShop ?? false },
     water: { cells: save.waterCells.slice() },
     rng: createRng(save.rngState),
     events: (save.pendingEvents ?? []).map((event) => structuredClone(event)),

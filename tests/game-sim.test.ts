@@ -75,7 +75,7 @@ describe('feeding and growth', () => {
       sim.dropFood(onlyFish(sim).position.x)
       events.push(...runFor(sim, 8))
     }
-    expect(onlyFish(sim).fish.weight).toBeGreaterThan(5)
+    expect(onlyFish(sim).fish.weight).toBeGreaterThan(3.5)
     expect(sim.state.unlocks.noticedGrowth).toBe(true)
     expect(
       events.some((e) => e.type === 'toast' && e.tone === 'development' && /bigger/.test(e.message)),
@@ -284,6 +284,37 @@ describe('critique regressions', () => {
     onlyFish(sim).fish.sickness = 1
     sim.advanceOffline(3600)
     expect(onlyFish(sim).fish.sickness).toBeLessThanOrEqual(TUNING.offlineSicknessCeiling)
+  })
+
+  test('the drip feeder feeds hungry fish automatically, spending coins', () => {
+    const sim = new GameSim(pairedState(715, { hunger: 0.9 }))
+    sim.state.ownsFeeder = true
+    sim.state.coins = 50
+    const coinsBefore = sim.state.coins
+    runFor(sim, 60)
+    const fish = [...sim.state.world.with('fish')]
+    expect(Math.max(...fish.map((f) => f.fish.hunger))).toBeLessThan(0.9)
+    expect(sim.state.coins).toBeLessThan(coinsBefore + 60 * TUNING.incomeFloor + 60 * TUNING.incomePerGram * 40)
+  })
+
+  test('the feeder does nothing without coins', () => {
+    const sim = new GameSim(pairedState(717, { hunger: 0.9 }))
+    sim.state.ownsFeeder = true
+    sim.state.coins = 0
+    sim.step(TUNING.tick, true)
+    expect([...sim.state.world.with('food')]).toHaveLength(0)
+  })
+
+  test('a dead fish\'s name is not reused for newcomers', () => {
+    const sim = GameSim.fresh(719)
+    const name = onlyFish(sim).fish.name
+    onlyFish(sim).fish.hunger = 1
+    onlyFish(sim).fish.health = 0.01
+    runFor(sim, 300)
+    expect(sim.state.gameOver).toBe(true)
+    sim.state.coins = 100
+    expect(sim.buy('starterFish')).toBe(true)
+    expect(onlyFish(sim).fish.name).not.toBe(name)
   })
 
   test('the shop refuses fish at the population cap', () => {

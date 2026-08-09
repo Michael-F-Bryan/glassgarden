@@ -118,6 +118,7 @@ export type Unlocks = {
   noticedPollution: boolean
   siphonInShop: boolean
   fishInShop: boolean
+  feederInShop: boolean
   seenEgg: boolean
 }
 
@@ -127,6 +128,10 @@ export const TUNING = {
   startingCoins: 30,
   pelletCost: 1,
   siphonCost: 60,
+  feederCost: 400,
+  /** Drip feeder: one pellet per interval when a fish is hungry enough. */
+  feederDropSeconds: 8,
+  feederFeedsAbove: 0.55,
   /** Escalating fish shop prices; breeding must take over after these. */
   fishPrices: [120, 300, 750, 1900],
   fishPriceBeyond: 4500,
@@ -138,26 +143,29 @@ export const TUNING = {
   pelletNutrition: 1,
   pelletSpoilSeconds: 45,
   /** Weight gained per nutrition eaten, scaled by remaining growth headroom. */
-  growthPerNutrition: 0.85,
+  growthPerNutrition: 1.15,
   starterMaxWeight: 26,
   starterWeight: 1.2,
   babyWeight: 1.0,
-  /** Hunger accumulated per second by a full-grown fish (smaller fish less). */
-  hungerPerSecondAdult: 1 / 90,
+  /** Hunger accumulated per second by a full-grown fish (smaller fish less).
+   * Recently fed fish (hunger < satiationBelow) digest at satiationFactor. */
+  hungerPerSecondAdult: 1 / 150,
+  satiationBelow: 0.5,
+  satiationFactor: 0.45,
   hungerRelievedPerNutrition: 0.38,
   seekFoodAbove: 0.25,
   /** digesting >= this spawns a dropping. */
   digestionPerDropping: 2,
 
-  wastePollutionPerSecond: 0.0065, // per unit of waste size
-  spoiledFoodPollutionPerSecond: 0.0055,
+  wastePollutionPerSecond: 0.016, // per unit of waste size
+  spoiledFoodPollutionPerSecond: 0.008,
   pollutionDecayPerSecond: 0.0018,
   pollutionDiffusionPerSecond: 0.04,
   sicknessAbovePollution: 0.3,
   sicknessPerSecondAtFullPollution: 1 / 45,
   sicknessRecoveryPerSecond: 1 / 90,
   /** Debris self-degrades (after leaching pollution) so entities stay bounded. */
-  wasteBreakdownPerSecond: 0.004,
+  wasteBreakdownPerSecond: 0.002,
   spoiledFoodLingerSeconds: 180,
   siphonRadius: 70,
   siphonPollutionClear: 0.35, // fraction of local cell pollution removed per use
@@ -179,13 +187,13 @@ export const TUNING = {
   courtshipSeconds: 20,
   eggHatchSeconds: 60,
   /** Eggs incubating above this pollution hatch stunted, less resilient fry. */
-  murkyEggPollution: 0.3,
+  murkyEggPollution: 0.4,
   maxPopulation: 12,
 
   /** Hidden development thresholds. */
   growthNoticedAtMultiple: 2, // starter weight vs its hatch weight
-  pollutionNoticedAt: 0.22,
-  fishUnlockWeight: 10,
+  pollutionNoticedAt: 0.18,
+  fishUnlockWeight: 8,
 
   /** Away-time contract: slowed and capped, and always survivable. */
   offlineRate: 0.2,

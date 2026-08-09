@@ -6,6 +6,7 @@ import {
   livingFish,
   removeEntity,
   spawnFish,
+  spawnPellet,
   takenNames,
   type GameState,
 } from './state'
@@ -42,6 +43,7 @@ export function stepTick(state: GameState, dt: number, flags: TickFlags): void {
   sicknessSystem(state, dt, flags)
   healthSystem(state, dt, flags)
   breedingSystem(state)
+  feederSystem(state)
   economySystem(state, dt)
   developmentSystem(state)
   cleanupSystem(state, dt)
@@ -52,7 +54,8 @@ function hungerSystem(state: GameState, dt: number, flags: TickFlags): void {
     const fish = entity.fish
     fish.ageSeconds += dt
     const maturity = Math.min(1, fish.weight / fish.genome.maxWeight)
-    const rate = TUNING.hungerPerSecondAdult * (0.45 + 0.55 * maturity)
+    const satiation = fish.hunger < TUNING.satiationBelow ? TUNING.satiationFactor : 1
+    const rate = TUNING.hungerPerSecondAdult * (0.45 + 0.55 * maturity) * satiation
     const ceiling = flags.offline ? TUNING.offlineHungerCeiling : 1
     fish.hunger = Math.min(ceiling, fish.hunger + rate * dt)
     if (fish.hunger >= 1) {
@@ -303,6 +306,8 @@ function dieOf(state: GameState, entity: Entity): void {
     velocity: { x: 0, y: 0 },
     remains: { fish, expiresAt: state.time + TUNING.remainsLingerSeconds },
   })
+  state.retiredNames.push(fish.name)
+  if (state.retiredNames.length > 40) state.retiredNames.shift()
   emit(state, { type: 'death', name: fish.name })
   emit(state, { type: 'toast', tone: 'warning', message: `${fish.name} has died.` })
   // An incubating egg means the tank is not actually lost yet.
@@ -410,6 +415,21 @@ function breedingSystem(state: GameState): void {
   b.fish!.activity = { kind: 'court', partnerId: a.id, until }
 }
 
+/** The drip feeder drops a pellet for hungry fish, spending player coins. */
+function feederSystem(state: GameState): void {
+  if (!state.ownsFeeder || state.coins < TUNING.pelletCost) return
+  if (state.time - state.feederLastDropAt < TUNING.feederDropSeconds) return
+  const hungry = livingFish(state).filter(
+    (entity) => entity.fish!.hunger > TUNING.feederFeedsAbove,
+  )
+  if (hungry.length === 0) return
+  const pellets = [...state.world.with('food')].filter((e) => !e.food.spoiled).length
+  if (pellets >= hungry.length) return
+  state.coins -= TUNING.pelletCost
+  state.feederLastDropAt = state.time
+  spawnPellet(state, TANK.width - 80)
+}
+
 function economySystem(state: GameState, dt: number): void {
   const totalWeight = livingFish(state).reduce((sum, entity) => sum + entity.fish!.weight, 0)
   state.coins += (TUNING.incomeFloor + TUNING.incomePerGram * totalWeight) * dt
@@ -444,6 +464,14 @@ function developmentSystem(state: GameState): void {
       type: 'toast',
       tone: 'info',
       message: 'New in the shop: a gravel siphon, for cleaning up waste.',
+    })
+  }
+  if (!unlocks.feederInShop && livingFish(state).length >= 3) {
+    unlocks.feederInShop = true
+    emit(state, {
+      type: 'toast',
+      tone: 'info',
+      message: 'The shop has something for busy caretakers: a drip feeder.',
     })
   }
   if (!unlocks.fishInShop) {

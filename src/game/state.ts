@@ -26,7 +26,11 @@ export type GameState = {
   time: number
   coins: number
   ownsSiphon: boolean
+  ownsFeeder: boolean
+  feederLastDropAt: number
   fishPurchased: number
+  /** Names of the departed, kept so newcomers don't wear them. */
+  retiredNames: string[]
   unlocks: Unlocks
   water: WaterGrid
   rng: Rng
@@ -42,12 +46,16 @@ export function createState(seed: number): GameState {
     time: 0,
     coins: TUNING.startingCoins,
     ownsSiphon: false,
+    ownsFeeder: false,
+    feederLastDropAt: 0,
     fishPurchased: 0,
+    retiredNames: [],
     unlocks: {
       noticedGrowth: false,
       noticedPollution: false,
       siphonInShop: false,
       fishInShop: false,
+      feederInShop: false,
       seenEgg: false,
     },
     water: createWaterGrid(),
@@ -80,9 +88,26 @@ export function livingFish(state: GameState): Entity[] {
 }
 
 export function takenNames(state: GameState): Set<string> {
-  const names = new Set<string>()
+  const names = new Set<string>(state.retiredNames)
   for (const entity of state.world.with('fish')) names.add(entity.fish.name)
   return names
+}
+
+/** Drop a pellet into the water near x — shared by the player and the feeder. */
+export function spawnPellet(state: GameState, x: number): Entity {
+  return addEntity(state, {
+    position: {
+      x: Math.min(TANK.width - 20, Math.max(20, x + state.rng.range(-10, 10))),
+      y: TANK.waterTop + 6,
+    },
+    velocity: { x: state.rng.range(-8, 8), y: 0 },
+    food: {
+      nutrition: TUNING.pelletNutrition,
+      spoilsAt: state.time + TUNING.pelletSpoilSeconds,
+      spoiled: false,
+      restingOnSand: false,
+    },
+  })
 }
 
 export type SpawnFishOptions = {

@@ -31,6 +31,7 @@ type HudSnapshot = {
   criticalNames: string[]
   ownsSiphon: boolean
   gameOver: boolean
+  waterQuality: 'clear' | 'tinged' | 'murky' | 'foul'
   shopItems: ShopItem[]
   selectedFish?: {
     id: number
@@ -40,6 +41,7 @@ type HudSnapshot = {
     mood: string
     weightGrams: number
     age: string
+    origin: 'arrived' | 'hatched'
     parents?: [string, string]
     hatchedInMurkyWater: boolean
   }
@@ -53,6 +55,7 @@ const EMPTY_HUD: HudSnapshot = {
   criticalNames: [],
   ownsSiphon: false,
   gameOver: false,
+  waterQuality: 'clear',
   shopItems: [],
 }
 
@@ -71,6 +74,13 @@ function describeStage(fish: Fish): string {
   if (maturity < 0.2) return 'fry'
   if (maturity < TUNING.breedingMinWeightFraction) return 'juvenile'
   return 'adult'
+}
+
+function describeWater(worstPollution: number): 'clear' | 'tinged' | 'murky' | 'foul' {
+  if (worstPollution < 0.08) return 'clear'
+  if (worstPollution < 0.22) return 'tinged'
+  if (worstPollution < 0.45) return 'murky'
+  return 'foul'
 }
 
 function formatAge(seconds: number): string {
@@ -103,6 +113,7 @@ function buildHudSnapshot(sim: GameSim, selectedFishId: number | undefined): Hud
       .map((entity) => entity.fish.name),
     ownsSiphon: state.ownsSiphon,
     gameOver: state.gameOver,
+    waterQuality: describeWater(sim.worstPollution()),
     shopItems: sim.shopItems(),
     selectedFish: selected?.fish
       ? {
@@ -113,6 +124,7 @@ function buildHudSnapshot(sim: GameSim, selectedFishId: number | undefined): Hud
           mood: describeMood(selected.fish),
           weightGrams: selected.fish.weight,
           age: formatAge(selected.fish.ageSeconds),
+          origin: selected.fish.parents ? 'hatched' : 'arrived',
           parents: selected.fish.parents,
           hatchedInMurkyWater: selected.fish.hatchedInMurkyWater,
         }
@@ -127,6 +139,8 @@ export default function GameRoot() {
   const selectedFishRef = useRef<number | undefined>(undefined)
   const toolRef = useRef<Tool>('feed')
   const refreshHudRef = useRef<() => void>(() => {})
+  const rendererRef = useRef<TankRenderer | null>(null)
+  const affordWarnAtRef = useRef(0)
 
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -157,6 +171,7 @@ export default function GameRoot() {
     }
     if (!sim) sim = GameSim.fresh(Date.now() >>> 0)
     simRef.current = sim
+
     // Dev-only playtest accelerator and automation handle; absent in production builds.
     let simSpeed = 1
     if (process.env.NODE_ENV === 'development') {
@@ -165,6 +180,7 @@ export default function GameRoot() {
       ;(window as unknown as { __glassgarden?: unknown }).__glassgarden = sim
     }
     const renderer = new TankRenderer()
+    rendererRef.current = renderer
 
     const dpr = Math.min(2, window.devicePixelRatio || 1)
     let renderScale = dpr
@@ -211,7 +227,7 @@ export default function GameRoot() {
             message: event.message,
             expiresAt: now + TOAST_LIFETIME_MS[event.tone],
           }))
-        return [...current.filter((toast) => toast.expiresAt > now), ...additions].slice(-6)
+        return [...current.filter((toast) => toast.expiresAt > now), ...additions].slice(-12)
       })
     }
 
@@ -281,6 +297,8 @@ export default function GameRoot() {
   const onCanvasClick = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const sim = simRef.current
     if (!sim) return
+    setHelpOpen(false)
+    setShopOpen(false)
     const point = toLogical(event)
     const fish = sim.fishAt(point.x, point.y)
     if (fish) {
@@ -288,9 +306,22 @@ export default function GameRoot() {
     } else {
       selectedFishRef.current = undefined
       if (toolRef.current === 'feed') {
-        sim.dropFood(point.x)
+        const dropped = sim.dropFood(point.x)
+        if (!dropped && !sim.state.gameOver && performance.now() - affordWarnAtRef.current > 5000) {
+          affordWarnAtRef.current = performance.now()
+          setToasts((current) => [
+            ...current,
+            {
+              key: performance.now(),
+              tone: 'warning',
+              message: 'Not enough coins for food — they trickle in as your fish grow.',
+              expiresAt: performance.now() + TOAST_LIFETIME_MS.warning,
+            },
+          ])
+        }
       } else if (toolRef.current === 'siphon') {
         sim.siphonAt(point.x, point.y)
+        rendererRef.current?.notifySiphon(point.x, point.y)
       }
     }
     refreshHudRef.current()
@@ -323,6 +354,18 @@ export default function GameRoot() {
     selectedFishRef.current = undefined
     refreshHudRef.current()
   }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setHelpOpen(false)
+      setShopOpen(false)
+      selectedFishRef.current = undefined
+      refreshHudRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,_#12303e,_#0a1a24_65%)] p-4 text-slate-100">
@@ -411,7 +454,7 @@ export default function GameRoot() {
                 : 'border-white/10 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
             }`}
           >
-            🫘 Feed
+            🫘 Feed <span className="ml-1 text-xs opacity-70">◉1</span>
           </button>
           {hud.ownsSiphon && (
             <button
@@ -433,6 +476,20 @@ export default function GameRoot() {
         </div>
 
         <div className="absolute right-3 bottom-3 flex items-center gap-2 text-xs">
+          <span
+            data-testid="water-quality"
+            className={`rounded-full bg-slate-950/60 px-3 py-1 backdrop-blur ${
+              hud.waterQuality === 'clear'
+                ? 'text-cyan-200/90'
+                : hud.waterQuality === 'tinged'
+                  ? 'text-lime-200/90'
+                  : hud.waterQuality === 'murky'
+                    ? 'text-amber-300/90'
+                    : 'text-red-300/90'
+            }`}
+          >
+            {hud.waterQuality} water
+          </span>
           <span
             data-testid="population"
             className="rounded-full bg-slate-950/60 px-3 py-1 text-slate-200/90 backdrop-blur"
@@ -527,8 +584,8 @@ export default function GameRoot() {
               </button>
             </div>
             <p className="text-xs text-slate-400">
-              generation {hud.selectedFish.generation} · {hud.selectedFish.stage} · hatched{' '}
-              {hud.selectedFish.age}
+              generation {hud.selectedFish.generation} · {hud.selectedFish.stage} ·{' '}
+              {hud.selectedFish.origin} {hud.selectedFish.age}
             </p>
             <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
               <dt className="text-slate-400">Mood</dt>

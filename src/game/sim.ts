@@ -1,19 +1,18 @@
 import { generateName, randomGenome } from './genome'
 import {
   fishPrice,
-  TANK,
   TUNING,
   type Entity,
   type GameEvent,
   type OfflineSummary,
 } from './model'
 import {
-  addEntity,
   createFreshGame,
   emit,
   livingFish,
   removeEntity,
   spawnFish,
+  spawnPellet,
   takenNames,
   type GameState,
 } from './state'
@@ -23,7 +22,7 @@ import { clearPollutionNear } from './water'
 export type { OfflineSummary } from './model'
 
 export type ShopItem = {
-  id: 'siphon' | 'fish' | 'starterFish'
+  id: 'siphon' | 'feeder' | 'fish' | 'starterFish'
   label: string
   description: string
   cost: number
@@ -112,6 +111,11 @@ export class GameSim {
     return this.state.events.splice(0, this.state.events.length)
   }
 
+  /** Worst water cell, for the HUD's diegetic quality pill. */
+  worstPollution(): number {
+    return Math.max(...this.state.water.cells)
+  }
+
   incomePerSecond(): number {
     const totalWeight = livingFish(this.state).reduce((sum, e) => sum + e.fish!.weight, 0)
     return TUNING.incomeFloor + TUNING.incomePerGram * totalWeight
@@ -121,19 +125,7 @@ export class GameSim {
   dropFood(x: number): boolean {
     if (this.state.gameOver || this.state.coins < TUNING.pelletCost) return false
     this.state.coins -= TUNING.pelletCost
-    addEntity(this.state, {
-      position: {
-        x: Math.min(TANK.width - 20, Math.max(20, x + this.state.rng.range(-10, 10))),
-        y: TANK.waterTop + 6,
-      },
-      velocity: { x: this.state.rng.range(-8, 8), y: 0 },
-      food: {
-        nutrition: TUNING.pelletNutrition,
-        spoilsAt: this.state.time + TUNING.pelletSpoilSeconds,
-        spoiled: false,
-        restingOnSand: false,
-      },
-    })
+    spawnPellet(this.state, x)
     return true
   }
 
@@ -170,6 +162,16 @@ export class GameSim {
         description: 'Clean up droppings and spoiled food before they foul the water.',
         cost: TUNING.siphonCost,
         affordable: coins >= TUNING.siphonCost,
+      })
+    }
+    if (this.state.unlocks.feederInShop && !this.state.ownsFeeder) {
+      items.push({
+        id: 'feeder',
+        label: 'Drip feeder',
+        description:
+          'Drops a pellet for hungry fish while you are busy elsewhere. Uses your coins.',
+        cost: TUNING.feederCost,
+        affordable: coins >= TUNING.feederCost,
       })
     }
     if (this.state.unlocks.fishInShop && !this.state.gameOver) {
@@ -210,6 +212,13 @@ export class GameSim {
         tone: 'info',
         message: 'Gravel siphon acquired. Select it, then click debris to clean it up.',
       })
+    } else if (item.id === 'feeder') {
+      this.state.ownsFeeder = true
+      emit(this.state, {
+        type: 'toast',
+        tone: 'info',
+        message: 'Drip feeder installed above the tank. It spends a coin per pellet.',
+      })
     } else if (item.id === 'fish') {
       this.state.fishPurchased += 1
       const genome = randomGenome(this.state.rng, this.state.rng.range(18, 34))
@@ -218,7 +227,7 @@ export class GameSim {
         name: generateName(this.state.rng, takenNames(this.state)),
         weight: this.state.rng.range(1.5, 3),
         generation: 1,
-        hunger: 0.45,
+        hunger: 0.15, // arrives well fed; a crisis on arrival reads as a rip-off
       })
       emit(this.state, {
         type: 'toast',
