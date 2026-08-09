@@ -51,6 +51,15 @@ describe('game UI layout', () => {
     })
   })
 
+  test('hud exposes worst pollution for the water-quality meter', () => {
+    const sim = GameSim.fresh(123)
+    expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBe(0)
+
+    sim.state.water.cells.fill(0.4)
+
+    expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBeCloseTo(0.4)
+  })
+
   test('first-feed hint follows the sim and never flashes on the placeholder HUD', () => {
     const sim = GameSim.fresh(123)
     expect(buildHudSnapshot(sim, undefined, 'clear').fedOnce).toBe(false)

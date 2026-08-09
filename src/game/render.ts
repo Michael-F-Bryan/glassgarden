@@ -238,12 +238,12 @@ export class TankRenderer {
     ctx.lineTo(0, TANK.height)
     ctx.closePath()
     ctx.fill()
-    // Pebbles.
+    // Pebbles: kept low-contrast so droppings stand out against them.
     for (let i = 0; i < 26; i += 1) {
       const px = hash01(i * 31) * TANK.width
       const py = TANK.sandTop + 14 + hash01(i * 57) * 36
       const radius = 2 + hash01(i * 91) * 4
-      ctx.fillStyle = `rgba(90, 74, 50, ${0.25 + hash01(i * 13) * 0.3})`
+      ctx.fillStyle = `rgba(96, 82, 60, ${0.16 + hash01(i * 13) * 0.18})`
       ctx.beginPath()
       ctx.ellipse(px, py, radius * 1.4, radius, 0, 0, Math.PI * 2)
       ctx.fill()
@@ -340,21 +340,32 @@ export class TankRenderer {
     }
   }
 
+  // Droppings must read as "clean me", never as sand decoration: dark olive
+  // clumps under a faint green haze — the same colour language as pollution.
   private drawWaste(ctx: CanvasRenderingContext2D, entity: Entity): void {
     const size = 4.5 + entity.waste!.size * 3.4
-    ctx.fillStyle = '#4c3a26'
+    const { x, y } = entity.position
+    ctx.save()
+    ctx.fillStyle = 'rgba(110, 140, 60, 0.2)'
     ctx.beginPath()
-    ctx.ellipse(entity.position.x, entity.position.y, size, size * 0.6, 0, 0, Math.PI * 2)
+    ctx.ellipse(x, y - size * 0.3, size * 1.9, size * 1.1, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.strokeStyle = 'rgba(150, 120, 78, 0.5)'
-    ctx.lineWidth = 1
+    const lumps = [
+      { dx: -0.55, dy: 0.05, scale: 0.75 },
+      { dx: 0.5, dy: -0.1, scale: 0.65 },
+      { dx: 0, dy: -0.35, scale: 0.85 },
+    ]
+    for (const lump of lumps) {
+      ctx.fillStyle = '#333f27'
+      ctx.beginPath()
+      ctx.ellipse(x + lump.dx * size, y + lump.dy * size, size * lump.scale, size * lump.scale * 0.7, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = 'rgba(90, 110, 60, 0.55)'
     ctx.beginPath()
-    ctx.ellipse(entity.position.x, entity.position.y - size * 0.15, size * 0.8, size * 0.4, 0, Math.PI, Math.PI * 2)
-    ctx.stroke()
-    ctx.fillStyle = 'rgba(30, 22, 12, 0.5)'
-    ctx.beginPath()
-    ctx.ellipse(entity.position.x - size * 0.3, entity.position.y - size * 0.2, size * 0.45, size * 0.3, 0, 0, Math.PI * 2)
+    ctx.ellipse(x - size * 0.2, y - size * 0.5, size * 0.4, size * 0.25, 0, 0, Math.PI * 2)
     ctx.fill()
+    ctx.restore()
   }
 
   private drawEgg(ctx: CanvasRenderingContext2D, entity: Entity, simTime: number, realTime: number): void {

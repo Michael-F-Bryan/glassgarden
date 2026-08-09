@@ -39,6 +39,8 @@ type HudSnapshot = {
   /** False only until the player's very first pellet; drives the feed hint. */
   fedOnce: boolean
   waterQuality: WaterTier
+  /** Worst water cell in [0, 1], driving the quality meter's fill. */
+  worstPollution: number
   shopItems: ShopItem[]
   residents: {
     id: number
@@ -73,6 +75,7 @@ const EMPTY_HUD: HudSnapshot = {
   gameOver: false,
   fedOnce: true, // no hint until the real sim reports otherwise
   waterQuality: 'clear',
+  worstPollution: 0,
   shopItems: [],
   residents: [],
 }
@@ -165,6 +168,7 @@ export function buildHudSnapshot(
     gameOver: state.gameOver,
     fedOnce: state.unlocks.fedOnce,
     waterQuality: describeWater(sim.worstPollution(), previousWater),
+    worstPollution: sim.worstPollution(),
     shopItems: sim.shopItems(),
     residents: fishEntities.map((entity) => ({
       id: entity.id,
@@ -384,24 +388,30 @@ export default function GameRoot() {
     }
   }
 
-  /** Hold-to-sprinkle: a quick tap keeps its old meanings (inspect a fish,
-   * drop one pellet), while holding rains pellets at the pointer. A gesture
-   * that starts over a fish delays its first pellet one interval, so tapping
-   * a fish still reads as inspection rather than feeding it in the face. */
+  /** Held-tool gestures. Feed: a quick tap keeps its old meanings (inspect a
+   * fish, drop one pellet), while holding rains pellets at the pointer; a
+   * gesture that starts over a fish delays its first pellet one interval, so
+   * tapping a fish still reads as inspection rather than feeding it in the
+   * face. Siphon: hold and sweep like a real gravel vac — it pulls debris and
+   * pollution continuously under the pointer as it moves. */
   const TAP_MAX_MS = 260
   const SPRINKLE_INTERVAL_MS = 280
+  const SIPHON_INTERVAL_MS = 220
+  const SIPHON_SWEEP_DISTANCE = 55
 
-  type SprinkleGesture = {
+  type CanvasGesture = {
+    tool: Tool
     pointerId: number
     startedAtMs: number
     startedOverFishId?: number
     pelletsDropped: number
     point: { x: number; y: number }
+    lastSiphonPoint: { x: number; y: number }
     intervalId: ReturnType<typeof setInterval>
   }
-  const gestureRef = useRef<SprinkleGesture | null>(null)
+  const gestureRef = useRef<CanvasGesture | null>(null)
 
-  const endGesture = (): SprinkleGesture | null => {
+  const endGesture = (): CanvasGesture | null => {
     const gesture = gestureRef.current
     if (gesture) clearInterval(gesture.intervalId)
     gestureRef.current = null
@@ -438,34 +448,46 @@ export default function GameRoot() {
     return false
   }
 
+  const siphonSweep = (gesture: CanvasGesture) => {
+    const sim = simRef.current
+    if (!sim) return
+    sim.siphonAt(gesture.point.x, gesture.point.y)
+    rendererRef.current?.notifySiphon(gesture.point.x, gesture.point.y)
+    gesture.lastSiphonPoint = { ...gesture.point }
+    refreshHudRef.current()
+  }
+
   const onCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const sim = simRef.current
     if (!sim) return
     setHelpOpen(false)
     const point = toLogical(event)
-    if (toolRef.current === 'siphon') {
-      sim.siphonAt(point.x, point.y)
-      rendererRef.current?.notifySiphon(point.x, point.y)
-      refreshHudRef.current()
-      return
-    }
-    const fish = sim.fishAt(point.x, point.y)
-    if (!fish) selectedFishRef.current = undefined
+    const tool = toolRef.current
+    const fish = tool === 'feed' ? sim.fishAt(point.x, point.y) : undefined
+    if (tool === 'feed' && !fish) selectedFishRef.current = undefined
     endGesture()
-    const gesture: SprinkleGesture = {
+    const gesture: CanvasGesture = {
+      tool,
       pointerId: event.pointerId,
       startedAtMs: performance.now(),
       startedOverFishId: fish?.id,
       pelletsDropped: 0,
       point,
-      intervalId: setInterval(() => {
-        const active = gestureRef.current
-        if (active && tryDropPellet(active.point.x)) active.pelletsDropped += 1
-      }, SPRINKLE_INTERVAL_MS),
+      lastSiphonPoint: point,
+      intervalId: setInterval(
+        () => {
+          const active = gestureRef.current
+          if (!active) return
+          if (active.tool === 'siphon') siphonSweep(active)
+          else if (tryDropPellet(active.point.x)) active.pelletsDropped += 1
+        },
+        tool === 'siphon' ? SIPHON_INTERVAL_MS : SPRINKLE_INTERVAL_MS,
+      ),
     }
     gestureRef.current = gesture
     event.currentTarget.setPointerCapture(event.pointerId)
-    if (!fish && tryDropPellet(point.x)) gesture.pelletsDropped += 1
+    if (tool === 'siphon') siphonSweep(gesture)
+    else if (!fish && tryDropPellet(point.x)) gesture.pelletsDropped += 1
     refreshHudRef.current()
   }
 
@@ -484,7 +506,17 @@ export default function GameRoot() {
     if (!sim) return
     const point = toLogical(event)
     const gesture = gestureRef.current
-    if (gesture && event.pointerId === gesture.pointerId) gesture.point = point
+    if (gesture && event.pointerId === gesture.pointerId) {
+      gesture.point = point
+      // Sweeping fast shouldn't wait for the next interval tick.
+      if (
+        gesture.tool === 'siphon' &&
+        Math.hypot(point.x - gesture.lastSiphonPoint.x, point.y - gesture.lastSiphonPoint.y) >
+          SIPHON_SWEEP_DISTANCE
+      ) {
+        siphonSweep(gesture)
+      }
+    }
     const hovered = sim.fishAt(point.x, point.y)
     hoverFishRef.current = hovered?.id
     event.currentTarget.style.cursor = hovered
@@ -644,14 +676,16 @@ export default function GameRoot() {
             </button>
           )}
           <span className="ml-1 hidden rounded-full bg-slate-950/60 px-3 py-1 text-xs text-slate-200/90 backdrop-blur sm:block">
-            {tool === 'feed' ? 'click to drop food · hold to sprinkle' : 'click debris to clean it up'}
+            {tool === 'feed'
+              ? 'click to drop food · hold to sprinkle'
+              : 'hold and sweep the sand to clean'}
           </span>
         </div>
 
         <div className="absolute right-3 bottom-3 flex items-center gap-2 text-xs">
           <span
             data-testid="water-quality"
-            className={`rounded-full bg-slate-950/60 px-3 py-1 backdrop-blur ${
+            className={`flex items-center gap-2 rounded-full bg-slate-950/60 px-3 py-1 backdrop-blur ${
               hud.waterQuality === 'clear'
                 ? 'text-cyan-200/90'
                 : hud.waterQuality === 'tinged'
@@ -662,6 +696,21 @@ export default function GameRoot() {
             }`}
           >
             {hud.waterQuality} water
+            <span className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-700/70">
+              <span
+                data-testid="water-quality-bar"
+                className={`block h-full rounded-full transition-[width] duration-500 ${
+                  hud.waterQuality === 'clear'
+                    ? 'bg-cyan-300/80'
+                    : hud.waterQuality === 'tinged'
+                      ? 'bg-lime-300/80'
+                      : hud.waterQuality === 'murky'
+                        ? 'bg-amber-400/90'
+                        : 'bg-red-400/90'
+                }`}
+                style={{ width: `${Math.round(hud.worstPollution * 100)}%` }}
+              />
+            </span>
           </span>
           <span
             data-testid="population"

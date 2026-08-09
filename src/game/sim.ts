@@ -205,7 +205,7 @@ export class GameSim {
       emit(this.state, {
         type: 'toast',
         tone: 'info',
-        message: 'Gravel siphon acquired. Select it, then click debris to clean it up.',
+        message: 'Gravel siphon acquired. Select it, then hold and sweep the sand to clean.',
       })
     } else if (item.id === 'feeder') {
       this.state.ownsFeeder = true
