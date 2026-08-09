@@ -11,41 +11,41 @@ below marked with a measurement was observed in this repo, not assumed.
 
 ---
 
+## Recently shipped
+
+The three lanes deferred by the adversarial refactor review are now done and
+on `main`:
+
+- **Cohesive resident components** (`d11b228`) — the kitchen-sink `Fish` split
+  into resident/genome/physiology/behaviour/breeding, each system querying only
+  what it uses. Verified behaviour-preserving by diffing serialized state
+  against the previous build across three seeds.
+- **Staged feeding and first filtration** (`e3b2646`) — drip/twin/rotary feeder
+  stages and the sponge filter, revealed by pressure the player creates, with
+  save v2 and a deterministic v1 migration.
+- **Keyboard play and overlay semantics** (`47f2112`) — a visible caret driving
+  the same intents as the pointer, labelled dialogs, scoped Escape, focus
+  restoration, and the bounded cleanup the review authorised.
+
 ## Now
 
-### 1. Complete the non-pointer interaction path
+### 1. Play the opening for real
 
-**Outcome:** a keyboard player can feed, siphon, inspect residents, and operate every overlay
-safely, through the same runtime intents pointer actions use.
-**Evidence:** the canvas has no keyboard action path; overlays (menu, away summary, game-over,
-journal, help, inspector) lack dialog semantics and focus handling; Escape is handled globally
-rather than by the active overlay. Tool selection by number key and `aria-pressed` already exist
-in `GameRoot.tsx`, so the surface is partly there.
-**First slice:** keyboard Feed/Siphon/inspect routed through `createGameRuntime` intents, plus one
-active-overlay owner for focus and Escape.
-**Dependency:** none — the runtime already exposes typed intents.
-**Risk:** low technically; the interaction design (how a keyboard user aims at the tank) needs a
-deliberate decision rather than an ARIA sprinkle.
-**Confidence:** HIGH · **Handoff:** in flight
-
-### 2. Bounded entropy cleanup
-
-**Outcome:** the mood label/emoji precedence stops contradicting itself, shared E2E helpers live in
-one place, and provably dead shadcn scaffolding is gone.
-**Evidence:** `hud.ts` computes mood text and emoji through two separate ladders that can disagree
-(`starving` label with the sick emoji); `components/ui/button.tsx` and `lib/utils.ts` have no
-importers.
-**First slice:** one precedence table for mood; delete dead files only after an import and
-production-build scan.
+**Outcome:** confidence that the first sitting actually feels the way the
+progression doc intends.
+**Evidence:** every pacing judgement so far came from accelerated time
+(`devtools.advance`), not a human playing in real time. The doc's cadence
+targets — a decision every one to three minutes, siphon within a few minutes,
+a second fish in one sitting — remain unverified.
+**First slice:** one unaccelerated sitting from a fresh save, noting where
+attention lapses.
 **Dependency:** none.
-**Risk:** low. Keep `tw-animate-css` — it is used.
-**Confidence:** HIGH · **Handoff:** in flight
-
----
+**Risk:** none technical; the risk is shipping pacing nobody has felt.
+**Confidence:** HIGH · **Handoff:** user decision
 
 ## Next
 
-### 3. Habitat expansion as the capacity valve (12 → ~20)
+### 2. Habitat expansion as the capacity valve (12 → ~20)
 
 **Outcome:** a healthy full tank unlocks more space, visible habitat, and the ecological load that
 comes with it.
@@ -54,14 +54,14 @@ six-resident tank on a drip feeder bred to thirteen residents inside ~40 minutes
 and sat at the `maxPopulation` ceiling; breeding, not purchase, is already the population source.
 **First slice:** raise capacity behind a hidden development that requires a *stable, healthy* full
 tank, with the tank art and spawn volume to match.
-**Dependency:** filtration must scale first (item 4) or expansion just multiplies the pollution
+**Dependency:** filtration must scale first (item 3) or expansion just multiplies the pollution
 problem below.
 **Risk:** twenty residents must stay visually readable; this is as much an art/layout problem as a
 simulation one.
 **Confidence:** MED · **Handoff:** `brainstorm` for the unlock fiction, then `design-discussion`
 for capacity and spawn layout
 
-### 4. Debris load and the next filtration stage
+### 3. Debris load and the next filtration stage
 
 **Outcome:** a mature tank's maintenance stays meaningful without the sand becoming a carpet of
 droppings.
@@ -75,7 +75,7 @@ cost) or a presentation problem (stacking, sand-level rendering) before adding t
 **Risk:** over-correcting deletes the reason the siphon exists.
 **Confidence:** HIGH on the measurement, MED on the fix · **Handoff:** `design-discussion`
 
-### 5. Breeding as a shaped system rather than an automatic one
+### 4. Breeding as a shaped system rather than an automatic one
 
 **Outcome:** the player influences breeding through conditions and space, and offspring feel like
 descendants rather than spawns.
@@ -83,7 +83,7 @@ descendants rather than spawns.
 to be shortened to 10s this session because a 20s dance cost 0.67 hunger and starved the dancers —
 a sign the ritual is not yet a designed system.
 **First slice:** persistent partners and a visible courtship state worth watching.
-**Dependency:** habitat capacity (item 3), or the tank simply hits the ceiling.
+**Dependency:** habitat capacity (item 2), or the tank simply hits the ceiling.
 **Risk:** turning relationships into a spreadsheet; the doc is explicit that bonding does not need
 an income bonus to justify itself.
 **Confidence:** MED · **Handoff:** `brainstorm`
@@ -122,6 +122,6 @@ Held deliberately, in the doc's own order:
 
 - Pacing beyond the first hour is unmeasured: playtests here used accelerated time, not real
   sittings, so the opening cadence targets in the progression doc remain unverified by a human.
-- Item 4's fix direction is genuinely undecided — the measurement is solid, the remedy is not.
+- Item 3's fix direction is genuinely undecided — the measurement is solid, the remedy is not.
 - No performance work is scheduled; the offline catch-up benchmark (~1s for 20 simulated minutes)
   is the only measured budget, and rendering at twenty residents has not been profiled.
