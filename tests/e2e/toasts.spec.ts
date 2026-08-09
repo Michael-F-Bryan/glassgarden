@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import type { DevSnapshot } from '../../src/game/devtools'
 
-test('clicking a toast dismisses it without feeding the tank beneath', async ({ page }) => {
+test('clicking a toast dismisses it and never feeds the tank', async ({ page }) => {
   await page.goto('/')
   await page.waitForFunction(() => Boolean(window.__glassgardenDev))
   await page.evaluate(() => {

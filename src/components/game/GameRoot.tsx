@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   createGlassgardenDevTools,
@@ -250,6 +250,46 @@ export default function GameRoot() {
     setToolState(next)
   }
 
+  /** Held-tool gestures. Feed: a quick tap keeps its old meanings (inspect a
+   * fish, drop one pellet), while holding rains pellets at the pointer; a
+   * gesture that starts over a fish delays its first pellet one interval, so
+   * tapping a fish still reads as inspection rather than feeding it in the
+   * face. Siphon: hold and sweep like a real gravel vac — it pulls debris and
+   * pollution continuously under the pointer as it moves. */
+  const TAP_MAX_MS = 260
+  const SPRINKLE_INTERVAL_MS = 280
+  const SIPHON_INTERVAL_MS = 220
+  const SIPHON_SWEEP_DISTANCE = 55
+
+  type CanvasGesture = {
+    tool: Tool
+    pointerId: number
+    startedAtMs: number
+    startedOverFishId?: number
+    pelletsDropped: number
+    point: { x: number; y: number }
+    lastSiphonPoint: { x: number; y: number }
+    intervalId: ReturnType<typeof setInterval>
+  }
+  const gestureRef = useRef<CanvasGesture | null>(null)
+
+  /** Invalidate the active gesture: pause, session replacement, and pointer-up
+   * all funnel through here so no timer outlives the session that started it.
+   * A callback already queued behind clearInterval still fires once; it no-ops
+   * because gestureRef no longer points at its gesture. */
+  const cancelGesture = useCallback((): CanvasGesture | null => {
+    const gesture = gestureRef.current
+    if (gesture) clearInterval(gesture.intervalId)
+    gestureRef.current = null
+    return gesture
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      cancelGesture()
+    }
+  }, [cancelGesture])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -301,22 +341,32 @@ export default function GameRoot() {
       setHud((previous) => buildHudSnapshot(sim!, selectedFishRef.current, previous.waterQuality))
     refreshHudRef.current = refreshHud
 
-    const replaceSim = (next: GameSim) => {
+    /** Atomic session replacement: everything the old session owned —
+     * gesture timers, tool, hover/selection, throttles, transient notices,
+     * renderer residue — is invalidated before the new sim is installed,
+     * and the save happens only once the new session is coherent. */
+    const replaceSession = (next: GameSim) => {
+      cancelGesture()
+      if (toolRef.current === 'siphon' && !next.state.ownsSiphon) setTool('feed')
+      hoverFishRef.current = undefined
+      selectedFishRef.current = undefined
+      affordWarnAtRef.current = 0
       sim = next
       simRef.current = next
-      selectedFishRef.current = undefined
       setAwaySummary(null)
       setToasts([])
+      renderer.resetTransient()
       refreshHud()
+      save()
     }
-    replaceSimRef.current = replaceSim
+    replaceSimRef.current = replaceSession
     saveRef.current = save
 
     let devTools: GlassgardenDevTools | undefined
     if (process.env.NODE_ENV === 'development') {
       devTools = createGlassgardenDevTools({
         getSim: () => sim!,
-        replaceSim,
+        replaceSim: replaceSession,
         getSpeed: () => simSpeed,
         setSpeed: (next) => {
           simSpeed = next
@@ -417,7 +467,7 @@ export default function GameRoot() {
       if (window.__glassgardenDev === devTools) delete window.__glassgardenDev
       save()
     }
-  }, [])
+  }, [cancelGesture])
 
   const toLogical = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -427,46 +477,9 @@ export default function GameRoot() {
     }
   }
 
-  /** Held-tool gestures. Feed: a quick tap keeps its old meanings (inspect a
-   * fish, drop one pellet), while holding rains pellets at the pointer; a
-   * gesture that starts over a fish delays its first pellet one interval, so
-   * tapping a fish still reads as inspection rather than feeding it in the
-   * face. Siphon: hold and sweep like a real gravel vac — it pulls debris and
-   * pollution continuously under the pointer as it moves. */
-  const TAP_MAX_MS = 260
-  const SPRINKLE_INTERVAL_MS = 280
-  const SIPHON_INTERVAL_MS = 220
-  const SIPHON_SWEEP_DISTANCE = 55
-
-  type CanvasGesture = {
-    tool: Tool
-    pointerId: number
-    startedAtMs: number
-    startedOverFishId?: number
-    pelletsDropped: number
-    point: { x: number; y: number }
-    lastSiphonPoint: { x: number; y: number }
-    intervalId: ReturnType<typeof setInterval>
-  }
-  const gestureRef = useRef<CanvasGesture | null>(null)
-
-  const endGesture = (): CanvasGesture | null => {
-    const gesture = gestureRef.current
-    if (gesture) clearInterval(gesture.intervalId)
-    gestureRef.current = null
-    return gesture
-  }
-
-  useEffect(() => {
-    return () => {
-      const gesture = gestureRef.current
-      if (gesture) clearInterval(gesture.intervalId)
-    }
-  }, [])
-
   const tryDropPellet = (x: number): boolean => {
     const sim = simRef.current
-    if (!sim) return false
+    if (!sim || pausedRef.current) return false
     if (sim.dropFood(x)) {
       rendererRef.current?.notifyFeed(x)
       refreshHudRef.current()
@@ -489,7 +502,7 @@ export default function GameRoot() {
 
   const siphonSweep = (gesture: CanvasGesture) => {
     const sim = simRef.current
-    if (!sim) return
+    if (!sim || pausedRef.current) return
     sim.siphonAt(gesture.point.x, gesture.point.y)
     rendererRef.current?.notifySiphon(gesture.point.x, gesture.point.y)
     gesture.lastSiphonPoint = { ...gesture.point }
@@ -498,14 +511,14 @@ export default function GameRoot() {
 
   const onCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const sim = simRef.current
-    if (!sim) return
+    if (!sim || pausedRef.current) return
     setHelpOpen(false)
     setJournalOpen(false)
     const point = toLogical(event)
     const tool = toolRef.current
     const fish = tool === 'feed' ? sim.fishAt(point.x, point.y) : undefined
     if (tool === 'feed' && !fish) selectedFishRef.current = undefined
-    endGesture()
+    cancelGesture()
     const gesture: CanvasGesture = {
       tool,
       pointerId: event.pointerId,
@@ -517,7 +530,7 @@ export default function GameRoot() {
       intervalId: setInterval(
         () => {
           const active = gestureRef.current
-          if (!active) return
+          if (!active || pausedRef.current) return
           if (active.tool === 'siphon') siphonSweep(active)
           else if (tryDropPellet(active.point.x)) active.pelletsDropped += 1
         },
@@ -532,7 +545,7 @@ export default function GameRoot() {
   }
 
   const onCanvasPointerUp = () => {
-    const gesture = endGesture()
+    const gesture = cancelGesture()
     if (!gesture) return
     const quickTap = performance.now() - gesture.startedAtMs < TAP_MAX_MS
     if (quickTap && gesture.startedOverFishId !== undefined && gesture.pelletsDropped === 0) {
@@ -576,6 +589,7 @@ export default function GameRoot() {
   }
 
   const buy = (itemId: ShopItem['id']) => {
+    if (pausedRef.current) return
     simRef.current?.buy(itemId)
     refreshHudRef.current()
   }
@@ -591,7 +605,11 @@ export default function GameRoot() {
     refreshHudRef.current()
   }
 
+  /** Pausing must silence the player's hands, not just the clock: the held
+   * gesture is cancelled and every direct intent is gated on pausedRef, so
+   * resuming requires a fresh pointer-down. */
   const setMenuOpen = (open: boolean) => {
+    if (open) cancelGesture()
     pausedRef.current = open
     setMenuOpenState(open)
     setConfirmingNewGame(false)
@@ -604,7 +622,6 @@ export default function GameRoot() {
 
   const startNewGame = () => {
     replaceSimRef.current(GameSim.fresh(Date.now() >>> 0))
-    saveRef.current()
     setMenuOpen(false)
   }
 
@@ -696,34 +713,6 @@ export default function GameRoot() {
             </span>
           </div>
         )}
-
-        <div
-          className="pointer-events-none absolute bottom-3 left-3 z-20 flex w-[min(28rem,calc(100%-1.5rem))] flex-col items-start gap-2"
-          data-testid="toast-stack"
-          data-ui-anchor="bottom-left"
-        >
-          {visibleToasts.map((toast) => (
-            // The stack stays click-transparent; only the toast itself takes
-            // the pointer, because a click on it now means "dismiss".
-            <button
-              type="button"
-              key={toast.key}
-              data-testid={`toast-${toast.tone}`}
-              title="Dismiss"
-              onClick={() => dismissToast(toast.key)}
-              className={`pointer-events-auto max-w-full cursor-pointer rounded-xl border px-4 py-2 text-left text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-bottom-2 duration-300 ${
-                toast.tone === 'development'
-                  ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
-                  : toast.tone === 'warning'
-                    ? 'border-red-400/40 bg-red-950/85 text-red-100'
-                    : 'border-cyan-200/20 bg-slate-900/80 text-slate-200'
-              }`}
-            >
-              {toast.tone === 'development' && <span className="mr-2 text-base">✦</span>}
-              {toast.message}
-            </button>
-          ))}
-        </div>
 
         <div
           className="absolute top-3 left-3 z-20 flex items-center gap-2"
@@ -1059,6 +1048,34 @@ export default function GameRoot() {
         data-testid="shop-panel"
         data-ui-anchor="right-sidebar"
       >
+        {/* Toasts live in the sidebar, off the playable tank surface, so a
+         * dismissible notice can never intercept a Feed or Siphon gesture. */}
+        <div
+          className="mb-3 flex flex-col gap-2 empty:hidden"
+          data-testid="toast-stack"
+          data-ui-anchor="sidebar"
+          aria-live="polite"
+        >
+          {visibleToasts.map((toast) => (
+            <button
+              type="button"
+              key={toast.key}
+              data-testid={`toast-${toast.tone}`}
+              title="Dismiss"
+              onClick={() => dismissToast(toast.key)}
+              className={`w-full cursor-pointer rounded-xl border px-4 py-2 text-left text-sm shadow-lg transition animate-in fade-in slide-in-from-right-2 duration-300 ${
+                toast.tone === 'development'
+                  ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
+                  : toast.tone === 'warning'
+                    ? 'border-red-400/40 bg-red-950/85 text-red-100'
+                    : 'border-cyan-200/20 bg-slate-900/80 text-slate-200'
+              }`}
+            >
+              {toast.tone === 'development' && <span className="mr-2 text-base">✦</span>}
+              {toast.message}
+            </button>
+          ))}
+        </div>
         <div className="mb-4 border-b border-cyan-100/10 pb-3">
           <p className="text-[0.65rem] font-semibold tracking-[0.2em] text-cyan-300/55 uppercase">
             Tank supplies

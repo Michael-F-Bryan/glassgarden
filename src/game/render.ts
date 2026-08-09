@@ -57,6 +57,17 @@ export class TankRenderer {
   constructor() {
     this.pollutionLayer.width = WATER_COLS
     this.pollutionLayer.height = WATER_ROWS
+    this.resetTransient()
+  }
+
+  /** Forget cosmetic residue (siphon puffs, coin floats, bubble cadence) so a
+   * replaced session starts visually clean instead of inheriting effects that
+   * belong to the previous tank. */
+  resetTransient(): void {
+    this.puffs = []
+    this.coinFloats = []
+    this.lastBubbleTime = undefined
+    this.bubbles = []
     for (let i = 0; i < 14; i += 1) this.bubbles.push(this.newBubble(true))
   }
 

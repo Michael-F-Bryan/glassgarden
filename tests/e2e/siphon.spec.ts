@@ -17,13 +17,6 @@ async function loadDirtyTank(page: Page, seed: number): Promise<DevSnapshot> {
   )
 }
 
-/** Click-to-dismiss toasts sit over the bottom-left sand; clear them so
- * canvas clicks reach the tank, the same way a player would. */
-async function dismissToasts(page: Page): Promise<void> {
-  const toasts = page.locator('button[data-testid^="toast-"]')
-  while (await toasts.count()) await toasts.first().click()
-}
-
 async function tankPoint(page: Page, state: DevSnapshot, x: number, y: number) {
   const canvas = page.getByTestId('tank-canvas')
   const box = await canvas.boundingBox()
@@ -44,7 +37,6 @@ test('one sweep of the siphon clears every dropping along its path', async ({ pa
   const dirty = await loadDirtyTank(page, 21)
   expect(dirty.waste).toHaveLength(3)
   await page.getByTestId('tool-siphon').click()
-  await dismissToasts(page)
 
   const first = await tankPoint(page, dirty, dirty.waste[0].x, dirty.waste[0].y)
   const last = await tankPoint(page, dirty, dirty.waste[2].x, dirty.waste[2].y)
@@ -61,7 +53,6 @@ test('holding the siphon in place keeps drawing pollution out of the water', asy
   const before = dirty.water.meanPollution
   expect(before).toBeGreaterThan(0)
   await page.getByTestId('tool-siphon').click()
-  await dismissToasts(page)
 
   const point = await tankPoint(page, dirty, 600, dirty.tank.sandTop - 20)
   await page.mouse.move(point.x, point.y)

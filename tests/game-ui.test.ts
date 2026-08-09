@@ -19,13 +19,14 @@ describe('game UI layout', () => {
     expect(html).not.toContain('data-testid="shop-toggle"')
   })
 
-  test('tools and toast stack are anchored inside the tank', () => {
+  test('tools stay on the tank; toasts live in the sidebar, off the play surface', () => {
     const html = renderGame()
 
     expect(html).toContain('data-testid="tool-palette"')
     expect(html).toContain('data-ui-anchor="top-left"')
     expect(html).toContain('data-testid="toast-stack"')
-    expect(html).toContain('data-ui-anchor="bottom-left"')
+    expect(html).toContain('data-ui-anchor="sidebar"')
+    expect(html).not.toContain('data-ui-anchor="bottom-left"')
   })
 
   test('main menu button is in the chrome and the menu itself starts closed', () => {

@@ -71,9 +71,6 @@ test('loads deterministic scenarios and cleans a dirty tank through the UI', asy
   expect(dirty.ownsSiphon).toBe(true)
 
   await page.getByTestId('tool-siphon').click()
-  // Click-to-dismiss toasts overlap the bottom-left sand; clear them first.
-  const toasts = page.locator('button[data-testid^="toast-"]')
-  while (await toasts.count()) await toasts.first().click()
   await clickTank(page, dirty, dirty.waste[0].x, dirty.waste[0].y)
 
   await expect.poll(async () => (await snapshot(page)).waste.length).toBeLessThan(3)
