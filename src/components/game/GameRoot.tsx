@@ -160,6 +160,13 @@ export default function GameRoot() {
     }
     if (!sim) sim = GameSim.fresh(Date.now() >>> 0)
     simRef.current = sim
+    // Dev-only playtest accelerator and automation handle; absent in production builds.
+    let simSpeed = 1
+    if (process.env.NODE_ENV === 'development') {
+      const speedParam = Number(new URLSearchParams(window.location.search).get('speed'))
+      if (Number.isFinite(speedParam) && speedParam >= 1) simSpeed = Math.min(16, speedParam)
+      ;(window as unknown as { __glassgarden?: unknown }).__glassgarden = sim
+    }
     const renderer = new TankRenderer()
 
     const dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -208,7 +215,7 @@ export default function GameRoot() {
         const summary = sim!.advanceOffline(dt)
         if (summary.simulatedSeconds > 10) setAwaySummary(summary)
       } else {
-        sim!.step(dt, document.visibilityState === 'visible')
+        sim!.step(dt * simSpeed, document.visibilityState === 'visible')
       }
       applyEvents(sim!.drainEvents())
 
@@ -393,13 +400,16 @@ export default function GameRoot() {
               🧹 Siphon
             </button>
           )}
-          <span className="ml-1 hidden text-xs text-slate-400/80 sm:block">
+          <span className="ml-1 hidden rounded-full bg-slate-950/60 px-3 py-1 text-xs text-slate-200/90 backdrop-blur sm:block">
             {tool === 'feed' ? 'click the water to drop food' : 'click debris to clean it up'}
           </span>
         </div>
 
-        <div className="absolute right-3 bottom-3 flex items-center gap-2 text-xs text-slate-400/80">
-          <span data-testid="population">
+        <div className="absolute right-3 bottom-3 flex items-center gap-2 text-xs">
+          <span
+            data-testid="population"
+            className="rounded-full bg-slate-950/60 px-3 py-1 text-slate-200/90 backdrop-blur"
+          >
             {hud.fishCount} fish
             {hud.distressedCount > 0 && (
               <span className="ml-2 text-amber-300/90">{hud.distressedCount} unhappy</span>

@@ -138,8 +138,8 @@ export const TUNING = {
   /** digesting >= this spawns a dropping. */
   digestionPerDropping: 2,
 
-  wastePollutionPerSecond: 0.0045, // per unit of waste size
-  spoiledFoodPollutionPerSecond: 0.004,
+  wastePollutionPerSecond: 0.0065, // per unit of waste size
+  spoiledFoodPollutionPerSecond: 0.0055,
   pollutionDecayPerSecond: 0.0018,
   pollutionDiffusionPerSecond: 0.04,
   sicknessAbovePollution: 0.3,

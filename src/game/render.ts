@@ -117,7 +117,7 @@ export class TankRenderer {
       image.data[i * 4 + 0] = 88
       image.data[i * 4 + 1] = 158
       image.data[i * 4 + 2] = 58
-      image.data[i * 4 + 3] = Math.min(210, value * 300)
+      image.data[i * 4 + 3] = Math.min(220, Math.pow(value, 0.75) * 420)
     }
     layer.putImageData(image, 0, 0)
     ctx.save()
@@ -207,7 +207,7 @@ export class TankRenderer {
   }
 
   private drawWaste(ctx: CanvasRenderingContext2D, entity: Entity): void {
-    const size = 3 + entity.waste!.size * 2.6
+    const size = 4.5 + entity.waste!.size * 3.4
     ctx.fillStyle = '#4c3a26'
     ctx.beginPath()
     ctx.ellipse(entity.position.x, entity.position.y, size, size * 0.6, 0, 0, Math.PI * 2)
@@ -247,7 +247,7 @@ export class TankRenderer {
   ): void {
     const fish = entity.fish!
     const length = fishLength(fish.weight)
-    const height = length * fish.genome.bodyAspect
+    const height = (length * fish.genome.bodyAspect) / 2
     const speed = Math.hypot(entity.velocity.x, entity.velocity.y)
     const phase = realTime * (3 + fish.genome.speed / 30) + entity.id * 1.7
     const wiggle = Math.sin(phase) * (0.18 + Math.min(0.3, speed / 200))
@@ -279,7 +279,7 @@ export class TankRenderer {
     // Tail.
     const tailBase = -length * 0.42
     const tailLength = length * (0.3 + fish.genome.finFlair * 0.35)
-    const tailSpread = height * (0.5 + fish.genome.finFlair * 0.7)
+    const tailSpread = height * (0.85 + fish.genome.finFlair * 0.9)
     ctx.save()
     ctx.translate(tailBase, 0)
     ctx.rotate(wiggle)
@@ -434,7 +434,7 @@ export class TankRenderer {
     const fish = remains.fish
     const alpha = Math.max(0, Math.min(1, (remains.expiresAt - simTime) / 6))
     const length = fishLength(fish.weight)
-    const height = length * fish.genome.bodyAspect
+    const height = (length * fish.genome.bodyAspect) / 2
     ctx.save()
     ctx.globalAlpha = alpha * 0.8
     ctx.translate(entity.position.x, entity.position.y)
