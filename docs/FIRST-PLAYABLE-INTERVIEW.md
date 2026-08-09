@@ -6,6 +6,7 @@
 - **Timezone:** Australia/Perth (AWST, UTC+08:00)
 - **Started:** 2026-08-09T01:18:27+0800 (AWST)
 - **Completed:** 2026-08-09T01:50:59+0800 (AWST)
+- **Architecture amendment recorded:** 2026-08-09T09:52:28+0800 (AWST)
 - **Current phase:** Creative handoff complete
 - **Purpose:** Capture Michael’s starting point, game vision, characteristic causal loops, examples, and boundaries so Claude Code can build the game out and adapt it as it learns.
 - **Decision horizon:** Give Claude enough creative and product direction to begin well without prescribing an implementation specification.
@@ -20,7 +21,7 @@
 
 ## Calibrated brief
 
-This is a creative starting point, not an implementation specification. The current vision is a desktop-first browser experience that can remain open in a laptop tab between occasional check-ins. It begins with a bare tank containing one small, hungry fish that the player needs to feed. Repeated feeding makes the fish grow larger. Larger fish eat more and produce larger droppings; uneaten food and droppings left in the tank gradually turn the surrounding water green. Swimming through polluted water makes the fish feel sick, creating pressure to buy a cleaning device and manually remove the waste. The player passively earns coins at a rate proportional to the total weight of all fish in the tank. Growth therefore increases both income and ecological pressure. Reaching a hidden growth threshold, such as the starter fish’s weight, unlocks the option to buy another fish. Each purchased fish becomes increasingly expensive so that breeding can replace purchases as the main source of population growth. The envisaged early breeding proof is a compatible pair producing at least one baby; several offspring are worthwhile if the underlying model makes them cheap. Offspring combine parental traits with some randomness. While the page is open, the aquarium advances at its normal wall-clock rate. Closing it still permits some progress, but simulation is slowed or capped to reduce the chance of returning to starvation or fatal disease. A fish may die from hunger or sickness only while the player is present, after ample warning and continued neglect. The game ends when no living fish remain, but coins and purchased equipment survive; the player can buy a new starter fish and continue with that retained material progress. Claude should preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution while remaining free to simplify, extend, or reshape the specific mechanics and progression path according to feasibility and play quality.
+This is a creative starting point, not an implementation specification. The current vision is a desktop-first browser experience that can remain open in a laptop tab between occasional check-ins. It begins with a bare tank containing one small, hungry fish that the player needs to feed. Repeated feeding makes the fish grow larger. Larger fish eat more and produce larger droppings; uneaten food and droppings left in the tank gradually turn the surrounding water green. Swimming through polluted water makes the fish feel sick, creating pressure to buy a cleaning device and manually remove the waste. The player passively earns coins at a rate proportional to the total weight of all fish in the tank. Growth therefore increases both income and ecological pressure. Reaching a hidden growth threshold, such as the starter fish’s weight, unlocks the option to buy another fish. Each purchased fish becomes increasingly expensive so that breeding can replace purchases as the main source of population growth. The envisaged early breeding proof is a compatible pair producing at least one baby; several offspring are worthwhile if the underlying model makes them cheap. Offspring combine parental traits with some randomness. While the page is open, the aquarium advances at its normal wall-clock rate. Closing it still permits some progress, but simulation is slowed or capped to reduce the chance of returning to starvation or fatal disease. A fish may die from hunger or sickness only while the player is present, after ample warning and continued neglect. The game ends when no living fish remain, but coins and purchased equipment survive; the player can buy a new starter fish and continue with that retained material progress. Claude should preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution while remaining free to simplify, extend, or reshape the specific mechanics and progression path according to feasibility and play quality. The simulation and game logic should use a proper entity–component–system architecture rather than accumulating ad hoc state and behaviour; Claude retains authority over the ECS library and concrete component and system design.
 
 ## Registers
 
@@ -32,7 +33,7 @@ This is a creative starting point, not an implementation specification. The curr
 
 ### Vision anchors and boundaries
 
-C1–C5 describe the stronger product boundaries inherited from the direction interview. C6–C8 capture the concrete starting mechanics discussed here; under C9 and C10, Claude may adapt those mechanics while preserving the creative core.
+C1–C5 describe the stronger product boundaries inherited from the direction interview. C6–C8 capture the concrete starting mechanics discussed here; under C9 and C10, Claude may adapt those mechanics while preserving the creative core. C11 establishes the simulation architecture without prescribing a particular ECS library or domain model.
 
 | ID | Boundary | Source | Consequence |
 | --- | --- | --- | --- |
@@ -46,6 +47,7 @@ C1–C5 describe the stronger product boundaries inherited from the direction in
 | C8 | The envisaged early breeding proof is one baby from a compatible pair; several varied offspring are worthwhile if cheap. | Q8 | This is a scope anchor for Claude, not a mandatory acceptance requirement. |
 | C9 | The interview is a creative starting point and vision, not a specification Claude must implement literally. | Interview-control amendment 1 | Claude can adapt, simplify, and extend mechanics as it learns what is feasible and fun. |
 | C10 | Preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution; specific mechanics and progression may be reshaped. | Q10 | This is the stable creative core for Claude’s adaptation. |
+| C11 | Build the simulation and game logic around a proper entity–component–system architecture rather than ad hoc state and behaviour. | Architecture amendment 1 | ECS owns the game model and simulation; Claude chooses the concrete library, components, systems, and UI boundary according to implementation findings. |
 
 ### Unknowns
 
@@ -66,6 +68,7 @@ C1–C5 describe the stronger product boundaries inherited from the direction in
 | U13 | Breeding scope | Shows how far Michael imagines early breeding progressing without making it a fixed requirement. | Michael’s judgement | Resolved: one baby is the envisaged baseline; several varied offspring if implementation is cheap |
 | U14 | First offspring semantics | Determines whether the first baby demonstrates inheritance, environmental shaping, random individuality, or only population growth. | Michael’s judgement | Resolved: parental traits combined with some randomness |
 | U15 | Claude’s creative authority | Determines which parts of the vision are non-negotiable and which Claude may reshape while building. | Michael’s judgement | Resolved: preserve the premise, fantasy, and action-driven hidden evolution; reshape mechanics and progression as needed |
+| U16 | Game-logic architecture | Determines whether simulation state and behaviour have a coherent extensible model or grow through ad hoc UI-local mechanisms. | Michael’s judgement and Claude’s implementation exploration | Resolved in direction: proper ECS; exact library and component/system boundaries remain implementation discovery |
 
 ### Learnings
 
@@ -94,17 +97,18 @@ C1–C5 describe the stronger product boundaries inherited from the direction in
 | L21 | Offspring combine traits from both parents with some randomness. | Q9 |
 | L22 | The interview should give Claude a starting point and game vision, not a specification; Claude is expected to build out and adapt the game as it sees fit. | Interview-control amendment 1 |
 | L23 | Claude should preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution while remaining free to reshape specific mechanics and progression. | Q10 |
+| L24 | A proper ECS is the intended architecture for simulation and game logic; concrete ECS choices remain Claude’s responsibility. | Architecture amendment 1 |
 
 ### Deferred decisions
 
 | ID | Decision | Revisit trigger | Evidence needed | Owner |
 | --- | --- | --- | --- | --- |
 | D1 | Visual direction | After the creative handoff | The intended emotional tone, residents, interactions, and feedback | Claude’s design exploration |
-| D2 | Technical architecture and implementation stack | After the creative handoff | The stable creative core and candidate opening path | Claude’s implementation exploration |
+| D2 | ECS library, component/system boundaries, persistence integration, and UI adapter design | During implementation | The emerging simulation model and observed implementation pressure | Claude’s implementation exploration |
 
 ## Completion
 
-The interview now gives Claude a coherent opening scenario, examples of how care can create both growth and new pressures, an intended route from one fish to a breeding population, and a clear creative-authority boundary. Open tuning, persistence, presentation, implementation, and content decisions are deliberately left for Claude to explore rather than converted into further interview requirements.
+The interview now gives Claude a coherent opening scenario, examples of how care can create both growth and new pressures, an intended route from one fish to a breeding population, a clear creative-authority boundary, and ECS as the initial game-logic architecture. Open tuning, persistence, presentation, concrete ECS design, implementation, and content decisions are deliberately left for Claude to explore rather than converted into further interview requirements.
 
 ## Chronological record
 
@@ -441,3 +445,17 @@ The interview now gives Claude a coherent opening scenario, examples of how care
 **Effect:** Establishes the stable creative core and grants Claude explicit authority to reshape mechanics according to feasibility and play quality. This resolves the final high-value interview frontier; further questions would mostly constrain decisions Michael wants Claude to make.
 
 **Register updates:** C10 added; U15 resolved; L23 added.
+
+### Architecture amendment 1 — ECS game logic
+
+**Received:** 2026-08-09T09:52:28+0800 (AWST)
+
+**Direction:**
+
+> I also feel like using a proper ECS is the best architecture for building the game logic, rather than cobbling things together in an ad-hoc way. Can you integrate that into one of the interviews so Claude gets the right initial direction?
+
+**Interpretation:** The simulation should be modelled as entities with component data processed by systems, not as game state and behaviour scattered across React components or one-off feature objects. This is an architectural starting direction rather than a mandate for a particular ECS package or speculative general-purpose engine.
+
+**Effect:** Adds ECS as a stable implementation boundary while leaving the library, domain decomposition, persistence integration, and presentation adapter to Claude’s implementation exploration.
+
+**Register updates:** C11, U16, and L24 added; D2 narrowed.

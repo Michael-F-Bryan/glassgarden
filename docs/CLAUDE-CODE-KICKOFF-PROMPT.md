@@ -16,6 +16,8 @@ The interviews are a creative handoff, not an implementation specification. Pres
 
 The concrete feeding, growth, waste, pollution, economy, population, and breeding ideas are a strong starting point. Adapt, simplify, replace, or extend specific mechanics when doing so produces a more coherent and enjoyable game.
 
+Use a proper entity–component–system (ECS) architecture for the simulation and game logic rather than accumulating ad hoc state and behaviour in UI components. The ECS should own entities, component data, and systems; presentation should observe it and issue player intents. Choose a suitable TypeScript ECS implementation and concrete component/system boundaries based on the game as it develops—do not build a generic engine beyond Glassgarden’s actual needs.
+
 ## Your mandate
 
 Design and build the strongest first playable you can. Own the full loop: explore the existing code, make product and technical decisions, implement the game, test it, play it in a real browser, inspect the result critically, and keep refining it.
@@ -23,6 +25,14 @@ Design and build the strongest first playable you can. Own the full loop: explor
 Do not stop after producing a plan, scaffolding, or a technically functional first pass. Do not ask Michael for routine design or implementation decisions. Use your judgement and continue with minimal direction unless you encounter a genuinely blocking credential, an irreversible external action, or a decision that would abandon the stable creative core.
 
 Prefer a coherent, satisfying game loop over broad but shallow feature coverage. Keep the implementation concrete and maintainable; do not build speculative architecture for mechanics that do not yet exist.
+
+## Coordination and refinement
+
+Act as the coordinator, decision-maker, and final integrator. Use sub-agents selectively for bounded work that benefits from isolated context or independent judgement, such as gameplay and pacing critique, visual/UX review, technical investigation, test review, or a fresh browser playtest. Do not delegate merely to create activity, and keep shared-state implementation under one owner.
+
+At meaningful playable milestones, obtain fresh-context critiques of gameplay, visual presentation, and technical quality. Verify findings against the actual game, explicitly accept or reject them, repair material problems, then play again. Separate making from judging so defect checklists do not flatten the creative work.
+
+If an approach or delegated task fails, inspect its artefacts and evidence, identify the root cause, change the smallest relevant decision or instruction, and rerun the smallest useful test. Refine worker prompts when evidence shows their boundary or context was wrong; do not accumulate orchestration or prompt rules in response to isolated failures.
 
 ## Feedback loop
 

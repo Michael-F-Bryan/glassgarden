@@ -21,7 +21,7 @@
 
 ## Current calibrated direction
 
-The kickoff prompt should ask Claude Code to build from the existing creative handoff rather than transcribe it into a fixed feature specification. It must preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution. Claude has broad authority to continue designing, implementing, browser-testing, and refining the strongest first playable it can with minimal direction from Michael. It should stop only when the intended experience works end to end and repeated browser playtesting has produced a game Michael can open and enjoy, not merely technically valid scaffolding. Routine design and implementation choices belong to Claude. The existing `main`-to-GitHub-Pages path is the delivery route.
+The kickoff prompt should ask Claude Code to build from the existing creative handoff rather than transcribe it into a fixed feature specification. It must preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution. Claude has broad authority to continue designing, implementing, browser-testing, and refining the strongest first playable it can with minimal direction from Michael. It should stop only when the intended experience works end to end and repeated browser playtesting has produced a game Michael can open and enjoy, not merely technically valid scaffolding. Claude remains the coordinator, decision-maker, and final integrator; it may use bounded sub-agents and fresh-context audits where they improve the result, while retaining one owner for shared-state implementation. Routine design and implementation choices belong to Claude. The existing `main`-to-GitHub-Pages path is the delivery route.
 
 ## Registers
 
@@ -39,6 +39,7 @@ The kickoff prompt should ask Claude Code to build from the existing creative ha
 | C2 | The creative handoff is not an implementation specification. | Creative handoff C9 | The prompt must leave room for design and implementation discovery. |
 | C3 | This phase drafts a prompt; it does not authorise game implementation. | User request | No code changes beyond the interview and prompt artefacts. |
 | C4 | The finished autonomous run should leave Michael with a deployed game he can play and enjoy. | Q2 and existing GitHub Pages workflow | Technical checks alone cannot satisfy the prompt; the live experience must be verified. |
+| C5 | Claude remains coordinator and final integrator; delegation is selective, bounded, and evidence-driven. | Post-interview amendment 1 | Sub-agents provide isolated work or fresh judgement without creating a reviewer bureaucracy or concurrent shared-state ownership. |
 
 ### Unknowns
 
@@ -54,6 +55,7 @@ The kickoff prompt should ask Claude Code to build from the existing creative ha
 | L1 | The existing interviews already provide product vision and an adaptable opening path; the kickoff interview should not repeat them. | Source review |
 | L2 | Claude should keep building and testing autonomously rather than stop after a plan or first thin slice. | Q1 |
 | L3 | Completion means Michael can play and have fun with the resulting game; repeated browser playtesting must shape both game feel and presentation. | Q2 |
+| L4 | Fresh-context critique and root-cause-driven prompt refinement can improve the autonomous loop when Claude verifies findings and changes the smallest owning instruction. | Post-interview amendment 1 |
 
 ### Deferred decisions
 
@@ -128,3 +130,21 @@ The interview can stop because Claude’s operating authority and completion evi
 **Effect:** Resolves the completion evidence, establishes the live playable as the delivery target, and closes the interview.
 
 **Register updates:** U2 resolved; C4 and L3 added.
+
+## Post-interview amendments
+
+### Amendment 1 — Coordinator and refinement loop
+
+**Received:** 2026-08-09T09:52:28+0800 (AWST)
+
+**Direction:**
+
+> Good. Can you incorporate that into the kickoff prompt?
+
+**Context:** Michael accepted adding a coordinator responsible for sub-agents and a bounded prompt-refinement loop, while avoiding fixed agent counts, shared-state fan-out, and process for its own sake.
+
+**Interpretation:** Claude should own coordination and integration, delegate only bounded independent work or fresh-context evaluation, verify reviewer findings against the game, and respond to failures through root-cause analysis and the smallest useful retry rather than prompt accretion.
+
+**Effect:** Adds a compact coordination and refinement operating model to the kickoff prompt without changing Claude’s broad creative and implementation authority.
+
+**Register updates:** C5 and L4 added.
