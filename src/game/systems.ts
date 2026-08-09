@@ -4,6 +4,7 @@ import {
   addEntity,
   emit,
   livingFish,
+  recordJournal,
   removeEntity,
   spawnFish,
   spawnPellet,
@@ -310,10 +311,12 @@ function dieOf(state: GameState, entity: Entity): void {
   if (state.retiredNames.length > 40) state.retiredNames.shift()
   emit(state, { type: 'death', name: fish.name })
   emit(state, { type: 'toast', tone: 'warning', message: `${fish.name} has died.` })
+  recordJournal(state, 'death', `${fish.name} died.`)
   // An incubating egg means the tank is not actually lost yet.
   if (livingFish(state).length === 0 && state.world.with('egg').entities.length === 0) {
     state.gameOver = true
     emit(state, { type: 'gameOver' })
+    recordJournal(state, 'death', 'The tank fell quiet — no fish remain.')
   }
 }
 
@@ -349,6 +352,13 @@ function breedingSystem(state: GameState): void {
         ? `The egg hatched — welcome, ${baby.fish!.name}. The murky water has left them small and delicate.`
         : `The egg hatched — welcome, ${baby.fish!.name}. You can see both parents in their colours.`,
     })
+    recordJournal(
+      state,
+      'birth',
+      `${baby.fish!.name} hatched — child of ${egg.parents[0]} & ${egg.parents[1]}.${
+        murky ? ' The murky water left them small and delicate.' : ''
+      }`,
+    )
   }
 
   // Complete courtships whose dance has finished.
@@ -392,6 +402,7 @@ function breedingSystem(state: GameState): void {
     } else {
       emit(state, { type: 'toast', tone: 'info', message: 'Another egg rests on the sand.' })
     }
+    recordJournal(state, 'development', `${fish.name} & ${partner.fish.name} left an egg on the sand.`)
   }
 
   // Pair up newly eligible couples.
@@ -450,6 +461,7 @@ function developmentSystem(state: GameState): void {
         tone: 'development',
         message: `${grown.fish!.name} looks noticeably bigger than when they arrived. Bigger fish eat more — and leave more behind.`,
       })
+      recordJournal(state, 'development', `${grown.fish!.name} grew noticeably bigger.`)
     }
   }
   if (!unlocks.noticedPollution && maxPollution(state.water) >= TUNING.pollutionNoticedAt) {
@@ -465,6 +477,7 @@ function developmentSystem(state: GameState): void {
       tone: 'info',
       message: 'New in the shop: a gravel siphon, for cleaning up waste.',
     })
+    recordJournal(state, 'development', 'The water took on its first green tinge.')
   }
   if (!unlocks.feederInShop && livingFish(state).length >= 3) {
     unlocks.feederInShop = true
@@ -473,6 +486,7 @@ function developmentSystem(state: GameState): void {
       tone: 'info',
       message: 'The shop has something for busy caretakers: a drip feeder.',
     })
+    recordJournal(state, 'development', 'The shop began offering a drip feeder.')
   }
   if (!unlocks.fishInShop) {
     const thriving = livingFish(state).find((entity) => entity.fish!.weight >= TUNING.fishUnlockWeight)
@@ -483,6 +497,7 @@ function developmentSystem(state: GameState): void {
         tone: 'development',
         message: `Word is spreading about ${thriving.fish!.name}. The shop can now source another glimmerfin.`,
       })
+      recordJournal(state, 'development', `Word spread about ${thriving.fish!.name}; the shop can source another glimmerfin.`)
     }
   }
 }

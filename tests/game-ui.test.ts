@@ -70,6 +70,19 @@ describe('game UI layout', () => {
     expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBeCloseTo(0.4)
   })
 
+  test('journal entries reach the HUD newest-first with readable ages', () => {
+    const sim = GameSim.fresh(123)
+    sim.state.coins = 100
+    sim.state.unlocks.siphonInShop = true
+    sim.buy('siphon')
+
+    const journal = buildHudSnapshot(sim, undefined, 'clear').journal
+
+    expect(journal[0].message).toContain('gravel siphon')
+    expect(journal.at(-1)!.kind).toBe('arrival')
+    expect(journal[0].age).toBe('moments ago')
+  })
+
   test('first-feed hint follows the sim and never flashes on the placeholder HUD', () => {
     const sim = GameSim.fresh(123)
     expect(buildHudSnapshot(sim, undefined, 'clear').fedOnce).toBe(false)

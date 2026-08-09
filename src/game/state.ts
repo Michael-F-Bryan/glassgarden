@@ -8,6 +8,8 @@ import {
   type Fish,
   type GameEvent,
   type Genome,
+  type JournalEntry,
+  type JournalKind,
   type Unlocks,
   type Vec2,
 } from './model'
@@ -35,6 +37,8 @@ export type GameState = {
   water: WaterGrid
   rng: Rng
   events: GameEvent[]
+  /** The Tank Journal: a permanent, capped chronicle of the tank's life. */
+  journal: JournalEntry[]
   gameOver: boolean
 }
 
@@ -62,8 +66,14 @@ export function createState(seed: number): GameState {
     water: createWaterGrid(),
     rng: createRng(seed),
     events: [],
+    journal: [],
     gameOver: false,
   }
+}
+
+export function recordJournal(state: GameState, kind: JournalKind, message: string): void {
+  state.journal.push({ atSim: state.time, kind, message })
+  if (state.journal.length > TUNING.journalMaxEntries) state.journal.shift()
 }
 
 export function addEntity(state: GameState, entity: Omit<Entity, 'id'>): Entity {
@@ -166,5 +176,6 @@ export function createFreshGame(seed: number): GameState {
     tone: 'info',
     message: `A small glimmerfin named ${starter.fish!.name} settles into your bare tank. A pinch of food would be a warm welcome.`,
   })
+  recordJournal(state, 'arrival', `${starter.fish!.name} arrived in the bare tank.`)
   return state
 }

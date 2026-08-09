@@ -1,6 +1,6 @@
 import { World } from 'miniplex'
 
-import type { Entity, GameEvent, Unlocks } from './model'
+import type { Entity, GameEvent, JournalEntry, Unlocks } from './model'
 import { createRng } from './rng'
 import type { GameState } from './state'
 import { WATER_COLS, WATER_ROWS } from './water'
@@ -25,6 +25,8 @@ export type SaveFile = {
   entities: Entity[]
   /** Undelivered events (toasts) so announcements survive a reload. */
   pendingEvents: GameEvent[]
+  /** The Tank Journal; absent in saves from before it existed. */
+  journal?: JournalEntry[]
 }
 
 export function serialize(state: GameState, savedAtMs: number): SaveFile {
@@ -47,6 +49,7 @@ export function serialize(state: GameState, savedAtMs: number): SaveFile {
       .sort((a, b) => a.id - b.id)
       .map((entity) => structuredClone(entity)),
     pendingEvents: state.events.map((event) => structuredClone(event)),
+    journal: state.journal.map((entry) => ({ ...entry })),
   }
 }
 
@@ -78,6 +81,7 @@ export function deserialize(save: SaveFile): GameState {
     water: { cells: save.waterCells.slice() },
     rng: createRng(save.rngState),
     events: (save.pendingEvents ?? []).map((event) => structuredClone(event)),
+    journal: (save.journal ?? []).map((entry) => ({ ...entry })),
     gameOver: save.gameOver,
   }
 }
@@ -106,5 +110,6 @@ export function parseSave(json: string): SaveFile | undefined {
   if (candidate.pendingEvents !== undefined && !Array.isArray(candidate.pendingEvents)) {
     return undefined
   }
+  if (candidate.journal !== undefined && !Array.isArray(candidate.journal)) return undefined
   return candidate as SaveFile
 }

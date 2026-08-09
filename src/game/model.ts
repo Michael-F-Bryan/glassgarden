@@ -104,6 +104,16 @@ export type OfflineSummary = {
   companion?: string
 }
 
+export type JournalKind = 'arrival' | 'birth' | 'death' | 'development' | 'purchase' | 'away'
+
+/** One line in the Tank Journal: the permanent chronicle of the tank's life,
+ * unlike toasts, which evaporate in seconds. Timestamped in sim seconds. */
+export type JournalEntry = {
+  atSim: number
+  kind: JournalKind
+  message: string
+}
+
 /** One-shot notifications the UI drains each frame. */
 export type GameEvent =
   | { type: 'toast'; tone: 'development' | 'info' | 'warning'; message: string }
@@ -196,6 +206,9 @@ export const TUNING = {
   growthNoticedAtMultiple: 2, // starter weight vs its hatch weight
   pollutionNoticedAt: 0.18,
   fishUnlockWeight: 8,
+
+  /** Oldest journal entries fall off past this, bounding the save file. */
+  journalMaxEntries: 120,
 
   /** Away-time contract: slowed and capped, and always survivable. */
   offlineRate: 0.2,

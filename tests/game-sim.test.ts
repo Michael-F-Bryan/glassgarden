@@ -4,7 +4,7 @@ import { generateName, randomGenome } from '@/game/genome'
 import { TUNING, type GameEvent } from '@/game/model'
 import { deserialize, parseSave, serialize } from '@/game/save'
 import { GameSim } from '@/game/sim'
-import { addEntity, createState, spawnFish, takenNames } from '@/game/state'
+import { addEntity, createState, recordJournal, spawnFish, takenNames } from '@/game/state'
 import { maxPollution, pollutionAt } from '@/game/water'
 
 const TEST_STEP = 0.25
@@ -505,6 +505,54 @@ describe('persistence', () => {
     const sim = GameSim.fresh(503)
     const roundTripped = parseSave(JSON.stringify(serialize(sim.state, 5)))
     expect(roundTripped?.version).toBe(1)
+  })
+})
+
+describe('tank journal', () => {
+  test('chronicles the arrival, purchases, and deaths of the tank', () => {
+    const sim = GameSim.fresh(901)
+    expect(sim.state.journal).toHaveLength(1)
+    expect(sim.state.journal[0].kind).toBe('arrival')
+
+    sim.state.coins = 100
+    sim.state.unlocks.siphonInShop = true
+    expect(sim.buy('siphon')).toBe(true)
+    expect(sim.state.journal.at(-1)).toMatchObject({ kind: 'purchase' })
+
+    const fish = onlyFish(sim)
+    fish.fish.hunger = 1
+    fish.fish.health = 0.001
+    fish.fish.criticalSince = -TUNING.warningGraceSeconds
+    runFor(sim, 5)
+    const kinds = sim.state.journal.map((entry) => entry.kind)
+    expect(kinds).toContain('death')
+  })
+
+  test('chronicles hatchings with their lineage', () => {
+    const sim = new GameSim(pairedState(903))
+    runFor(sim, TUNING.courtshipSeconds + TUNING.eggHatchSeconds + 10)
+
+    const birth = sim.state.journal.find((entry) => entry.kind === 'birth')
+    expect(birth).toBeDefined()
+    expect(birth!.message).toContain('child of Ada & Bez')
+  })
+
+  test('survives save/load and stays bounded', () => {
+    const sim = GameSim.fresh(905)
+    for (let i = 0; i < TUNING.journalMaxEntries + 30; i += 1) {
+      recordJournal(sim.state, 'development', `entry ${i}`)
+    }
+    expect(sim.state.journal).toHaveLength(TUNING.journalMaxEntries)
+    expect(sim.state.journal.at(-1)!.message).toBe(`entry ${TUNING.journalMaxEntries + 29}`)
+
+    const resumed = new GameSim(deserialize(serialize(sim.state, 1_000)))
+    expect(resumed.state.journal).toEqual(sim.state.journal)
+  })
+
+  test('records an away chapter when the modal-worthy threshold is crossed', () => {
+    const sim = GameSim.fresh(907)
+    sim.advanceOffline(3_600)
+    expect(sim.state.journal.some((entry) => entry.kind === 'away')).toBe(true)
   })
 })
 

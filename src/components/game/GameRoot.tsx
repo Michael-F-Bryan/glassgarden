@@ -7,7 +7,7 @@ import {
   normaliseDevSpeed,
   type GlassgardenDevTools,
 } from '@/game/devtools'
-import { TANK, TUNING, type Fish, type GameEvent } from '@/game/model'
+import { TANK, TUNING, type Fish, type GameEvent, type JournalKind } from '@/game/model'
 import { TankRenderer } from '@/game/render'
 import { deserialize, parseSave, SAVE_KEY, serialize } from '@/game/save'
 import { GameSim, type OfflineSummary, type ShopItem } from '@/game/sim'
@@ -42,6 +42,8 @@ type HudSnapshot = {
   waterQuality: WaterTier
   /** Worst water cell in [0, 1], driving the quality meter's fill. */
   worstPollution: number
+  /** Tank Journal entries, newest first, ages pre-formatted for display. */
+  journal: { kind: JournalKind; message: string; age: string }[]
   shopItems: ShopItem[]
   residents: {
     id: number
@@ -77,6 +79,7 @@ const EMPTY_HUD: HudSnapshot = {
   fedOnce: true, // no hint until the real sim reports otherwise
   waterQuality: 'clear',
   worstPollution: 0,
+  journal: [],
   shopItems: [],
   residents: [],
 }
@@ -109,6 +112,15 @@ function describeStage(fish: Fish): string {
   if (maturity < 0.2) return 'fry'
   if (maturity < TUNING.breedingMinWeightFraction) return 'juvenile'
   return 'adult'
+}
+
+const JOURNAL_GLYPHS: Record<JournalKind, string> = {
+  arrival: '🐟',
+  birth: '🐣',
+  death: '🥀',
+  development: '✦',
+  purchase: '◉',
+  away: '🌙',
 }
 
 const WATER_TIERS = [
@@ -172,6 +184,13 @@ export function buildHudSnapshot(
     fedOnce: state.unlocks.fedOnce,
     waterQuality: describeWater(sim.worstPollution(), previousWater),
     worstPollution: sim.worstPollution(),
+    journal: [...state.journal]
+      .reverse()
+      .map((entry) => ({
+        kind: entry.kind,
+        message: entry.message,
+        age: formatAge(state.time - entry.atSim),
+      })),
     shopItems: sim.shopItems(),
     residents: fishEntities.map((entity) => {
       const pollution = pollutionAt(state.water, entity.position)
@@ -216,6 +235,7 @@ export default function GameRoot() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [tool, setToolState] = useState<Tool>('feed')
   const [helpOpen, setHelpOpen] = useState(false)
+  const [journalOpen, setJournalOpen] = useState(false)
   const [awaySummary, setAwaySummary] = useState<OfflineSummary | null>(null)
 
   const setTool = (next: Tool) => {
@@ -467,6 +487,7 @@ export default function GameRoot() {
     const sim = simRef.current
     if (!sim) return
     setHelpOpen(false)
+    setJournalOpen(false)
     const point = toLogical(event)
     const tool = toolRef.current
     const fish = tool === 'feed' ? sim.fishAt(point.x, point.y) : undefined
@@ -549,6 +570,7 @@ export default function GameRoot() {
 
   const selectFish = (fishId: number) => {
     selectedFishRef.current = fishId
+    setJournalOpen(false)
     refreshHudRef.current()
   }
 
@@ -556,6 +578,7 @@ export default function GameRoot() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       setHelpOpen(false)
+      setJournalOpen(false)
       selectedFishRef.current = undefined
       refreshHudRef.current()
     }
@@ -729,12 +752,64 @@ export default function GameRoot() {
           </span>
           <button
             type="button"
-            onClick={() => setHelpOpen((open) => !open)}
+            data-testid="journal-toggle"
+            aria-label="Tank Journal"
+            onClick={() => {
+              setJournalOpen((open) => !open)
+              setHelpOpen(false)
+            }}
+            className="rounded-full border border-white/10 bg-slate-900/60 px-2.5 py-1 text-slate-300 hover:bg-slate-800/60"
+          >
+            📖
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setHelpOpen((open) => !open)
+              setJournalOpen(false)
+            }}
             className="rounded-full border border-white/10 bg-slate-900/60 px-2.5 py-1 text-slate-300 hover:bg-slate-800/60"
           >
             ?
           </button>
         </div>
+
+        {journalOpen && (
+          <div
+            data-testid="tank-journal"
+            className="absolute right-3 bottom-14 z-20 flex max-h-[70%] w-80 flex-col rounded-xl border border-cyan-100/20 bg-slate-900/95 shadow-xl backdrop-blur"
+          >
+            <div className="flex items-center justify-between border-b border-cyan-100/10 px-4 py-2.5">
+              <p className="font-medium text-cyan-100">Tank Journal</p>
+              <button
+                type="button"
+                onClick={() => setJournalOpen(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="flex flex-col gap-2.5 overflow-y-auto px-4 py-3 text-sm">
+              {hud.journal.length === 0 ? (
+                <li className="text-slate-500">Nothing yet — the journal fills as the tank lives.</li>
+              ) : (
+                hud.journal.map((entry, index) => (
+                  <li key={index} data-testid="journal-entry" className="flex gap-2 text-slate-300">
+                    <span aria-hidden="true" className="w-5 shrink-0 text-center">
+                      {JOURNAL_GLYPHS[entry.kind]}
+                    </span>
+                    <span className="min-w-0 leading-5">
+                      {entry.message}
+                      <span className="ml-2 text-xs whitespace-nowrap text-slate-500">
+                        {entry.age}
+                      </span>
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        )}
 
         {helpOpen && (
           <div className="absolute right-3 bottom-14 w-72 rounded-xl border border-cyan-100/20 bg-slate-900/95 p-4 text-sm text-slate-300 shadow-xl backdrop-blur">

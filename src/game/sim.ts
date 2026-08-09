@@ -10,6 +10,7 @@ import {
   createFreshGame,
   emit,
   livingFish,
+  recordJournal,
   removeEntity,
   spawnFish,
   spawnPellet,
@@ -97,6 +98,11 @@ export class GameSim {
     // the "while you were away" panel survives an immediate remount or reload.
     if (summary.simulatedSeconds > 10) {
       emit(this.state, { type: 'awaySummary', summary })
+      recordJournal(
+        this.state,
+        'away',
+        `The tank drifted on without you — ◉${Math.floor(summary.coinsEarned)} collected.`,
+      )
     }
     return summary
   }
@@ -207,6 +213,7 @@ export class GameSim {
         tone: 'info',
         message: 'Gravel siphon acquired. Select it, then hold and sweep the sand to clean.',
       })
+      recordJournal(this.state, 'purchase', `Bought a gravel siphon for ◉${item.cost}.`)
     } else if (item.id === 'feeder') {
       this.state.ownsFeeder = true
       emit(this.state, {
@@ -214,6 +221,7 @@ export class GameSim {
         tone: 'info',
         message: 'Drip feeder installed above the tank. It spends a coin per pellet.',
       })
+      recordJournal(this.state, 'purchase', `Installed a drip feeder for ◉${item.cost}.`)
     } else if (item.id === 'fish') {
       this.state.fishPurchased += 1
       const genome = randomGenome(this.state.rng, this.state.rng.range(18, 34))
@@ -229,6 +237,7 @@ export class GameSim {
         tone: 'info',
         message: `${fish.fish!.name} has joined the tank.`,
       })
+      recordJournal(this.state, 'arrival', `${fish.fish!.name} joined the tank for ◉${item.cost}.`)
     } else {
       this.state.gameOver = false
       const fish = spawnFish(this.state, {
@@ -243,6 +252,7 @@ export class GameSim {
         tone: 'info',
         message: `${fish.fish!.name} settles into the quiet tank.`,
       })
+      recordJournal(this.state, 'arrival', `${fish.fish!.name} settled into the quiet tank — a new beginning.`)
     }
     return true
   }
