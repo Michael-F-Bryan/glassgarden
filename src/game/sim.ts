@@ -98,6 +98,7 @@ export class GameSim {
       coinsEarned: this.state.coins - coinsBefore,
       births,
       developments,
+      companion: livingFish(this.state)[0]?.fish!.name,
     }
     // Delivered as an event (and therefore persisted with pending events) so
     // the "while you were away" panel survives an immediate remount or reload.

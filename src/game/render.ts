@@ -56,8 +56,10 @@ export class TankRenderer {
   draw(ctx: CanvasRenderingContext2D, state: GameState, options: DrawOptions): void {
     const { realTime } = options
     ctx.clearRect(0, 0, TANK.width, TANK.height)
-    this.drawWater(ctx, realTime)
+    this.drawWater(ctx)
     this.drawPollution(ctx, state)
+    this.drawLightShafts(ctx, realTime)
+    this.drawRocks(ctx)
     this.drawKelp(ctx, realTime, true)
     this.drawSand(ctx)
 
@@ -80,7 +82,7 @@ export class TankRenderer {
     this.drawSurface(ctx, realTime)
   }
 
-  private drawWater(ctx: CanvasRenderingContext2D, realTime: number): void {
+  private drawWater(ctx: CanvasRenderingContext2D): void {
     const gradient = ctx.createLinearGradient(0, 0, 0, TANK.height)
     gradient.addColorStop(0, '#7ec9d8')
     gradient.addColorStop(0.25, '#3f97b4')
@@ -88,8 +90,10 @@ export class TankRenderer {
     gradient.addColorStop(1, '#173f52')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, TANK.width, TANK.height)
+  }
 
-    // Slow diagonal light shafts.
+  // Drawn over the murk layer so failing light doubles as a water-quality cue.
+  private drawLightShafts(ctx: CanvasRenderingContext2D, realTime: number): void {
     ctx.save()
     ctx.globalCompositeOperation = 'overlay'
     for (let i = 0; i < 3; i += 1) {
@@ -115,10 +119,10 @@ export class TankRenderer {
     const image = layer.createImageData(WATER_COLS, WATER_ROWS)
     for (let i = 0; i < state.water.cells.length; i += 1) {
       const value = state.water.cells[i]
-      image.data[i * 4 + 0] = 88
-      image.data[i * 4 + 1] = 158
-      image.data[i * 4 + 2] = 58
-      image.data[i * 4 + 3] = Math.min(220, Math.pow(value, 0.75) * 420)
+      image.data[i * 4 + 0] = 64
+      image.data[i * 4 + 1] = 105
+      image.data[i * 4 + 2] = 52
+      image.data[i * 4 + 3] = Math.min(150, Math.pow(value, 0.75) * 420)
     }
     layer.putImageData(image, 0, 0)
     ctx.save()
@@ -130,7 +134,7 @@ export class TankRenderer {
       0,
       TANK.waterTop,
       TANK.width,
-      TANK.sandTop - TANK.waterTop,
+      TANK.sandTop - TANK.waterTop + 18,
     )
     ctx.restore()
   }
@@ -167,26 +171,71 @@ export class TankRenderer {
     for (let k = 0; k < KELP.length; k += 1) {
       if (background !== (k % 2 === 0)) continue
       const kelp = KELP[k]
+      const fill = background ? 'rgba(16, 74, 60, 0.8)' : 'rgba(42, 122, 82, 0.92)'
+      const leafFill = background ? 'rgba(20, 86, 68, 0.7)' : 'rgba(56, 138, 92, 0.85)'
       for (let frond = 0; frond < kelp.fronds; frond += 1) {
-        const baseX = kelp.x + (frond - kelp.fronds / 2) * 16
+        const baseX = kelp.x + (frond - kelp.fronds / 2) * 18
         const height = kelp.height * (0.75 + hash01(k * 17 + frond) * 0.4)
         const sway = Math.sin(realTime * 0.7 + k + frond * 1.7)
-        ctx.strokeStyle = background ? 'rgba(16, 74, 60, 0.75)' : 'rgba(34, 110, 74, 0.9)'
-        ctx.lineWidth = 10 - frond * 2
-        ctx.lineCap = 'round'
+
+        // Sample the frond's spine, then draw it as one tapering ribbon.
+        const spine: { x: number; y: number }[] = []
+        for (let i = 0; i <= 8; i += 1) {
+          const t = i / 8
+          const bend = Math.sin(t * 2.2) * sway
+          spine.push({
+            x: baseX + bend * 26 * t + sway * 8 * t * t,
+            y: TANK.sandTop + 8 - height * t,
+          })
+        }
+        ctx.fillStyle = fill
         ctx.beginPath()
-        ctx.moveTo(baseX, TANK.sandTop + 8)
-        const midX = baseX + sway * 14
-        const topX = baseX + sway * 30
-        ctx.bezierCurveTo(
-          baseX - sway * 6,
-          TANK.sandTop - height * 0.4,
-          midX,
-          TANK.sandTop - height * 0.7,
-          topX,
-          TANK.sandTop - height,
-        )
-        ctx.stroke()
+        ctx.moveTo(spine[0].x - 8, spine[0].y)
+        for (let i = 1; i <= 8; i += 1) {
+          ctx.lineTo(spine[i].x - 8 * (1 - i / 8) - 1.5, spine[i].y)
+        }
+        for (let i = 8; i >= 0; i -= 1) {
+          ctx.lineTo(spine[i].x + 8 * (1 - i / 8) + 1.5, spine[i].y)
+        }
+        ctx.closePath()
+        ctx.fill()
+
+        // Short alternating leaf lobes along the spine.
+        ctx.fillStyle = leafFill
+        for (let i = 2; i <= 7; i += 2) {
+          const side = i % 4 === 0 ? 1 : -1
+          const leafSway = sway * 4
+          ctx.beginPath()
+          ctx.ellipse(
+            spine[i].x + side * 13 + leafSway,
+            spine[i].y + 4,
+            13,
+            4.5,
+            side * (0.5 + sway * 0.15),
+            0,
+            Math.PI * 2,
+          )
+          ctx.fill()
+        }
+      }
+    }
+    ctx.restore()
+  }
+
+  // A couple of quiet rock piles so the mid-water isn't a bare field.
+  private drawRocks(ctx: CanvasRenderingContext2D): void {
+    ctx.save()
+    for (const pile of [
+      { x: 520, scale: 1 },
+      { x: 780, scale: 0.6 },
+    ]) {
+      for (let i = 0; i < 3; i += 1) {
+        const radius = (26 - i * 7) * pile.scale
+        const px = pile.x + (hash01(pile.x + i * 31) - 0.5) * 60 * pile.scale
+        ctx.fillStyle = `rgba(30, 52, 64, ${0.55 + i * 0.1})`
+        ctx.beginPath()
+        ctx.ellipse(px, TANK.sandTop + 6 - radius * 0.35, radius * 1.5, radius, 0, 0, Math.PI * 2)
+        ctx.fill()
       }
     }
     ctx.restore()
@@ -213,6 +262,11 @@ export class TankRenderer {
     ctx.beginPath()
     ctx.ellipse(entity.position.x, entity.position.y, size, size * 0.6, 0, 0, Math.PI * 2)
     ctx.fill()
+    ctx.strokeStyle = 'rgba(150, 120, 78, 0.5)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.ellipse(entity.position.x, entity.position.y - size * 0.15, size * 0.8, size * 0.4, 0, Math.PI, Math.PI * 2)
+    ctx.stroke()
     ctx.fillStyle = 'rgba(30, 22, 12, 0.5)'
     ctx.beginPath()
     ctx.ellipse(entity.position.x - size * 0.3, entity.position.y - size * 0.2, size * 0.45, size * 0.3, 0, 0, Math.PI * 2)
@@ -275,30 +329,31 @@ export class TankRenderer {
 
     const bodyColor = `hsl(${hue}, ${saturation * 100}%, ${lightness * 100}%)`
     const darkColor = `hsl(${hue}, ${saturation * 90}%, ${lightness * 62}%)`
-    const finColor = `hsla(${hue}, ${saturation * 100}%, ${Math.min(78, lightness * 130)}%, 0.85)`
+    const finColor = `hsla(${hue}, ${saturation * 100}%, ${Math.min(72, lightness * 112)}%, 0.9)`
 
-    // Tail.
-    const tailBase = -length * 0.42
+    // Tail: rooted across a base overlapping the body so it never pinches off.
+    const tailBase = -length * 0.36
     const tailLength = length * (0.3 + fish.genome.finFlair * 0.35)
-    const tailSpread = height * (0.85 + fish.genome.finFlair * 0.9)
+    const tailSpread = height * (0.85 + fish.genome.finFlair * 0.6)
+    const rootHalf = height * 0.35
     ctx.save()
     ctx.translate(tailBase, 0)
     ctx.rotate(wiggle)
     ctx.fillStyle = finColor
     ctx.beginPath()
+    ctx.moveTo(length * 0.06, -rootHalf)
     if (fish.genome.finShape === 'forked') {
-      ctx.moveTo(0, 0)
-      ctx.lineTo(-tailLength, -tailSpread)
-      ctx.lineTo(-tailLength * 0.45, 0)
-      ctx.lineTo(-tailLength, tailSpread)
+      ctx.quadraticCurveTo(-tailLength * 0.5, -tailSpread * 0.9, -tailLength, -tailSpread)
+      ctx.quadraticCurveTo(-tailLength * 0.5, -tailSpread * 0.1, -tailLength * 0.4, 0)
+      ctx.quadraticCurveTo(-tailLength * 0.5, tailSpread * 0.1, -tailLength, tailSpread)
+      ctx.quadraticCurveTo(-tailLength * 0.5, tailSpread * 0.9, length * 0.06, rootHalf)
     } else if (fish.genome.finShape === 'veil') {
-      ctx.moveTo(0, 0)
-      ctx.bezierCurveTo(-tailLength * 0.8, -tailSpread * 1.3, -tailLength * 1.4, -tailSpread * 0.4, -tailLength * 1.1, 0)
-      ctx.bezierCurveTo(-tailLength * 1.4, tailSpread * 0.4, -tailLength * 0.8, tailSpread * 1.3, 0, 0)
+      ctx.bezierCurveTo(-tailLength * 0.9, -tailSpread * 1.2, -tailLength * 1.5, -tailSpread * 0.35, -tailLength * 1.1, 0)
+      ctx.bezierCurveTo(-tailLength * 1.5, tailSpread * 0.35, -tailLength * 0.9, tailSpread * 1.2, length * 0.06, rootHalf)
     } else {
-      ctx.moveTo(0, 0)
-      ctx.lineTo(-tailLength, -tailSpread * 0.8)
-      ctx.lineTo(-tailLength, tailSpread * 0.8)
+      ctx.quadraticCurveTo(-tailLength * 0.55, -tailSpread * 1.05, -tailLength, -tailSpread * 0.75)
+      ctx.quadraticCurveTo(-tailLength * 0.55, 0, -tailLength, tailSpread * 0.75)
+      ctx.quadraticCurveTo(-tailLength * 0.55, tailSpread * 1.05, length * 0.06, rootHalf)
     }
     ctx.closePath()
     ctx.fill()
@@ -396,7 +451,7 @@ export class TankRenderer {
     if (fish.hunger > 0.85 || fish.sickness > 0.6) {
       const symbol = fish.hunger > 0.85 ? '!' : '~'
       ctx.save()
-      ctx.font = 'bold 18px system-ui, sans-serif'
+      ctx.font = 'bold 18px Nunito, system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.fillStyle = fish.hunger > 0.85 ? '#ffd166' : '#a3d977'
       const bob = Math.sin(realTime * 4 + entity.id) * 3
@@ -405,7 +460,7 @@ export class TankRenderer {
     }
     if (fish.activity.kind === 'court') {
       ctx.save()
-      ctx.font = '14px system-ui, sans-serif'
+      ctx.font = '14px Nunito, system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.globalAlpha = 0.7 + Math.sin(realTime * 5 + entity.id) * 0.3
       ctx.fillText('♥', entity.position.x, entity.position.y - height - 14)
@@ -417,7 +472,7 @@ export class TankRenderer {
     const fish = entity.fish!
     const y = entity.position.y - fishLength(fish.weight) * fish.genome.bodyAspect - 30
     ctx.save()
-    ctx.font = '600 14px system-ui, sans-serif'
+    ctx.font = '600 14px Nunito, system-ui, sans-serif'
     ctx.textAlign = 'center'
     const label = fish.name
     const width = ctx.measureText(label).width + 16

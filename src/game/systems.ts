@@ -85,21 +85,20 @@ function movementSystem(state: GameState, dt: number): void {
     steerFish(state, entity, dt)
   }
   for (const entity of state.world.with('food')) {
-    sinkToSand(entity, dt, 26, () => (entity.food.restingOnSand = true))
+    sinkToSand(entity, dt, 26, TANK.sandTop + 6, () => (entity.food.restingOnSand = true))
   }
   for (const entity of state.world.with('waste')) {
-    sinkToSand(entity, dt, 34, () => (entity.waste.restingOnSand = true))
+    sinkToSand(entity, dt, 34, TANK.sandTop + 14, () => (entity.waste.restingOnSand = true))
   }
   for (const entity of state.world.with('egg')) {
-    sinkToSand(entity, dt, 20, () => undefined)
+    sinkToSand(entity, dt, 20, TANK.sandTop - 4, () => undefined)
   }
   for (const entity of state.world.with('remains')) {
     entity.position.y = Math.max(TANK.waterTop + 14, entity.position.y - 18 * dt)
   }
 }
 
-function sinkToSand(entity: Entity, dt: number, speed: number, onLand: () => void): void {
-  const restY = TANK.sandTop - 6
+function sinkToSand(entity: Entity, dt: number, speed: number, restY: number, onLand: () => void): void {
   if (entity.position.y >= restY) {
     entity.position.y = restY
     entity.velocity.x = 0
@@ -439,7 +438,7 @@ function developmentSystem(state: GameState): void {
     emit(state, {
       type: 'toast',
       tone: 'development',
-      message: 'The water is taking on a green tinge where things settle on the sand…',
+      message: 'The water is taking on a green tinge where things settle on the sand.',
     })
     emit(state, {
       type: 'toast',

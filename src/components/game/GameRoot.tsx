@@ -167,8 +167,16 @@ export default function GameRoot() {
     const renderer = new TankRenderer()
 
     const dpr = Math.min(2, window.devicePixelRatio || 1)
-    canvas.width = TANK.width * dpr
-    canvas.height = TANK.height * dpr
+    let renderScale = dpr
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect()
+      const width = Math.max(1, Math.round(rect.width * dpr))
+      canvas.width = width
+      canvas.height = Math.round((width * TANK.height) / TANK.width)
+      renderScale = width / TANK.width
+    }
+    resize()
+    window.addEventListener('resize', resize)
     const ctx = canvas.getContext('2d')!
 
     const save = () => {
@@ -222,7 +230,7 @@ export default function GameRoot() {
       }
       applyEvents(sim!.drainEvents())
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
       renderer.draw(ctx, sim!.state, {
         realTime: nowMs / 1000,
         selectedFishId: selectedFishRef.current,
@@ -257,6 +265,7 @@ export default function GameRoot() {
       cancelAnimationFrame(raf)
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('beforeunload', save)
+      window.removeEventListener('resize', resize)
       save()
     }
   }, [])
@@ -291,8 +300,19 @@ export default function GameRoot() {
     const sim = simRef.current
     if (!sim) return
     const point = toLogical(event)
-    hoverFishRef.current = sim.fishAt(point.x, point.y)?.id
+    const hovered = sim.fishAt(point.x, point.y)
+    hoverFishRef.current = hovered?.id
+    event.currentTarget.style.cursor = hovered
+      ? 'pointer'
+      : toolRef.current === 'siphon'
+        ? 'cell'
+        : 'default'
   }
+
+  const TOAST_PRIORITY: Record<Toast['tone'], number> = { warning: 0, development: 1, info: 2 }
+  const visibleToasts = [...toasts]
+    .sort((a, b) => TOAST_PRIORITY[a.tone] - TOAST_PRIORITY[b.tone] || b.key - a.key)
+    .slice(0, 3)
 
   const buy = (itemId: ShopItem['id']) => {
     simRef.current?.buy(itemId)
@@ -306,7 +326,7 @@ export default function GameRoot() {
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,_#12303e,_#0a1a24_65%)] p-4 text-slate-100">
-      <div className="flex w-full max-w-[1240px] items-end justify-between px-1">
+      <div className="flex w-full max-w-[min(1720px,calc((100svh-9rem)*16/9))] items-end justify-between px-1">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-cyan-100">Glassgarden</h1>
           <p className="text-xs text-cyan-300/70">a quiet aquarium that grows around your care</p>
@@ -336,10 +356,10 @@ export default function GameRoot() {
         </div>
       </div>
 
-      <div className="relative w-full max-w-[1240px] overflow-hidden rounded-2xl border border-cyan-100/15 bg-slate-950 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+      <div className="relative w-full max-w-[min(1720px,calc((100svh-9rem)*16/9))] overflow-hidden rounded-2xl border border-cyan-100/15 bg-slate-950 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
         <canvas
           ref={canvasRef}
-          className={`block aspect-[16/9] w-full ${tool === 'siphon' ? 'cursor-cell' : 'cursor-crosshair'}`}
+          className="block aspect-[16/9] w-full"
           onPointerDown={onCanvasClick}
           onPointerMove={onCanvasMove}
           data-testid="tank-canvas"
@@ -357,20 +377,24 @@ export default function GameRoot() {
           </div>
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 top-3 flex flex-col items-center gap-2 px-4">
-          {toasts.map((toast) => (
+        <div
+          className={`pointer-events-none absolute inset-x-0 flex flex-col items-center gap-2 px-4 ${
+            hud.criticalNames.length > 0 && !hud.gameOver ? 'top-16' : 'top-3'
+          }`}
+        >
+          {visibleToasts.map((toast) => (
             <div
               key={toast.key}
               data-testid={`toast-${toast.tone}`}
-              className={`pointer-events-auto max-w-xl rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur transition ${
+              className={`pointer-events-auto max-w-xl rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-top-2 duration-300 ${
                 toast.tone === 'development'
-                  ? 'border-amber-300/50 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100'
+                  ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
                   : toast.tone === 'warning'
                     ? 'border-red-400/40 bg-red-950/85 text-red-100'
                     : 'border-cyan-200/20 bg-slate-900/80 text-slate-200'
               }`}
             >
-              {toast.tone === 'development' && <span className="mr-2">✦</span>}
+              {toast.tone === 'development' && <span className="mr-2 text-base">✦</span>}
               {toast.message}
             </div>
           ))}
@@ -566,6 +590,11 @@ export default function GameRoot() {
                 {formatAway(awaySummary.awaySeconds)} passed. The tank drifted on without you, a
                 little slower.
               </p>
+              {awaySummary.companion && (
+                <p className="mt-3 text-sm text-slate-300">
+                  {awaySummary.companion} kept circling the kelp, watching for you.
+                </p>
+              )}
               <ul className="mt-4 flex flex-col gap-2 text-sm text-slate-200">
                 <li>◉ {Math.floor(awaySummary.coinsEarned)} coins collected</li>
                 {awaySummary.births.map((name) => (

@@ -100,6 +100,8 @@ export type OfflineSummary = {
   coinsEarned: number
   births: string[]
   developments: string[]
+  /** A resident to mention in the away panel's flavour line. */
+  companion?: string
 }
 
 /** One-shot notifications the UI drains each frame. */
