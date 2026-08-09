@@ -384,42 +384,107 @@ export default function GameRoot() {
     }
   }
 
-  const onCanvasClick = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  /** Hold-to-sprinkle: a quick tap keeps its old meanings (inspect a fish,
+   * drop one pellet), while holding rains pellets at the pointer. A gesture
+   * that starts over a fish delays its first pellet one interval, so tapping
+   * a fish still reads as inspection rather than feeding it in the face. */
+  const TAP_MAX_MS = 260
+  const SPRINKLE_INTERVAL_MS = 280
+
+  type SprinkleGesture = {
+    pointerId: number
+    startedAtMs: number
+    startedOverFishId?: number
+    pelletsDropped: number
+    point: { x: number; y: number }
+    intervalId: ReturnType<typeof setInterval>
+  }
+  const gestureRef = useRef<SprinkleGesture | null>(null)
+
+  const endGesture = (): SprinkleGesture | null => {
+    const gesture = gestureRef.current
+    if (gesture) clearInterval(gesture.intervalId)
+    gestureRef.current = null
+    return gesture
+  }
+
+  useEffect(() => {
+    return () => {
+      const gesture = gestureRef.current
+      if (gesture) clearInterval(gesture.intervalId)
+    }
+  }, [])
+
+  const tryDropPellet = (x: number): boolean => {
+    const sim = simRef.current
+    if (!sim) return false
+    if (sim.dropFood(x)) {
+      rendererRef.current?.notifyFeed(x)
+      refreshHudRef.current()
+      return true
+    }
+    if (!sim.state.gameOver && performance.now() - affordWarnAtRef.current > 5000) {
+      affordWarnAtRef.current = performance.now()
+      setToasts((current) => [
+        ...current,
+        {
+          key: performance.now(),
+          tone: 'warning',
+          message: 'Not enough coins for food — they trickle in as your fish grow.',
+          expiresAt: performance.now() + TOAST_LIFETIME_MS.warning,
+        },
+      ])
+    }
+    return false
+  }
+
+  const onCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const sim = simRef.current
     if (!sim) return
     setHelpOpen(false)
     const point = toLogical(event)
-    const fish = sim.fishAt(point.x, point.y)
-    if (fish) {
-      selectedFishRef.current = fish.id
-    } else {
-      selectedFishRef.current = undefined
-      if (toolRef.current === 'feed') {
-        const dropped = sim.dropFood(point.x)
-        if (!dropped && !sim.state.gameOver && performance.now() - affordWarnAtRef.current > 5000) {
-          affordWarnAtRef.current = performance.now()
-          setToasts((current) => [
-            ...current,
-            {
-              key: performance.now(),
-              tone: 'warning',
-              message: 'Not enough coins for food — they trickle in as your fish grow.',
-              expiresAt: performance.now() + TOAST_LIFETIME_MS.warning,
-            },
-          ])
-        }
-      } else if (toolRef.current === 'siphon') {
-        sim.siphonAt(point.x, point.y)
-        rendererRef.current?.notifySiphon(point.x, point.y)
-      }
+    if (toolRef.current === 'siphon') {
+      sim.siphonAt(point.x, point.y)
+      rendererRef.current?.notifySiphon(point.x, point.y)
+      refreshHudRef.current()
+      return
     }
+    const fish = sim.fishAt(point.x, point.y)
+    if (!fish) selectedFishRef.current = undefined
+    endGesture()
+    const gesture: SprinkleGesture = {
+      pointerId: event.pointerId,
+      startedAtMs: performance.now(),
+      startedOverFishId: fish?.id,
+      pelletsDropped: 0,
+      point,
+      intervalId: setInterval(() => {
+        const active = gestureRef.current
+        if (active && tryDropPellet(active.point.x)) active.pelletsDropped += 1
+      }, SPRINKLE_INTERVAL_MS),
+    }
+    gestureRef.current = gesture
+    event.currentTarget.setPointerCapture(event.pointerId)
+    if (!fish && tryDropPellet(point.x)) gesture.pelletsDropped += 1
     refreshHudRef.current()
+  }
+
+  const onCanvasPointerUp = () => {
+    const gesture = endGesture()
+    if (!gesture) return
+    const quickTap = performance.now() - gesture.startedAtMs < TAP_MAX_MS
+    if (quickTap && gesture.startedOverFishId !== undefined && gesture.pelletsDropped === 0) {
+      selectedFishRef.current = gesture.startedOverFishId
+      refreshHudRef.current()
+    }
   }
 
   const onCanvasMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const sim = simRef.current
     if (!sim) return
     const point = toLogical(event)
+    const gesture = gestureRef.current
+    if (gesture && event.pointerId === gesture.pointerId) gesture.point = point
     const hovered = sim.fishAt(point.x, point.y)
     hoverFishRef.current = hovered?.id
     event.currentTarget.style.cursor = hovered
@@ -488,9 +553,11 @@ export default function GameRoot() {
       >
         <canvas
           ref={canvasRef}
-          className="block aspect-[16/9] w-full"
-          onPointerDown={onCanvasClick}
+          className="block aspect-[16/9] w-full touch-none"
+          onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasMove}
+          onPointerUp={onCanvasPointerUp}
+          onPointerCancel={onCanvasPointerUp}
           data-testid="tank-canvas"
         />
 
@@ -504,7 +571,7 @@ export default function GameRoot() {
                 🫘
               </span>
               <span className="rounded-full bg-slate-950/70 px-4 py-1.5 text-sm text-cyan-100 shadow-lg backdrop-blur">
-                click the water to drop a pinch of food
+                click the water to drop food — hold to sprinkle
               </span>
             </div>
           </div>
@@ -577,7 +644,7 @@ export default function GameRoot() {
             </button>
           )}
           <span className="ml-1 hidden rounded-full bg-slate-950/60 px-3 py-1 text-xs text-slate-200/90 backdrop-blur sm:block">
-            {tool === 'feed' ? 'click the water to drop food' : 'click debris to clean it up'}
+            {tool === 'feed' ? 'click to drop food · hold to sprinkle' : 'click debris to clean it up'}
           </span>
         </div>
 
@@ -618,8 +685,8 @@ export default function GameRoot() {
           <div className="absolute right-3 bottom-14 w-72 rounded-xl border border-cyan-100/20 bg-slate-900/95 p-4 text-sm text-slate-300 shadow-xl backdrop-blur">
             <p className="mb-2 font-medium text-cyan-100">How to play</p>
             <p className="mb-2">
-              Click the water to drop food. Keep an eye on your fish — and on the water they swim
-              in.
+              Click the water to drop food, or press and hold to sprinkle. Keep an eye on your fish
+              — and on the water they swim in.
             </p>
             <p className="mb-2">
               The tank keeps living while you&apos;re away, a little slower, shaped by how you left

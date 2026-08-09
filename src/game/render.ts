@@ -33,17 +33,25 @@ const KELP = [
 ]
 
 type SiphonPuff = { x: number; y: number; at: number }
+type CoinFloat = { x: number; y: number; at: number }
 
 export class TankRenderer {
   private pollutionLayer = document.createElement('canvas')
   private bubbles: Bubble[] = []
   private lastBubbleTime: number | undefined
   private puffs: SiphonPuff[] = []
+  private coinFloats: CoinFloat[] = []
 
   /** Cosmetic confirmation that a siphon click landed. */
   notifySiphon(x: number, y: number): void {
     this.puffs.push({ x, y, at: performance.now() / 1000 })
     if (this.puffs.length > 8) this.puffs.shift()
+  }
+
+  /** Cosmetic "−◉1" drifting up from where a pellet was paid for. */
+  notifyFeed(x: number): void {
+    this.coinFloats.push({ x, y: TANK.waterTop + 14, at: performance.now() / 1000 })
+    if (this.coinFloats.length > 10) this.coinFloats.shift()
   }
 
   constructor() {
@@ -89,6 +97,7 @@ export class TankRenderer {
     this.drawKelp(ctx, realTime, false)
     if (state.ownsFeeder) this.drawFeeder(ctx)
     this.drawPuffs(ctx, realTime)
+    this.drawCoinFloats(ctx, realTime)
     this.drawBubbles(ctx, realTime)
     this.drawSurface(ctx, realTime)
   }
@@ -136,6 +145,23 @@ export class TankRenderer {
         )
         ctx.fill()
       }
+      ctx.restore()
+    }
+  }
+
+  private drawCoinFloats(ctx: CanvasRenderingContext2D, realTime: number): void {
+    const LIFETIME = 0.9
+    this.coinFloats = this.coinFloats.filter((float) => realTime - float.at < LIFETIME)
+    for (const float of this.coinFloats) {
+      const t = (realTime - float.at) / LIFETIME
+      ctx.save()
+      ctx.globalAlpha = 0.85 * (1 - t * t)
+      ctx.font = '600 13px Nunito, system-ui, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillStyle = '#ffd97a'
+      ctx.shadowColor = 'rgba(10, 20, 30, 0.7)'
+      ctx.shadowBlur = 3
+      ctx.fillText('−◉1', float.x, float.y - t * 26)
       ctx.restore()
     }
   }
