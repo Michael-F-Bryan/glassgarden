@@ -51,6 +51,16 @@ describe('game UI layout', () => {
     })
   })
 
+  test('a healthy fish in polluted water reads as uneasy, not content', () => {
+    const sim = GameSim.fresh(123)
+    sim.state.water.cells.fill(0.5)
+
+    const resident = buildHudSnapshot(sim, undefined, 'clear').residents[0]
+
+    expect(resident.mood).toBe('uneasy in the murk')
+    expect(resident.moodEmoji).toBe('😖')
+  })
+
   test('hud exposes worst pollution for the water-quality meter', () => {
     const sim = GameSim.fresh(123)
     expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBe(0)

@@ -1,6 +1,6 @@
 import { fishLength, TANK, type Entity } from './model'
 import type { GameState } from './state'
-import { WATER_COLS, WATER_ROWS } from './water'
+import { averagePollution, WATER_COLS, WATER_ROWS } from './water'
 
 /**
  * Canvas presentation of the simulation. Pure observer: reads GameState,
@@ -72,10 +72,14 @@ export class TankRenderer {
 
   draw(ctx: CanvasRenderingContext2D, state: GameState, options: DrawOptions): void {
     const { realTime } = options
+    // Overall murk drives every water-quality cue at once: green tint, dying
+    // light, drifting particulate. The tank itself must tell the truth.
+    const murk = Math.min(1, averagePollution(state.water) * 1.6)
     ctx.clearRect(0, 0, TANK.width, TANK.height)
     this.drawWater(ctx)
-    this.drawPollution(ctx, state)
-    this.drawLightShafts(ctx, realTime)
+    this.drawPollution(ctx, state, murk)
+    this.drawLightShafts(ctx, realTime, murk)
+    this.drawMurkMotes(ctx, realTime, murk)
     this.drawRocks(ctx)
     this.drawKelp(ctx, realTime, true)
     this.drawSand(ctx)
@@ -176,15 +180,18 @@ export class TankRenderer {
     ctx.fillRect(0, 0, TANK.width, TANK.height)
   }
 
-  // Drawn over the murk layer so failing light doubles as a water-quality cue.
-  private drawLightShafts(ctx: CanvasRenderingContext2D, realTime: number): void {
+  // Drawn over the murk layer so failing light doubles as a water-quality cue:
+  // the dirtier the tank, the dimmer the shafts, until foul water kills them.
+  private drawLightShafts(ctx: CanvasRenderingContext2D, realTime: number, murk: number): void {
+    const strength = 0.16 * (1 - 0.9 * murk)
+    if (strength <= 0.005) return
     ctx.save()
     ctx.globalCompositeOperation = 'overlay'
     for (let i = 0; i < 3; i += 1) {
       const drift = Math.sin(realTime * 0.07 + i * 2.1) * 90
       const x = 220 + i * 360 + drift
       const shaft = ctx.createLinearGradient(x, 0, x - 140, TANK.height)
-      shaft.addColorStop(0, 'rgba(255,255,255,0.16)')
+      shaft.addColorStop(0, `rgba(255,255,255,${strength.toFixed(3)})`)
       shaft.addColorStop(1, 'rgba(255,255,255,0)')
       ctx.fillStyle = shaft
       ctx.beginPath()
@@ -198,7 +205,7 @@ export class TankRenderer {
     ctx.restore()
   }
 
-  private drawPollution(ctx: CanvasRenderingContext2D, state: GameState): void {
+  private drawPollution(ctx: CanvasRenderingContext2D, state: GameState, murk: number): void {
     const layer = this.pollutionLayer.getContext('2d')!
     const image = layer.createImageData(WATER_COLS, WATER_ROWS)
     for (let i = 0; i < state.water.cells.length; i += 1) {
@@ -206,7 +213,8 @@ export class TankRenderer {
       image.data[i * 4 + 0] = 64
       image.data[i * 4 + 1] = 105
       image.data[i * 4 + 2] = 52
-      image.data[i * 4 + 3] = Math.min(150, Math.pow(value, 0.75) * 420)
+      // Slightly super-linear: tinged water stays subtle, foul water is unmissable.
+      image.data[i * 4 + 3] = Math.min(215, Math.pow(value, 1.1) * 320)
     }
     layer.putImageData(image, 0, 0)
     ctx.save()
@@ -220,6 +228,34 @@ export class TankRenderer {
       TANK.width,
       TANK.sandTop - TANK.waterTop + 18,
     )
+    ctx.restore()
+    // A whole-tank cast on top of the per-cell layer, so even diffuse
+    // pollution shifts the room's colour instead of hiding in one corner.
+    if (murk > 0.02) {
+      ctx.save()
+      ctx.fillStyle = `rgba(70, 108, 52, ${(murk * 0.32).toFixed(3)})`
+      ctx.fillRect(0, TANK.waterTop, TANK.width, TANK.height - TANK.waterTop)
+      ctx.restore()
+    }
+  }
+
+  // Suspended particulate that thickens as the water fouls.
+  private drawMurkMotes(ctx: CanvasRenderingContext2D, realTime: number, murk: number): void {
+    if (murk < 0.08) return
+    ctx.save()
+    ctx.fillStyle = `rgba(150, 170, 110, ${(0.14 + murk * 0.3).toFixed(3)})`
+    const count = Math.round(60 * murk)
+    const span = TANK.sandTop - TANK.waterTop - 40
+    for (let i = 0; i < count; i += 1) {
+      const drift = realTime * (2 + hash01(i * 7) * 6)
+      const x = (hash01(i * 13) * TANK.width + drift) % TANK.width
+      const bob = Math.sin(realTime * 0.4 + i) * 14
+      const y = TANK.waterTop + 20 + ((hash01(i * 29) * span + bob + span) % span)
+      const radius = 0.8 + hash01(i * 41) * 1.6
+      ctx.beginPath()
+      ctx.arc(x, y, radius, 0, Math.PI * 2)
+      ctx.fill()
+    }
     ctx.restore()
   }
 

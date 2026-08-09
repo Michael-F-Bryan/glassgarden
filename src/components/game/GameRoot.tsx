@@ -11,6 +11,7 @@ import { TANK, TUNING, type Fish, type GameEvent } from '@/game/model'
 import { TankRenderer } from '@/game/render'
 import { deserialize, parseSave, SAVE_KEY, serialize } from '@/game/save'
 import { GameSim, type OfflineSummary, type ShopItem } from '@/game/sim'
+import { pollutionAt } from '@/game/water'
 
 type Tool = 'feed' | 'siphon'
 
@@ -80,22 +81,24 @@ const EMPTY_HUD: HudSnapshot = {
   residents: [],
 }
 
-function describeMood(fish: Fish): string {
+function describeMood(fish: Fish, pollution = 0): string {
   if (fish.hunger >= 0.999) return 'starving'
   if (fish.sickness >= 0.75) return 'gravely ill'
   if (fish.sickness > 0.4) return 'sick'
   if (fish.hunger > 0.85) return 'very hungry'
   if (fish.hunger > 0.5) return 'peckish'
+  if (pollution > TUNING.sicknessAbovePollution) return 'uneasy in the murk'
   if (fish.activity.kind === 'court') return 'smitten'
   return 'content'
 }
 
-function moodEmoji(fish: Fish): string {
+function moodEmoji(fish: Fish, pollution = 0): string {
   if (fish.sickness >= 0.75) return '🤢'
   if (fish.sickness > 0.4) return '🤒'
   if (fish.hunger >= 0.999) return '😫'
   if (fish.hunger > 0.85) return '😟'
   if (fish.hunger > 0.5) return '😐'
+  if (pollution > TUNING.sicknessAbovePollution) return '😖'
   if (fish.activity.kind === 'court') return '🥰'
   if (fish.activity.kind === 'distress') return '😰'
   return '😊'
@@ -170,22 +173,25 @@ export function buildHudSnapshot(
     waterQuality: describeWater(sim.worstPollution(), previousWater),
     worstPollution: sim.worstPollution(),
     shopItems: sim.shopItems(),
-    residents: fishEntities.map((entity) => ({
-      id: entity.id,
-      name: entity.fish.name,
-      hue: entity.fish.genome.hue,
-      saturation: entity.fish.genome.saturation,
-      weightGrams: entity.fish.weight,
-      mood: describeMood(entity.fish),
-      moodEmoji: moodEmoji(entity.fish),
-    })),
+    residents: fishEntities.map((entity) => {
+      const pollution = pollutionAt(state.water, entity.position)
+      return {
+        id: entity.id,
+        name: entity.fish.name,
+        hue: entity.fish.genome.hue,
+        saturation: entity.fish.genome.saturation,
+        weightGrams: entity.fish.weight,
+        mood: describeMood(entity.fish, pollution),
+        moodEmoji: moodEmoji(entity.fish, pollution),
+      }
+    }),
     selectedFish: selected?.fish
       ? {
           id: selected.id,
           name: selected.fish.name,
           generation: selected.fish.generation,
           stage: describeStage(selected.fish),
-          mood: describeMood(selected.fish),
+          mood: describeMood(selected.fish, pollutionAt(state.water, selected.position)),
           weightGrams: selected.fish.weight,
           age: formatAge(selected.fish.ageSeconds),
           origin: selected.fish.parents ? 'hatched' : 'arrived',
