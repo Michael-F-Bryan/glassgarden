@@ -24,5 +24,6 @@ npm run build
 
 - [Direction interview](docs/INTERVIEW.md)
 - [Creative handoff interview](docs/FIRST-PLAYABLE-INTERVIEW.md)
+- [Claude Code kickoff prompt](docs/CLAUDE-CODE-KICKOFF-PROMPT.md)
 
 Pushes to `main` build the static export and deploy it to GitHub Pages.
