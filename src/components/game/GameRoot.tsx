@@ -166,7 +166,6 @@ export default function GameRoot() {
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [tool, setToolState] = useState<Tool>('feed')
-  const [shopOpen, setShopOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [awaySummary, setAwaySummary] = useState<OfflineSummary | null>(null)
 
@@ -330,7 +329,6 @@ export default function GameRoot() {
     const sim = simRef.current
     if (!sim) return
     setHelpOpen(false)
-    setShopOpen(false)
     const point = toLogical(event)
     const fish = sim.fishAt(point.x, point.y)
     if (fish) {
@@ -391,7 +389,6 @@ export default function GameRoot() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       setHelpOpen(false)
-      setShopOpen(false)
       selectedFishRef.current = undefined
       refreshHudRef.current()
     }
@@ -401,37 +398,30 @@ export default function GameRoot() {
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,_#12303e,_#0a1a24_65%)] p-4 text-slate-100">
-      <div className="flex w-full max-w-[min(1720px,calc((100svh-9rem)*16/9))] items-end justify-between px-1">
+      <div className="flex w-full max-w-[min(1720px,calc((100svh-7rem)*16/9+21rem))] items-end justify-between px-1">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-cyan-100">Glassgarden</h1>
           <p className="text-xs text-cyan-300/70">a quiet aquarium that grows around your care</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div
-            className="rounded-full border border-amber-200/20 bg-amber-950/40 px-4 py-1.5 text-sm font-medium text-amber-200 tabular-nums"
-            data-testid="coins"
-          >
-            ◉ {hud.coins.toLocaleString()}
-            <span className="ml-2 text-xs text-amber-200/60">
-              +{hud.incomePerSecond.toFixed(2)}/s
-            </span>
-          </div>
-          <button
-            type="button"
-            data-testid="shop-toggle"
-            onClick={() => setShopOpen((open) => !open)}
-            className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${
-              shopOpen
-                ? 'border-cyan-300/60 bg-cyan-400/20 text-cyan-100'
-                : 'border-cyan-200/20 bg-cyan-950/40 text-cyan-200 hover:bg-cyan-900/40'
-            }`}
-          >
-            Shop
-          </button>
+        <div
+          className="rounded-full border border-amber-200/20 bg-amber-950/40 px-4 py-1.5 text-sm font-medium text-amber-200 tabular-nums"
+          data-testid="coins"
+        >
+          ◉ {hud.coins.toLocaleString()}
+          <span className="ml-2 text-xs text-amber-200/60">
+            +{hud.incomePerSecond.toFixed(2)}/s
+          </span>
         </div>
       </div>
 
-      <div className="relative w-full max-w-[min(1720px,calc((100svh-9rem)*16/9))] overflow-hidden rounded-2xl border border-cyan-100/15 bg-slate-950 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+      <div
+        className="grid w-full max-w-[min(1720px,calc((100svh-7rem)*16/9+21rem))] items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]"
+        data-layout="tank-with-shop-sidebar"
+      >
+      <div
+        className="relative min-w-0 overflow-hidden rounded-2xl border border-cyan-100/15 bg-slate-950 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+        data-testid="tank-shell"
+      >
         <canvas
           ref={canvasRef}
           className="block aspect-[16/9] w-full"
@@ -453,15 +443,15 @@ export default function GameRoot() {
         )}
 
         <div
-          className={`pointer-events-none absolute inset-x-0 flex flex-col items-center gap-2 px-4 ${
-            hud.criticalNames.length > 0 && !hud.gameOver ? 'top-16' : 'top-3'
-          }`}
+          className="pointer-events-none absolute bottom-3 left-3 z-20 flex w-[min(28rem,calc(100%-1.5rem))] flex-col items-start gap-2"
+          data-testid="toast-stack"
+          data-ui-anchor="bottom-left"
         >
           {visibleToasts.map((toast) => (
             <div
               key={toast.key}
               data-testid={`toast-${toast.tone}`}
-              className={`pointer-events-none max-w-xl rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-top-2 duration-300 ${
+              className={`pointer-events-none max-w-full rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-bottom-2 duration-300 ${
                 toast.tone === 'development'
                   ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
                   : toast.tone === 'warning'
@@ -475,7 +465,11 @@ export default function GameRoot() {
           ))}
         </div>
 
-        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+        <div
+          className="absolute top-3 left-3 z-20 flex items-center gap-2"
+          data-testid="tool-palette"
+          data-ui-anchor="top-left"
+        >
           <button
             type="button"
             onClick={() => setTool('feed')}
@@ -555,54 +549,9 @@ export default function GameRoot() {
           </div>
         )}
 
-        {shopOpen && (
-          <div
-            className="absolute top-3 right-3 w-80 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-4 shadow-2xl backdrop-blur"
-            data-testid="shop-panel"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold tracking-wide text-cyan-100 uppercase">Shop</h2>
-              <button
-                type="button"
-                onClick={() => setShopOpen(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                ✕
-              </button>
-            </div>
-            {hud.shopItems.length === 0 ? (
-              <p className="text-sm text-slate-400">
-                Nothing for sale just yet. The shop takes an interest in tanks that are going
-                places.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {hud.shopItems.map((item) => (
-                  <li key={item.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-slate-100">{item.label}</span>
-                      <span className="text-sm text-amber-200 tabular-nums">◉ {item.cost}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-400">{item.description}</p>
-                    <button
-                      type="button"
-                      data-testid={`buy-${item.id}`}
-                      disabled={!item.affordable}
-                      onClick={() => buy(item.id)}
-                      className="mt-2 w-full rounded-lg border border-cyan-300/30 bg-cyan-400/15 px-3 py-1.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/25 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-800/40 disabled:text-slate-500"
-                    >
-                      {item.affordable ? 'Buy' : 'Not enough coins'}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
         {hud.selectedFish && (
           <div
-            className="absolute bottom-16 left-3 w-72 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-4 shadow-2xl backdrop-blur"
+            className="absolute right-3 bottom-14 w-72 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-4 shadow-2xl backdrop-blur"
             data-testid="fish-inspector"
           >
             <div className="mb-1 flex items-center justify-between">
@@ -703,6 +652,45 @@ export default function GameRoot() {
             </div>
           </div>
         )}
+      </div>
+      <aside
+        className="min-h-56 rounded-2xl border border-cyan-100/15 bg-slate-950/80 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] lg:min-h-0"
+        data-testid="shop-panel"
+        data-ui-anchor="right-sidebar"
+      >
+        <div className="mb-4 border-b border-cyan-100/10 pb-3">
+          <p className="text-[0.65rem] font-semibold tracking-[0.2em] text-cyan-300/55 uppercase">
+            Tank supplies
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-cyan-100">Shop</h2>
+        </div>
+        {hud.shopItems.length === 0 ? (
+          <p className="text-sm leading-6 text-slate-400">
+            Nothing for sale just yet. The shop takes an interest in tanks that are going places.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {hud.shopItems.map((item) => (
+              <li key={item.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="font-medium text-slate-100">{item.label}</span>
+                  <span className="shrink-0 text-sm text-amber-200 tabular-nums">◉ {item.cost}</span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-slate-400">{item.description}</p>
+                <button
+                  type="button"
+                  data-testid={`buy-${item.id}`}
+                  disabled={!item.affordable}
+                  onClick={() => buy(item.id)}
+                  className="mt-3 w-full rounded-lg border border-cyan-300/30 bg-cyan-400/15 px-3 py-1.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/25 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-800/40 disabled:text-slate-500"
+                >
+                  {item.affordable ? 'Buy' : 'Not enough coins'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
       </div>
     </main>
   )
