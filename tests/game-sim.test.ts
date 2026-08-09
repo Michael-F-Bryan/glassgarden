@@ -281,6 +281,7 @@ describe('away time', () => {
     const summary = sim.advanceOffline(24 * 3600)
     expect(summary.simulatedSeconds).toBe(TUNING.offlineMaxSimSeconds)
     expect(summary.coinsEarned).toBeGreaterThan(0)
+    expect(sim.drainEvents().some((e) => e.type === 'awaySummary')).toBe(true)
     expect([...sim.state.world.with('fish')]).toHaveLength(1)
     expect(onlyFish(sim).fish.hunger).toBeLessThanOrEqual(TUNING.offlineHungerCeiling)
     expect(sim.state.gameOver).toBe(false)

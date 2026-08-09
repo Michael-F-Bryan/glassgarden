@@ -94,12 +94,21 @@ export type Entity = {
   remains?: { fish: Fish; expiresAt: number }
 }
 
+export type OfflineSummary = {
+  awaySeconds: number
+  simulatedSeconds: number
+  coinsEarned: number
+  births: string[]
+  developments: string[]
+}
+
 /** One-shot notifications the UI drains each frame. */
 export type GameEvent =
   | { type: 'toast'; tone: 'development' | 'info' | 'warning'; message: string }
   | { type: 'death'; name: string }
   | { type: 'birth'; name: string }
   | { type: 'gameOver' }
+  | { type: 'awaySummary'; summary: OfflineSummary }
 
 export type Unlocks = {
   /** Development milestones already announced, so each toast fires once. */

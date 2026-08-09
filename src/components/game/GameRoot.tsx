@@ -145,17 +145,14 @@ export default function GameRoot() {
     if (!canvas) return
 
     let sim: GameSim | null = null
-    let pendingAwaySummary: OfflineSummary | null = null
     const stored = window.localStorage.getItem(SAVE_KEY)
     if (stored) {
       const save = parseSave(stored)
       if (save) {
         sim = new GameSim(deserialize(save))
         const awaySeconds = (Date.now() - save.savedAtMs) / 1000
-        if (awaySeconds > 90) {
-          const summary = sim.advanceOffline(awaySeconds)
-          if (summary.simulatedSeconds > 10) pendingAwaySummary = summary
-        }
+        // Emits an awaySummary event delivered on the first frame.
+        if (awaySeconds > 90) sim.advanceOffline(awaySeconds)
       }
     }
     if (!sim) sim = GameSim.fresh(Date.now() >>> 0)
@@ -187,6 +184,10 @@ export default function GameRoot() {
 
     const applyEvents = (events: GameEvent[]) => {
       if (events.length === 0) return
+      const summaryEvent = events.findLast((event) => event.type === 'awaySummary')
+      if (summaryEvent && summaryEvent.type === 'awaySummary') {
+        setAwaySummary(summaryEvent.summary)
+      }
       const now = performance.now()
       setToasts((current) => {
         const additions = events
@@ -203,17 +204,12 @@ export default function GameRoot() {
 
     const frame = (nowMs: number) => {
       raf = requestAnimationFrame(frame)
-      if (pendingAwaySummary) {
-        setAwaySummary(pendingAwaySummary)
-        pendingAwaySummary = null
-      }
       if (lastFrameMs === undefined) lastFrameMs = nowMs
       const dt = (nowMs - lastFrameMs) / 1000
       lastFrameMs = nowMs
 
       if (dt > 90) {
-        const summary = sim!.advanceOffline(dt)
-        if (summary.simulatedSeconds > 10) setAwaySummary(summary)
+        sim!.advanceOffline(dt)
       } else {
         sim!.step(dt * simSpeed, document.visibilityState === 'visible')
       }

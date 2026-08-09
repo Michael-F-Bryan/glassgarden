@@ -1,5 +1,12 @@
 import { generateName, randomGenome } from './genome'
-import { fishPrice, TANK, TUNING, type Entity, type GameEvent } from './model'
+import {
+  fishPrice,
+  TANK,
+  TUNING,
+  type Entity,
+  type GameEvent,
+  type OfflineSummary,
+} from './model'
 import {
   addEntity,
   createFreshGame,
@@ -13,13 +20,7 @@ import {
 import { stepTick } from './systems'
 import { clearPollutionNear } from './water'
 
-export type OfflineSummary = {
-  awaySeconds: number
-  simulatedSeconds: number
-  coinsEarned: number
-  births: string[]
-  developments: string[]
-}
+export type { OfflineSummary } from './model'
 
 export type ShopItem = {
   id: 'siphon' | 'fish' | 'starterFish'
@@ -91,13 +92,19 @@ export class GameSim {
     for (const message of developments) {
       emit(this.state, { type: 'toast', tone: 'development', message })
     }
-    return {
+    const summary: OfflineSummary = {
       awaySeconds,
       simulatedSeconds,
       coinsEarned: this.state.coins - coinsBefore,
       births,
       developments,
     }
+    // Delivered as an event (and therefore persisted with pending events) so
+    // the "while you were away" panel survives an immediate remount or reload.
+    if (summary.simulatedSeconds > 10) {
+      emit(this.state, { type: 'awaySummary', summary })
+    }
+    return summary
   }
 
   drainEvents(): GameEvent[] {
