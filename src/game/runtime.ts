@@ -5,10 +5,10 @@ import {
   type GlassgardenDevTools,
 } from './devtools'
 import { buildHudSnapshot, EMPTY_HUD, type HudSnapshot, type WaterTier } from './hud'
-import type { GameEvent, OfflineSummary, Vec2 } from './model'
+import type { OfflineSummary, UiNotification, Vec2 } from './model'
 import { createCanvasPresenter } from './render'
 import { hydrate } from './save'
-import { GameSim } from './sim'
+import { GameSim, type AdvanceResult, type ShopOfferId } from './sim'
 import type { GameReadModel } from './state'
 
 export type Tool = 'feed' | 'siphon'
@@ -80,7 +80,7 @@ export type GameRuntime = {
   replace(next: GameSim): void
   newGame(): void
   setTool(tool: Tool): void
-  buy(itemId: 'siphon' | 'feeder' | 'fish' | 'starterFish'): void
+  buy(itemId: ShopOfferId): void
   selectFish(fishId: number | undefined): void
   pointerDown(point: Vec2): void
   /** Returns whether a fish is under the pointer, for cursor styling. */
@@ -123,12 +123,16 @@ type Gesture = {
 
 type Toast = ToastView & { expiresAt: number }
 
-/** Boot-time notices queued for the first frame's event delivery. Module
- * scope, not runtime scope: in dev, React strict mode stops and restarts the
- * runtime after the first start has already consumed an invalid save and
- * autosaved a fresh valid one, so a runtime-local queue would silently drop
- * the recovery warning the player most needs to see. */
-const pendingBootEvents: GameEvent[] = []
+/** Boot outcomes queued for the first frame. Module scope, not runtime
+ * scope: in dev, React strict mode stops and restarts the runtime after the
+ * first start has already consumed the save (advancing away time, or
+ * replacing an invalid payload with a fresh autosave), so a runtime-local
+ * value would silently drop the away summary or the recovery warning. Only
+ * the frame loop consumes this, and RAF never fires on the discarded mount. */
+const bootHandoff: { notifications: UiNotification[]; awaySummary: OfflineSummary | null } = {
+  notifications: [],
+  awaySummary: null,
+}
 
 export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
   let sim: GameSim | null = null
@@ -183,11 +187,17 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     toasts = toasts.slice(-12)
   }
 
-  const projectEvents = (events: GameEvent[]) => {
-    for (const event of events) {
-      if (event.type === 'awaySummary') awaySummary = event.summary
-      if (event.type === 'toast') pushToast(event.tone, event.message)
+  const applyAdvance = (result: AdvanceResult) => {
+    for (const notification of result.notifications) {
+      pushToast(notification.tone, notification.message)
     }
+  }
+
+  /** Announce an offline catch-up: the panel for a real absence, plus the
+   * developments re-told as toasts so they are not missed. */
+  const applySummary = (summary: OfflineSummary) => {
+    if (summary.simulatedSeconds > 10) awaySummary = summary
+    for (const message of summary.developments) pushToast('development', message)
   }
 
   const save = () => {
@@ -206,11 +216,14 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
 
   const tryDropPellet = (x: number): boolean => {
     if (!sim || paused) return false
-    if (sim.dropFood(x)) {
+    const result = sim.dropFood(x)
+    if (result.ok) {
       presenter?.notifyFeed(x)
       return true
     }
-    if (!sim.read.gameOver && deps.monotonicNow() - affordWarnAtMs > 5000) {
+    // Game over is announced by its own overlay; only poverty warrants a
+    // (throttled) nudge.
+    if (result.reason === 'unaffordable' && deps.monotonicNow() - affordWarnAtMs > 5000) {
       affordWarnAtMs = deps.monotonicNow()
       pushToast('warning', 'Not enough coins for food — they trickle in as your fish grow.')
     }
@@ -263,12 +276,18 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     // seconds runs the slowed, capped away-time catch-up; anything shorter
     // is simulated in full at the fixed tick — nothing is discarded.
     if (!paused && sim) {
-      if (dt > 5) {
-        sim.advanceOffline(dt)
-      } else {
-        sim.advanceElapsed(dt * speed, deps.visible() ? 'visible' : 'background')
+      if (bootHandoff.awaySummary) {
+        awaySummary = bootHandoff.awaySummary
+        bootHandoff.awaySummary = null
       }
-      projectEvents([...pendingBootEvents.splice(0), ...sim.drainEvents()])
+      for (const notification of bootHandoff.notifications.splice(0)) {
+        pushToast(notification.tone, notification.message)
+      }
+      if (dt > 5) {
+        applySummary(sim.advanceOffline(dt))
+      } else {
+        applyAdvance(sim.advanceElapsed(dt * speed, deps.visible() ? 'visible' : 'background'))
+      }
       pulseGesture(nowMs)
     }
 
@@ -298,15 +317,20 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       if (loaded.kind === 'loaded') {
         sim = new GameSim(hydrate(loaded.document))
         const awaySeconds = (deps.now() - loaded.document.savedAtMs) / 1000
-        // Emits an awaySummary event delivered on the first frame.
-        if (awaySeconds > 90) sim.advanceOffline(awaySeconds)
+        if (awaySeconds > 90) {
+          // Handed to the first frame rather than applied here — see bootHandoff.
+          const summary = sim.advanceOffline(awaySeconds)
+          if (summary.simulatedSeconds > 10) bootHandoff.awaySummary = summary
+          for (const message of summary.developments) {
+            bootHandoff.notifications.push({ tone: 'development', message })
+          }
+        }
       } else {
         sim = GameSim.fresh(deps.now() >>> 0)
         if (loaded.kind !== 'empty') {
           // loadFromStorage already preserved the unreadable payload under
           // the recovery key; say so instead of pretending this is a first visit.
-          pendingBootEvents.push({
-            type: 'toast',
+          bootHandoff.notifications.push({
             tone: 'warning',
             message: `Your saved tank could not be read, so this one starts fresh. The old data is kept in your browser under “${RECOVERY_KEY}”.`,
           })
@@ -324,6 +348,18 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
           getSpeed: () => speed,
           setSpeed: (next) => {
             speed = next
+          },
+          advanceElapsed: (seconds) => {
+            if (!sim) return
+            applyAdvance(sim.advanceElapsed(seconds, 'visible'))
+            publish()
+          },
+          simulateAway: (seconds) => {
+            if (!sim) throw new Error('runtime not started')
+            const summary = sim.advanceOffline(seconds)
+            applySummary(summary)
+            publish()
+            return summary
           },
           save,
         })
@@ -379,7 +415,12 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
 
     buy(itemId) {
       if (!sim || paused) return
-      sim.buy(itemId)
+      const result = sim.buy(itemId)
+      if (result.ok) {
+        for (const notification of result.notifications) {
+          pushToast(notification.tone, notification.message)
+        }
+      }
       publish()
     },
 

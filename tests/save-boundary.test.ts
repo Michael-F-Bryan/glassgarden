@@ -52,7 +52,7 @@ describe('decodeSave: regressions from the persistence boundary probe', () => {
     expect(result.document.nextEntityId).toBeGreaterThan(fishId)
 
     const resumed = new GameSim(hydrate(result.document))
-    expect(resumed.dropFood(600)).toBe(true)
+    expect(resumed.dropFood(600).ok).toBe(true)
     expect([...resumed.read.world.entities].filter((entity) => entity.id === fishId)).toHaveLength(1)
     expect(resumed.read.byId.get(fishId)?.fish).toBeDefined()
   })
@@ -129,7 +129,7 @@ describe('round-trip and migration determinism', () => {
   test('serialize -> JSON -> decodeSave -> hydrate -> serialize is deterministic and equal', () => {
     const sim = GameSim.fresh(200)
     sim.dropFood(600)
-    for (let t = 0; t < 30; t += 0.25) sim.step(0.25, true)
+    for (let t = 0; t < 30; t += 0.25) sim.advanceElapsed(0.25, 'visible')
 
     const saved = sim.toSave(5_000)
     const result = decodeSave(JSON.stringify(saved))
@@ -140,10 +140,22 @@ describe('round-trip and migration determinism', () => {
     expect(serialize(resumed, 5_000)).toEqual(saved)
   })
 
+  test('a legacy save carrying pendingEvents is accepted, and the field is dropped', () => {
+    const save = GameSim.fresh(204).toSave(1_000)
+    const legacyRaw = JSON.stringify({
+      ...save,
+      pendingEvents: [{ type: 'toast', tone: 'info', message: 'stale' }],
+    })
+
+    const result = decodeSave(legacyRaw)
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+    expect(result.document).not.toHaveProperty('pendingEvents')
+  })
+
   test('a historical minimal V1 fixture with no journal, feeder fields, or fedOnce migrates with documented defaults', () => {
     const save = GameSim.fresh(201).toSave(1_000) as Partial<SaveFile>
     delete save.journal
-    delete save.pendingEvents
     delete save.retiredNames
     delete save.feederLastDropAt
     delete save.ownsFeeder
@@ -155,7 +167,6 @@ describe('round-trip and migration determinism', () => {
     if (result.kind !== 'loaded') return
 
     expect(result.document.journal).toEqual([])
-    expect(result.document.pendingEvents).toEqual([])
     expect(result.document.retiredNames).toEqual([])
     expect(result.document.feederLastDropAt).toBe(0)
     expect(result.document.ownsFeeder).toBe(false)

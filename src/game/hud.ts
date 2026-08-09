@@ -1,5 +1,5 @@
 import { TUNING, type Fish, type JournalKind } from './model'
-import type { GameSim, ShopItem } from './sim'
+import type { GameSim, ShopOfferId } from './sim'
 import { pollutionAt } from './water'
 
 /**
@@ -22,7 +22,7 @@ export type HudSnapshot = {
   worstPollution: number
   /** Tank Journal entries, newest first, ages pre-formatted for display. */
   journal: { kind: JournalKind; message: string; age: string }[]
-  shopItems: ShopItem[]
+  shopItems: ShopItemView[]
   residents: {
     id: number
     name: string
@@ -45,6 +45,38 @@ export type HudSnapshot = {
     hatchedInMurkyWater: boolean
   }
 }
+
+/** A shop offer dressed for display. The sim provides the domain offer
+ * (id, cost, availability, reason); the copy lives here, with the UI. */
+export type ShopItemView = {
+  id: ShopOfferId
+  label: string
+  description: string
+  cost: number
+  affordable: boolean
+}
+
+const SHOP_COPY: Record<ShopOfferId, { label: string; description: string }> = {
+  siphon: {
+    label: 'Gravel siphon',
+    description: 'Clean up droppings and spoiled food before they foul the water.',
+  },
+  feeder: {
+    label: 'Drip feeder',
+    description: 'Drops a pellet for hungry fish while you are busy elsewhere. Uses your coins.',
+  },
+  fish: {
+    label: 'Young glimmerfin',
+    description: 'A new resident for the tank. Each one is harder to source than the last.',
+  },
+  starterFish: {
+    label: 'Starter glimmerfin',
+    description: 'Begin again. Your coins and equipment remain yours.',
+  },
+}
+
+const FISH_AT_CAPACITY_COPY =
+  'The tank is at capacity — no responsible shop would add another fish.'
 
 export const EMPTY_HUD: HudSnapshot = {
   coins: 0,
@@ -160,7 +192,13 @@ export function buildHudSnapshot(
         message: entry.message,
         age: formatAge(state.time - entry.atSim),
       })),
-    shopItems: sim.shopItems(),
+    shopItems: sim.shopOffers().map((offer) => ({
+      id: offer.id,
+      label: SHOP_COPY[offer.id].label,
+      description: offer.atCapacity ? FISH_AT_CAPACITY_COPY : SHOP_COPY[offer.id].description,
+      cost: offer.cost,
+      affordable: offer.affordable,
+    })),
     residents: fishEntities.map((entity) => {
       const pollution = pollutionAt(state.water, entity.position)
       return {

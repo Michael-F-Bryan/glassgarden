@@ -1,5 +1,5 @@
-import { TANK, type GameEvent, type OfflineSummary, type Unlocks } from './model'
-import { GameSim, type ShopItem } from './sim'
+import { TANK, type OfflineSummary, type Unlocks } from './model'
+import { GameSim, type ShopOffer } from './sim'
 import { addEntity, createFreshGame } from './state'
 
 export const DEV_TOOLS_VERSION = 1 as const
@@ -50,8 +50,7 @@ export type DevSnapshot = {
     worstPollution: number
     meanPollution: number
   }
-  shop: ShopItem[]
-  pendingEvents: GameEvent[]
+  shop: ShopOffer[]
 }
 
 export type GlassgardenDevTools = {
@@ -70,11 +69,16 @@ declare global {
   }
 }
 
+/** Operations the runtime lends to the dev tools. Advancing time goes
+ * through the runtime so notifications and away summaries reach the page
+ * exactly as they would in normal play. */
 type DevToolsBindings = {
   getSim(): GameSim
   replaceSim(sim: GameSim): void
   getSpeed(): number
   setSpeed(speed: number): void
+  advanceElapsed(seconds: number): void
+  simulateAway(seconds: number): OfflineSummary
   save(): void
 }
 
@@ -126,8 +130,7 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
       worstPollution: Math.max(...cells),
       meanPollution,
     },
-    shop: sim.shopItems().map((item) => ({ ...item })),
-    pendingEvents: state.events.map((event) => structuredClone(event)),
+    shop: sim.shopOffers().map((offer) => ({ ...offer })),
   }
 }
 
@@ -182,16 +185,15 @@ export function createGlassgardenDevTools(bindings: DevToolsBindings): Glassgard
       if (!Number.isFinite(seconds) || seconds < 0 || seconds > 3600) {
         throw new RangeError('advance seconds must be between 0 and 3600')
       }
-      const sim = bindings.getSim()
-      sim.advanceElapsed(seconds, 'visible')
+      bindings.advanceElapsed(seconds)
       bindings.save()
-      return createDevSnapshot(sim, bindings.getSpeed())
+      return createDevSnapshot(bindings.getSim(), bindings.getSpeed())
     },
     simulateAway: (seconds) => {
       if (!Number.isFinite(seconds) || seconds < 0) {
         throw new RangeError('away seconds must be a non-negative finite number')
       }
-      const summary = bindings.getSim().advanceOffline(seconds)
+      const summary = bindings.simulateAway(seconds)
       bindings.save()
       return summary
     },

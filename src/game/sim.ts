@@ -5,11 +5,12 @@ import {
   type Entity,
   type GameEvent,
   type OfflineSummary,
+  type StepReport,
+  type UiNotification,
 } from './model'
 import { serialize, type SaveFile } from './save'
 import {
   createFreshGame,
-  emit,
   livingFish,
   recordJournal,
   removeEntity,
@@ -22,8 +23,51 @@ import {
 import { stepTick, type SimulationMode } from './systems'
 import { clearPollutionNear } from './water'
 
-export type { OfflineSummary } from './model'
+export type { OfflineSummary, StepReport, UiNotification } from './model'
 export type { SimulationMode } from './systems'
+
+/** Why a player intent was refused. Exhaustive, so the UI must decide a
+ * presentation for every failure rather than reading mutable state after
+ * the fact. */
+export type ActionFailure = 'gameOver' | 'unaffordable' | 'unowned' | 'unavailable' | 'atCapacity'
+
+export type ActionResult<T = void> =
+  | { ok: true; value: T; notifications: UiNotification[] }
+  | { ok: false; reason: ActionFailure }
+
+/** What one advance returned: facts for aggregation/policy plus the
+ * intentional player-facing notices it produced. */
+export type AdvanceResult = {
+  report: StepReport
+  notifications: UiNotification[]
+}
+
+/** Project the systems' internal event collector into the typed advance
+ * outcome. Exhaustive: a new event variant fails to compile until a policy
+ * decision is made here. */
+function projectEvents(events: GameEvent[]): AdvanceResult {
+  const report: StepReport = { births: [], deaths: [], gameOver: false }
+  const notifications: UiNotification[] = []
+  for (const event of events) {
+    switch (event.type) {
+      case 'toast':
+        notifications.push({ tone: event.tone, message: event.message })
+        break
+      case 'birth':
+        report.births.push(event.name)
+        break
+      case 'death':
+        report.deaths.push(event.name)
+        break
+      case 'gameOver':
+        report.gameOver = true
+        break
+      default:
+        event satisfies never
+    }
+  }
+  return { report, notifications }
+}
 
 /** A tiny guard against floating-point noise near an exact tick boundary,
  * far smaller than any real elapsed-time difference this simulation cares
@@ -32,13 +76,17 @@ export type { SimulationMode } from './systems'
  * below vs. above a tick boundary and silently disagree by one tick. */
 const TICK_BOUNDARY_EPSILON = 1e-9
 
-export type ShopItem = {
+/** A domain shop offer: what is purchasable and why it might not be. Labels
+ * and descriptions are the UI's to own (see hud.ts). */
+export type ShopOffer = {
   id: 'siphon' | 'feeder' | 'fish' | 'starterFish'
-  label: string
-  description: string
   cost: number
   affordable: boolean
+  /** Fish offer only: the tank cannot responsibly hold another resident. */
+  atCapacity?: boolean
 }
+
+export type ShopOfferId = ShopOffer['id']
 
 /**
  * Facade over the ECS state: the runtime advances it from the frame loop,
@@ -86,7 +134,7 @@ export class GameSim {
    * so equal elapsed time always reaches the same state regardless of how
    * a caller chops it up.
    */
-  advanceElapsed(seconds: number, mode: SimulationMode): void {
+  advanceElapsed(seconds: number, mode: SimulationMode): AdvanceResult {
     if (!Number.isFinite(seconds) || seconds < 0) {
       throw new RangeError(
         `advanceElapsed: seconds must be a finite, non-negative number, got ${seconds}`,
@@ -104,20 +152,14 @@ export class GameSim {
       stepTick(this.state, quantum, mode)
     }
     this.accumulator -= ticks * quantum
-  }
-
-  /**
-   * @deprecated Call `advanceElapsed(realDt, visible ? 'visible' : 'background')` directly.
-   */
-  step(realDt: number, visible: boolean): void {
-    this.advanceElapsed(realDt, visible ? 'visible' : 'background')
+    return projectEvents(this.state.events.splice(0, this.state.events.length))
   }
 
   /**
    * Catch up after the page was closed or hidden: slowed and capped, with
-   * deterioration clamped and death impossible. Returns a summary for the
-   * "while you were away" panel; development toasts are re-queued so they
-   * are announced when the player is back.
+   * deterioration clamped and death impossible. Returns the summary for the
+   * "while you were away" panel directly — nothing round-trips through a
+   * queue. The caller decides how to announce it.
    */
   advanceOffline(awaySeconds: number): OfflineSummary {
     const simulatedSeconds = Math.min(
@@ -125,32 +167,18 @@ export class GameSim {
       TUNING.offlineMaxSimSeconds,
     )
     const coinsBefore = this.state.coins
-    const pendingBefore = this.state.events.splice(0, this.state.events.length)
-
-    this.advanceElapsed(simulatedSeconds, 'offline')
-
-    const awayEvents = this.state.events.splice(0, this.state.events.length)
-    const births = awayEvents.filter((e) => e.type === 'birth').map((e) => e.name)
-    const developments = awayEvents
-      .filter((e): e is Extract<GameEvent, { type: 'toast' }> => e.type === 'toast')
-      .filter((e) => e.tone === 'development')
-      .map((e) => e.message)
-    this.state.events.push(...pendingBefore)
-    for (const message of developments) {
-      emit(this.state, { type: 'toast', tone: 'development', message })
-    }
+    const { report, notifications } = this.advanceElapsed(simulatedSeconds, 'offline')
     const summary: OfflineSummary = {
       awaySeconds,
       simulatedSeconds,
       coinsEarned: this.state.coins - coinsBefore,
-      births,
-      developments,
+      births: report.births,
+      developments: notifications
+        .filter((notification) => notification.tone === 'development')
+        .map((notification) => notification.message),
       companion: livingFish(this.state)[0]?.fish!.name,
     }
-    // Delivered as an event (and therefore persisted with pending events) so
-    // the "while you were away" panel survives an immediate remount or reload.
     if (summary.simulatedSeconds > 10) {
-      emit(this.state, { type: 'awaySummary', summary })
       recordJournal(
         this.state,
         'away',
@@ -158,10 +186,6 @@ export class GameSim {
       )
     }
     return summary
-  }
-
-  drainEvents(): GameEvent[] {
-    return this.state.events.splice(0, this.state.events.length)
   }
 
   /** Worst water cell, for the HUD's diegetic quality pill. */
@@ -174,22 +198,23 @@ export class GameSim {
     return TUNING.incomeFloor + TUNING.incomePerGram * totalWeight
   }
 
-  /** Drop a food pellet into the water near x. Returns false if unaffordable. */
-  dropFood(x: number): boolean {
-    if (this.state.gameOver || this.state.coins < TUNING.pelletCost) return false
+  /** Drop a food pellet into the water near x. */
+  dropFood(x: number): ActionResult {
+    if (this.state.gameOver) return { ok: false, reason: 'gameOver' }
+    if (this.state.coins < TUNING.pelletCost) return { ok: false, reason: 'unaffordable' }
     this.state.coins -= TUNING.pelletCost
     this.state.unlocks.fedOnce = true
     spawnPellet(this.state, x)
-    return true
+    return { ok: true, value: undefined, notifications: [] }
   }
 
   /**
    * Use the gravel siphon at a point: removes waste and spoiled food within
-   * reach and pulls some green out of the local water. Returns how many bits
-   * of debris were removed, or undefined when the player has no siphon.
+   * reach and pulls some green out of the local water. The value is how many
+   * bits of debris were removed.
    */
-  siphonAt(x: number, y: number): number | undefined {
-    if (!this.state.ownsSiphon) return undefined
+  siphonAt(x: number, y: number): ActionResult<number> {
+    if (!this.state.ownsSiphon) return { ok: false, reason: 'unowned' }
     let removed = 0
     const debris = [
       ...this.state.world.with('waste'),
@@ -203,27 +228,22 @@ export class GameSim {
       }
     }
     clearPollutionNear(this.state.water, { x, y }, TUNING.siphonPollutionClear)
-    return removed
+    return { ok: true, value: removed, notifications: [] }
   }
 
-  shopItems(): ShopItem[] {
-    const items: ShopItem[] = []
+  shopOffers(): ShopOffer[] {
+    const offers: ShopOffer[] = []
     const coins = this.state.coins
     if (this.state.unlocks.siphonInShop && !this.state.ownsSiphon) {
-      items.push({
+      offers.push({
         id: 'siphon',
-        label: 'Gravel siphon',
-        description: 'Clean up droppings and spoiled food before they foul the water.',
         cost: TUNING.siphonCost,
         affordable: coins >= TUNING.siphonCost,
       })
     }
     if (this.state.unlocks.feederInShop && !this.state.ownsFeeder) {
-      items.push({
+      offers.push({
         id: 'feeder',
-        label: 'Drip feeder',
-        description:
-          'Drops a pellet for hungry fish while you are busy elsewhere. Uses your coins.',
         cost: TUNING.feederCost,
         affordable: coins >= TUNING.feederCost,
       })
@@ -233,49 +253,45 @@ export class GameSim {
       const population =
         this.state.world.with('fish').entities.length + this.state.world.with('egg').entities.length
       const atCapacity = population >= TUNING.maxPopulation
-      items.push({
+      offers.push({
         id: 'fish',
-        label: 'Young glimmerfin',
-        description: atCapacity
-          ? 'The tank is at capacity — no responsible shop would add another fish.'
-          : 'A new resident for the tank. Each one is harder to source than the last.',
         cost,
         affordable: !atCapacity && coins >= cost,
+        atCapacity,
       })
     }
     if (this.state.gameOver) {
-      items.push({
+      offers.push({
         id: 'starterFish',
-        label: 'Starter glimmerfin',
-        description: 'Begin again. Your coins and equipment remain yours.',
         cost: TUNING.starterFishCost,
         affordable: coins >= TUNING.starterFishCost,
       })
     }
-    return items
+    return offers
   }
 
-  buy(itemId: ShopItem['id']): boolean {
-    const item = this.shopItems().find((candidate) => candidate.id === itemId)
-    if (!item || !item.affordable) return false
-    this.state.coins -= item.cost
-    if (item.id === 'siphon') {
+  buy(offerId: ShopOfferId): ActionResult {
+    const offer = this.shopOffers().find((candidate) => candidate.id === offerId)
+    if (!offer) return { ok: false, reason: 'unavailable' }
+    if (offer.atCapacity) return { ok: false, reason: 'atCapacity' }
+    if (!offer.affordable) return { ok: false, reason: 'unaffordable' }
+    this.state.coins -= offer.cost
+    const notifications: UiNotification[] = []
+    if (offer.id === 'siphon') {
       this.state.ownsSiphon = true
-      emit(this.state, {
-        type: 'toast',
+      notifications.push({
         tone: 'info',
         message: 'Gravel siphon acquired. Select it, then hold and sweep the sand to clean.',
       })
-      recordJournal(this.state, 'purchase', `Bought a gravel siphon for ◉${item.cost}.`)
-    } else if (item.id === 'feeder') {
+      recordJournal(this.state, 'purchase', `Bought a gravel siphon for ◉${offer.cost}.`)
+    } else if (offer.id === 'feeder') {
       this.state.ownsFeeder = true
-      emit(this.state, {
-        type: 'toast',
+      notifications.push({
         tone: 'info',
         message: 'Drip feeder installed above the tank. It spends a coin per pellet.',
       })
-      recordJournal(this.state, 'purchase', `Installed a drip feeder for ◉${item.cost}.`)
-    } else if (item.id === 'fish') {
+      recordJournal(this.state, 'purchase', `Installed a drip feeder for ◉${offer.cost}.`)
+    } else if (offer.id === 'fish') {
       this.state.fishPurchased += 1
       const genome = randomGenome(this.state.rng, this.state.rng.range(18, 34))
       const fish = spawnFish(this.state, {
@@ -285,12 +301,8 @@ export class GameSim {
         generation: 1,
         hunger: 0.15, // arrives well fed; a crisis on arrival reads as a rip-off
       })
-      emit(this.state, {
-        type: 'toast',
-        tone: 'info',
-        message: `${fish.fish!.name} has joined the tank.`,
-      })
-      recordJournal(this.state, 'arrival', `${fish.fish!.name} joined the tank for ◉${item.cost}.`)
+      notifications.push({ tone: 'info', message: `${fish.fish!.name} has joined the tank.` })
+      recordJournal(this.state, 'arrival', `${fish.fish!.name} joined the tank for ◉${offer.cost}.`)
     } else {
       this.state.gameOver = false
       const fish = spawnFish(this.state, {
@@ -300,14 +312,10 @@ export class GameSim {
         generation: 1,
         hunger: 0.5,
       })
-      emit(this.state, {
-        type: 'toast',
-        tone: 'info',
-        message: `${fish.fish!.name} settles into the quiet tank.`,
-      })
+      notifications.push({ tone: 'info', message: `${fish.fish!.name} settles into the quiet tank.` })
       recordJournal(this.state, 'arrival', `${fish.fish!.name} settled into the quiet tank — a new beginning.`)
     }
-    return true
+    return { ok: true, value: undefined, notifications }
   }
 
   fishAt(x: number, y: number): Entity | undefined {

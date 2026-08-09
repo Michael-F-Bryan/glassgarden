@@ -12,7 +12,7 @@ import {
   type GameView,
   type Tool,
 } from '@/game/runtime'
-import type { ShopItem } from '@/game/sim'
+import type { ShopOfferId } from '@/game/sim'
 
 const JOURNAL_GLYPHS: Record<JournalKind, string> = {
   arrival: '🐟',
@@ -83,7 +83,7 @@ export default function GameRoot() {
 
   const setTool = (tool: Tool) => runtimeRef.current?.setTool(tool)
 
-  const buy = (itemId: ShopItem['id']) => runtimeRef.current?.buy(itemId)
+  const buy = (itemId: ShopOfferId) => runtimeRef.current?.buy(itemId)
 
   const closeInspector = () => runtimeRef.current?.selectFish(undefined)
 

@@ -112,13 +112,12 @@ describe('mode contracts', () => {
     const fish = [...sim.read.world.with('fish')][0]
     fish.fish.hunger = 1
 
-    sim.advanceElapsed(400, 'visible')
-    const events = sim.drainEvents()
+    const { report, notifications } = sim.advanceElapsed(400, 'visible')
 
     expect(
-      events.some((e) => e.type === 'toast' && e.tone === 'warning' && /starving/.test(e.message)),
+      notifications.some((n) => n.tone === 'warning' && /starving/.test(n.message)),
     ).toBe(true)
-    expect(events.some((e) => e.type === 'death')).toBe(true)
+    expect(report.deaths.length).toBeGreaterThan(0)
     expect([...sim.read.world.with('fish')]).toHaveLength(0)
     expect(sim.read.gameOver).toBe(true)
   })

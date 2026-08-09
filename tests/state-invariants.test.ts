@@ -74,8 +74,8 @@ describe('construction and growth', () => {
 
     state.unlocks.fishInShop = true
     state.coins = 10_000
-    expect(sim.buy('fish')).toBe(true)
-    expect(sim.buy('fish')).toBe(true)
+    expect(sim.buy('fish').ok).toBe(true)
+    expect(sim.buy('fish').ok).toBe(true)
     assertStateInvariants(state)
 
     sim.advanceElapsed(5, 'visible')
@@ -90,7 +90,7 @@ describe('removal', () => {
     assertStateInvariants(state)
 
     for (const x of [360, 600, 840]) {
-      expect(sim.siphonAt(x, TANK.sandTop - 6)).toBe(1)
+      expect(sim.siphonAt(x, TANK.sandTop - 6)).toMatchObject({ ok: true, value: 1 })
     }
     expect([...state.world.with('waste')]).toHaveLength(0)
     assertStateInvariants(state)

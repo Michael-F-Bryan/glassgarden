@@ -59,12 +59,14 @@ describe('development controls', () => {
       },
       getSpeed: () => 0,
       setSpeed: () => undefined,
+      advanceElapsed: (seconds) => void sim.advanceElapsed(seconds, 'visible'),
+      simulateAway: (seconds) => sim.advanceOffline(seconds),
       save: () => undefined,
     })
 
     tools.simulateAway(3 * 60 * 60)
     const before = tools.snapshot().fish[0]
-    expect(sim.dropFood(before.x + 50)).toBe(true)
+    expect(sim.dropFood(before.x + 50).ok).toBe(true)
 
     const after = tools.advance(12)
     expect(after.fish).toHaveLength(1)
@@ -84,6 +86,8 @@ describe('development controls', () => {
       setSpeed: (next) => {
         speed = next
       },
+      advanceElapsed: (seconds) => void sim.advanceElapsed(seconds, 'visible'),
+      simulateAway: (seconds) => sim.advanceOffline(seconds),
       save: () => {
         saves += 1
       },

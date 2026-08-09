@@ -114,13 +114,30 @@ export type JournalEntry = {
   message: string
 }
 
-/** One-shot notifications the UI drains each frame. */
+/** An intentional player-facing transient notice, returned to the caller by
+ * advances and intents — never read back out of mutable state. */
+export type UiNotification = {
+  tone: 'development' | 'info' | 'warning'
+  message: string
+}
+
+/** Facts one advance produced, for offline aggregation and runtime policy.
+ * Durable history is the journal; this is the per-advance report. */
+export type StepReport = {
+  births: string[]
+  deaths: string[]
+  /** True when this advance ended the tank (last fish died, no eggs left). */
+  gameOver: boolean
+}
+
+/** Internal collector entries the systems emit during a tick; drained and
+ * projected into StepReport + UiNotification by GameSim.advanceElapsed().
+ * Not persisted and not visible outside the simulation core. */
 export type GameEvent =
-  | { type: 'toast'; tone: 'development' | 'info' | 'warning'; message: string }
+  | ({ type: 'toast' } & UiNotification)
   | { type: 'death'; name: string }
   | { type: 'birth'; name: string }
   | { type: 'gameOver' }
-  | { type: 'awaySummary'; summary: OfflineSummary }
 
 export type Unlocks = {
   /** The player has dropped food at least once; gates the first-feed hint. */

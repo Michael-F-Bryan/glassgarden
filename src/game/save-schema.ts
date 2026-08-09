@@ -125,27 +125,6 @@ const JournalEntrySchema = z.object({
   message: z.string(),
 })
 
-const OfflineSummarySchema = z.object({
-  awaySeconds: finite().min(0),
-  simulatedSeconds: finite().min(0),
-  coinsEarned: finite(),
-  births: z.array(z.string()),
-  developments: z.array(z.string()),
-  companion: z.string().optional(),
-})
-
-const GameEventSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('toast'),
-    tone: z.enum(['development', 'info', 'warning']),
-    message: z.string(),
-  }),
-  z.object({ type: z.literal('death'), name: z.string() }),
-  z.object({ type: z.literal('birth'), name: z.string() }),
-  z.object({ type: z.literal('gameOver') }),
-  z.object({ type: z.literal('awaySummary'), summary: OfflineSummarySchema }),
-])
-
 export const SaveV1Schema = z.object({
   version: z.literal(1),
   savedAtMs: finite().min(0),
@@ -164,8 +143,9 @@ export const SaveV1Schema = z.object({
   nextEntityId: z.number().int().positive(),
   gameOver: z.boolean(),
   entities: z.array(EntitySchema),
-  // Legacy-optional: absent before undelivered toasts were persisted.
-  pendingEvents: z.array(GameEventSchema).optional(),
+  // Legacy: older saves persisted undelivered toasts. Accepted in any shape
+  // and discarded by migrateV1ToCurrent — notifications are no longer durable.
+  pendingEvents: z.array(z.unknown()).optional(),
   // Legacy-optional: absent before the Tank Journal existed.
   journal: z.array(JournalEntrySchema).optional(),
 })
@@ -247,7 +227,6 @@ export function migrateV1ToCurrent(save: SaveFileV1): SaveFile {
     nextEntityId: save.nextEntityId,
     gameOver: save.gameOver,
     entities: save.entities,
-    pendingEvents: save.pendingEvents ?? [],
     journal: save.journal ?? [],
   }
 }

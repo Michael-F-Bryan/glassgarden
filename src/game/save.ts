@@ -1,6 +1,6 @@
 import { World } from 'miniplex'
 
-import type { Entity, GameEvent, JournalEntry, Unlocks } from './model'
+import type { Entity, JournalEntry, Unlocks } from './model'
 import { createRng } from './rng'
 import { checkSemantics, migrateV1ToCurrent, normalizeSemantics, SaveV1Schema } from './save-schema'
 import type { GameState } from './state'
@@ -26,8 +26,6 @@ export type SaveFile = {
   nextEntityId: number
   gameOver: boolean
   entities: Entity[]
-  /** Undelivered events (toasts) so announcements survive a reload. */
-  pendingEvents: GameEvent[]
   journal: JournalEntry[]
 }
 
@@ -56,7 +54,6 @@ export function serialize(state: GameState, savedAtMs: number): SaveFile {
     entities: [...state.world.entities]
       .sort((a, b) => a.id - b.id)
       .map((entity) => structuredClone(entity)),
-    pendingEvents: state.events.map((event) => structuredClone(event)),
     journal: state.journal.map((entry) => ({ ...entry })),
   }
 }
@@ -85,7 +82,9 @@ export function hydrate(document: SaveFile): GameState {
     unlocks: { ...document.unlocks },
     water: { cells: document.waterCells.slice() },
     rng: createRng(document.rngState),
-    events: document.pendingEvents.map((event) => structuredClone(event)),
+    // Notifications are deliberately not durable: the internal collector
+    // starts empty and the journal carries the permanent history.
+    events: [],
     journal: document.journal.map((entry) => ({ ...entry })),
     gameOver: document.gameOver,
   }

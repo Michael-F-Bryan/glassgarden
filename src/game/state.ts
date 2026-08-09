@@ -61,7 +61,6 @@ export type GameReadModel = {
   readonly fishPurchased: number
   readonly unlocks: Readonly<Unlocks>
   water: { readonly cells: readonly number[] }
-  readonly events: readonly GameEvent[]
   readonly journal: readonly JournalEntry[]
   readonly gameOver: boolean
 }
