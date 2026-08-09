@@ -31,5 +31,8 @@ test("Pages workflow validates pull requests and deploys only trusted runs", () 
   assert.match(workflow, /if: github\.event_name != 'pull_request'/);
   assert.match(workflow, /pages: write/);
   assert.match(workflow, /id-token: write/);
-  assert.match(workflow, /uses: actions\/deploy-pages@v4/);
+  assert.match(workflow, /uses: actions\/checkout@v7/);
+  assert.match(workflow, /uses: actions\/setup-node@v7/);
+  assert.match(workflow, /uses: actions\/upload-pages-artifact@v5/);
+  assert.match(workflow, /uses: actions\/deploy-pages@v5/);
 });
