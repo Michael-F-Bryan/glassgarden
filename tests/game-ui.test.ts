@@ -28,6 +28,13 @@ describe('game UI layout', () => {
     expect(html).toContain('data-ui-anchor="bottom-left"')
   })
 
+  test('main menu button is in the chrome and the menu itself starts closed', () => {
+    const html = renderGame()
+
+    expect(html).toContain('data-testid="menu-toggle"')
+    expect(html).not.toContain('data-testid="main-menu"')
+  })
+
   test('fish roster is permanently present at the bottom of the shop', () => {
     const html = renderGame()
 

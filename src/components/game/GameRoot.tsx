@@ -230,12 +230,19 @@ export default function GameRoot() {
   const refreshHudRef = useRef<() => void>(() => {})
   const rendererRef = useRef<TankRenderer | null>(null)
   const affordWarnAtRef = useRef(0)
+  /** True while the main menu is open: the frame loop keeps drawing but the
+   * sim does not advance — the tank holds its breath. */
+  const pausedRef = useRef(false)
+  const replaceSimRef = useRef<(next: GameSim) => void>(() => {})
+  const saveRef = useRef<() => void>(() => {})
 
   const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [tool, setToolState] = useState<Tool>('feed')
   const [helpOpen, setHelpOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
+  const [menuOpen, setMenuOpenState] = useState(false)
+  const [confirmingNewGame, setConfirmingNewGame] = useState(false)
   const [awaySummary, setAwaySummary] = useState<OfflineSummary | null>(null)
 
   const setTool = (next: Tool) => {
@@ -294,18 +301,22 @@ export default function GameRoot() {
       setHud((previous) => buildHudSnapshot(sim!, selectedFishRef.current, previous.waterQuality))
     refreshHudRef.current = refreshHud
 
+    const replaceSim = (next: GameSim) => {
+      sim = next
+      simRef.current = next
+      selectedFishRef.current = undefined
+      setAwaySummary(null)
+      setToasts([])
+      refreshHud()
+    }
+    replaceSimRef.current = replaceSim
+    saveRef.current = save
+
     let devTools: GlassgardenDevTools | undefined
     if (process.env.NODE_ENV === 'development') {
       devTools = createGlassgardenDevTools({
         getSim: () => sim!,
-        replaceSim: (next) => {
-          sim = next
-          simRef.current = next
-          selectedFishRef.current = undefined
-          setAwaySummary(null)
-          setToasts([])
-          refreshHud()
-        },
+        replaceSim,
         getSpeed: () => simSpeed,
         setSpeed: (next) => {
           simSpeed = next
@@ -358,12 +369,14 @@ export default function GameRoot() {
 
       // Any real gap (background tab, sleep, reload) runs at the slowed,
       // clamped away-time rate; the modal only appears for longer absences.
-      if (dt > 5) {
-        sim!.advanceOffline(dt)
-      } else {
-        sim!.step(dt * simSpeed, document.visibilityState === 'visible')
+      if (!pausedRef.current) {
+        if (dt > 5) {
+          sim!.advanceOffline(dt)
+        } else {
+          sim!.step(dt * simSpeed, document.visibilityState === 'visible')
+        }
+        applyEvents(sim!.drainEvents())
       }
-      applyEvents(sim!.drainEvents())
 
       ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
       renderer.draw(ctx, sim!.state, {
@@ -574,9 +587,29 @@ export default function GameRoot() {
     refreshHudRef.current()
   }
 
+  const setMenuOpen = (open: boolean) => {
+    pausedRef.current = open
+    setMenuOpenState(open)
+    setConfirmingNewGame(false)
+    if (open) {
+      setHelpOpen(false)
+      setJournalOpen(false)
+      saveRef.current() // pausing is a safe point; keep the save fresh
+    }
+  }
+
+  const startNewGame = () => {
+    replaceSimRef.current(GameSim.fresh(Date.now() >>> 0))
+    saveRef.current()
+    setMenuOpen(false)
+  }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      pausedRef.current = false
+      setMenuOpenState(false)
+      setConfirmingNewGame(false)
       setHelpOpen(false)
       setJournalOpen(false)
       selectedFishRef.current = undefined
@@ -593,14 +626,24 @@ export default function GameRoot() {
           <h1 className="text-xl font-semibold tracking-tight text-cyan-100">Glassgarden</h1>
           <p className="text-xs text-cyan-300/70">a quiet aquarium that grows around your care</p>
         </div>
-        <div
-          className="rounded-full border border-amber-200/20 bg-amber-950/40 px-4 py-1.5 text-sm font-medium text-amber-200 tabular-nums"
-          data-testid="coins"
-        >
-          ◉ {hud.coins.toLocaleString()}
-          <span className="ml-2 text-xs text-amber-200/60">
-            +{hud.incomePerSecond.toFixed(2)}/s
-          </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-testid="menu-toggle"
+            onClick={() => setMenuOpen(true)}
+            className="rounded-full border border-white/10 bg-slate-900/60 px-4 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800/60"
+          >
+            ⏸ Menu
+          </button>
+          <div
+            className="rounded-full border border-amber-200/20 bg-amber-950/40 px-4 py-1.5 text-sm font-medium text-amber-200 tabular-nums"
+            data-testid="coins"
+          >
+            ◉ {hud.coins.toLocaleString()}
+            <span className="ml-2 text-xs text-amber-200/60">
+              +{hud.incomePerSecond.toFixed(2)}/s
+            </span>
+          </div>
         </div>
       </div>
 
@@ -891,6 +934,78 @@ export default function GameRoot() {
                 coins are still trickling in — a fresh start isn&apos;t far away
               </p>
             )}
+          </div>
+        )}
+
+        {menuOpen && (
+          <div
+            className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
+            data-testid="main-menu"
+          >
+            <div className="w-80 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-6 shadow-2xl">
+              <h2 className="text-lg font-semibold text-cyan-100">Paused</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                the tank holds its breath while you&apos;re here
+              </p>
+              <p className="mt-3 text-sm text-slate-300">
+                {hud.fishCount} fish · ◉ {hud.coins.toLocaleString()} · {hud.waterQuality} water
+              </p>
+              <div className="mt-5 flex flex-col gap-2">
+                <button
+                  type="button"
+                  data-testid="menu-resume"
+                  onClick={() => setMenuOpen(false)}
+                  className="w-full rounded-xl border border-cyan-300/40 bg-cyan-400/20 px-4 py-2 font-medium text-cyan-100 transition hover:bg-cyan-400/30"
+                >
+                  Resume
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setHelpOpen(true)
+                  }}
+                  className="w-full rounded-xl border border-white/10 bg-slate-800/60 px-4 py-2 text-slate-200 transition hover:bg-slate-800"
+                >
+                  How to play
+                </button>
+                {confirmingNewGame ? (
+                  <div className="rounded-xl border border-red-400/30 bg-red-950/40 p-3">
+                    <p className="text-sm text-red-100">
+                      Start over? Your fish, coins, and equipment are gone for good — the journal
+                      too.
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        data-testid="menu-confirm-new-game"
+                        onClick={startNewGame}
+                        className="flex-1 rounded-lg border border-red-400/50 bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-100 transition hover:bg-red-500/30"
+                      >
+                        Start over
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="menu-keep-tank"
+                        onClick={() => setConfirmingNewGame(false)}
+                        className="flex-1 rounded-lg border border-white/10 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 transition hover:bg-slate-800"
+                      >
+                        Keep my tank
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    data-testid="menu-new-game"
+                    onClick={() => setConfirmingNewGame(true)}
+                    className="w-full rounded-xl border border-white/10 bg-slate-800/60 px-4 py-2 text-slate-200 transition hover:bg-slate-800"
+                  >
+                    Start a new game
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
