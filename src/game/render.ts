@@ -35,6 +35,38 @@ const KELP = [
 type SiphonPuff = { x: number; y: number; at: number }
 type CoinFloat = { x: number; y: number; at: number }
 
+/**
+ * The runtime's window onto the canvas: owns the 2d context, device-pixel
+ * scaling, and the window resize listener, so the runtime itself never
+ * touches the canvas API and tests can substitute a recording fake.
+ */
+export function createCanvasPresenter(canvas: HTMLCanvasElement) {
+  const renderer = new TankRenderer()
+  const dpr = Math.min(2, window.devicePixelRatio || 1)
+  let renderScale = dpr
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect()
+    const width = Math.max(1, Math.round(rect.width * dpr))
+    canvas.width = width
+    canvas.height = Math.round((width * TANK.height) / TANK.width)
+    renderScale = width / TANK.width
+  }
+  resize()
+  window.addEventListener('resize', resize)
+  const ctx = canvas.getContext('2d')!
+
+  return {
+    draw(state: GameState, options: DrawOptions): void {
+      ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
+      renderer.draw(ctx, state, options)
+    },
+    notifyFeed: (x: number) => renderer.notifyFeed(x),
+    notifySiphon: (x: number, y: number) => renderer.notifySiphon(x, y),
+    resetTransient: () => renderer.resetTransient(),
+    dispose: () => window.removeEventListener('resize', resize),
+  }
+}
+
 export class TankRenderer {
   private pollutionLayer = document.createElement('canvas')
   private bubbles: Bubble[] = []

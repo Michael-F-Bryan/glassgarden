@@ -2,7 +2,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, test } from 'vitest'
 
-import GameRoot, { buildHudSnapshot } from '@/components/game/GameRoot'
+import GameRoot from '@/components/game/GameRoot'
+import { buildHudSnapshot } from '@/game/hud'
 import { GameSim } from '@/game/sim'
 
 function renderGame(): string {

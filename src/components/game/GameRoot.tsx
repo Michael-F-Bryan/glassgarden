@@ -1,119 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import { formatAway } from '@/game/hud'
+import { TANK, TUNING, type JournalKind } from '@/game/model'
 import {
-  createGlassgardenDevTools,
-  normaliseDevSpeed,
-  type GlassgardenDevTools,
-} from '@/game/devtools'
-import { loadFromStorage, RECOVERY_KEY, saveToStorage } from '@/game/browser-save'
-import { TANK, TUNING, type Fish, type GameEvent, type JournalKind } from '@/game/model'
-import { TankRenderer } from '@/game/render'
-import { hydrate, serialize } from '@/game/save'
-import { GameSim, type OfflineSummary, type ShopItem } from '@/game/sim'
-import { pollutionAt } from '@/game/water'
-
-type Tool = 'feed' | 'siphon'
-
-type Toast = {
-  key: number
-  tone: 'development' | 'info' | 'warning'
-  message: string
-  expiresAt: number
-}
-
-const TOAST_LIFETIME_MS: Record<Toast['tone'], number> = {
-  development: 10_000,
-  warning: 7_000,
-  info: 5_500,
-}
-
-/** Immutable view of the sim for React rendering, refreshed from the loop. */
-type HudSnapshot = {
-  coins: number
-  incomePerSecond: number
-  fishCount: number
-  distressedCount: number
-  criticalNames: string[]
-  ownsSiphon: boolean
-  gameOver: boolean
-  /** False only until the player's very first pellet; drives the feed hint. */
-  fedOnce: boolean
-  waterQuality: WaterTier
-  /** Worst water cell in [0, 1], driving the quality meter's fill. */
-  worstPollution: number
-  /** Tank Journal entries, newest first, ages pre-formatted for display. */
-  journal: { kind: JournalKind; message: string; age: string }[]
-  shopItems: ShopItem[]
-  residents: {
-    id: number
-    name: string
-    hue: number
-    saturation: number
-    weightGrams: number
-    mood: string
-    moodEmoji: string
-  }[]
-  selectedFish?: {
-    id: number
-    name: string
-    generation: number
-    stage: string
-    mood: string
-    weightGrams: number
-    age: string
-    origin: 'arrived' | 'hatched'
-    parents?: [string, string]
-    hatchedInMurkyWater: boolean
-  }
-}
-
-const EMPTY_HUD: HudSnapshot = {
-  coins: 0,
-  incomePerSecond: 0,
-  fishCount: 0,
-  distressedCount: 0,
-  criticalNames: [],
-  ownsSiphon: false,
-  gameOver: false,
-  fedOnce: true, // no hint until the real sim reports otherwise
-  waterQuality: 'clear',
-  worstPollution: 0,
-  journal: [],
-  shopItems: [],
-  residents: [],
-}
-
-function describeMood(fish: Fish, pollution = 0): string {
-  if (fish.hunger >= 0.999) return 'starving'
-  if (fish.sickness >= 0.75) return 'gravely ill'
-  if (fish.sickness > 0.4) return 'sick'
-  if (fish.hunger > 0.85) return 'very hungry'
-  if (fish.hunger > 0.5) return 'peckish'
-  if (pollution > TUNING.sicknessAbovePollution) return 'uneasy in the murk'
-  if (fish.activity.kind === 'court') return 'smitten'
-  return 'content'
-}
-
-function moodEmoji(fish: Fish, pollution = 0): string {
-  if (fish.sickness >= 0.75) return '🤢'
-  if (fish.sickness > 0.4) return '🤒'
-  if (fish.hunger >= 0.999) return '😫'
-  if (fish.hunger > 0.85) return '😟'
-  if (fish.hunger > 0.5) return '😐'
-  if (pollution > TUNING.sicknessAbovePollution) return '😖'
-  if (fish.activity.kind === 'court') return '🥰'
-  if (fish.activity.kind === 'distress') return '😰'
-  return '😊'
-}
-
-function describeStage(fish: Fish): string {
-  const maturity = fish.weight / fish.genome.maxWeight
-  if (maturity < 0.2) return 'fry'
-  if (maturity < TUNING.breedingMinWeightFraction) return 'juvenile'
-  return 'adult'
-}
+  browserRuntimeDeps,
+  createGameRuntime,
+  EMPTY_VIEW,
+  type GameRuntime,
+  type GameView,
+  type Tool,
+} from '@/game/runtime'
+import type { ShopItem } from '@/game/sim'
 
 const JOURNAL_GLYPHS: Record<JournalKind, string> = {
   arrival: '🐟',
@@ -124,367 +23,38 @@ const JOURNAL_GLYPHS: Record<JournalKind, string> = {
   away: '🌙',
 }
 
-const WATER_TIERS = [
-  { tier: 'clear', below: 0.12 },
-  { tier: 'tinged', below: 0.3 },
-  { tier: 'murky', below: 0.5 },
-  { tier: 'foul', below: Infinity },
-] as const
-
-type WaterTier = (typeof WATER_TIERS)[number]['tier']
-
-/** Sticky tiering: needs to cross a boundary by a margin to change, so the
- * pill doesn't flicker while pollution hovers at a threshold. */
-function describeWater(worstPollution: number, previous: WaterTier): WaterTier {
-  const index = WATER_TIERS.findIndex((entry) => worstPollution < entry.below)
-  const previousIndex = WATER_TIERS.findIndex((entry) => entry.tier === previous)
-  if (index > previousIndex) {
-    const boundary = WATER_TIERS[index - 1].below
-    if (worstPollution < boundary + 0.04) return previous
-  } else if (index < previousIndex) {
-    const boundary = WATER_TIERS[index].below
-    if (worstPollution > boundary - 0.04) return previous
-  }
-  return WATER_TIERS[index].tier
-}
-
-function formatAge(seconds: number): string {
-  if (seconds < 90) return 'moments ago'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ago`
-}
-
-function formatAway(seconds: number): string {
-  if (seconds < 120) return `${Math.round(seconds)} seconds`
-  if (seconds < 7200) return `${Math.round(seconds / 60)} minutes`
-  return `${(seconds / 3600).toFixed(1)} hours`
-}
-
-export function buildHudSnapshot(
-  sim: GameSim,
-  selectedFishId: number | undefined,
-  previousWater: WaterTier,
-): HudSnapshot {
-  const state = sim.state
-  const fishEntities = [...state.world.with('fish')].sort((a, b) => a.id - b.id)
-  const selected = selectedFishId !== undefined ? state.byId.get(selectedFishId) : undefined
-  return {
-    coins: Math.floor(state.coins),
-    incomePerSecond: sim.incomePerSecond(),
-    fishCount: fishEntities.length,
-    distressedCount: fishEntities.filter(
-      (entity) =>
-        entity.fish.hunger > TUNING.distressHungerAbove ||
-        entity.fish.sickness > TUNING.distressSicknessAbove,
-    ).length,
-    criticalNames: fishEntities
-      .filter((entity) => entity.fish.hunger >= 0.999 || entity.fish.sickness >= 0.75)
-      .map((entity) => entity.fish.name),
-    ownsSiphon: state.ownsSiphon,
-    gameOver: state.gameOver,
-    fedOnce: state.unlocks.fedOnce,
-    waterQuality: describeWater(sim.worstPollution(), previousWater),
-    worstPollution: sim.worstPollution(),
-    journal: [...state.journal]
-      .reverse()
-      .map((entry) => ({
-        kind: entry.kind,
-        message: entry.message,
-        age: formatAge(state.time - entry.atSim),
-      })),
-    shopItems: sim.shopItems(),
-    residents: fishEntities.map((entity) => {
-      const pollution = pollutionAt(state.water, entity.position)
-      return {
-        id: entity.id,
-        name: entity.fish.name,
-        hue: entity.fish.genome.hue,
-        saturation: entity.fish.genome.saturation,
-        weightGrams: entity.fish.weight,
-        mood: describeMood(entity.fish, pollution),
-        moodEmoji: moodEmoji(entity.fish, pollution),
-      }
-    }),
-    selectedFish: selected?.fish
-      ? {
-          id: selected.id,
-          name: selected.fish.name,
-          generation: selected.fish.generation,
-          stage: describeStage(selected.fish),
-          mood: describeMood(selected.fish, pollutionAt(state.water, selected.position)),
-          weightGrams: selected.fish.weight,
-          age: formatAge(selected.fish.ageSeconds),
-          origin: selected.fish.parents ? 'hatched' : 'arrived',
-          parents: selected.fish.parents,
-          hatchedInMurkyWater: selected.fish.hatchedInMurkyWater,
-        }
-      : undefined,
-  }
-}
-
-/** Boot-time notices queued for the first frame's event delivery. Module
- * scope, not effect scope: in dev, React strict mode remounts the effect
- * after the first mount has already consumed an invalid save and autosaved a
- * fresh valid one, so an effect-local queue would silently drop the recovery
- * warning the player most needs to see. */
-const pendingBootEvents: GameEvent[] = []
-
+/**
+ * Page-level composition and view. Everything with a lifecycle — the live
+ * sim, browser clocks, persistence, renderer, gestures, replacement — lives
+ * in the game runtime; this component renders the subscribed view and
+ * translates DOM events into runtime calls. Only overlay chrome (menu, help,
+ * journal, confirmation) is React state here.
+ */
 export default function GameRoot() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const simRef = useRef<GameSim | null>(null)
-  const hoverFishRef = useRef<number | undefined>(undefined)
-  const selectedFishRef = useRef<number | undefined>(undefined)
-  const toolRef = useRef<Tool>('feed')
-  const refreshHudRef = useRef<() => void>(() => {})
-  const rendererRef = useRef<TankRenderer | null>(null)
-  const affordWarnAtRef = useRef(0)
-  /** True while the main menu is open: the frame loop keeps drawing but the
-   * sim does not advance — the tank holds its breath. */
-  const pausedRef = useRef(false)
-  const replaceSimRef = useRef<(next: GameSim) => void>(() => {})
-  const saveRef = useRef<() => void>(() => {})
+  const runtimeRef = useRef<GameRuntime | null>(null)
 
-  const [hud, setHud] = useState<HudSnapshot>(EMPTY_HUD)
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const [tool, setToolState] = useState<Tool>('feed')
+  const [view, setView] = useState<GameView>(EMPTY_VIEW)
   const [helpOpen, setHelpOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
   const [menuOpen, setMenuOpenState] = useState(false)
   const [confirmingNewGame, setConfirmingNewGame] = useState(false)
-  const [awaySummary, setAwaySummary] = useState<OfflineSummary | null>(null)
-
-  const setTool = (next: Tool) => {
-    toolRef.current = next
-    setToolState(next)
-  }
-
-  /** Held-tool gestures. Feed: a quick tap keeps its old meanings (inspect a
-   * fish, drop one pellet), while holding rains pellets at the pointer; a
-   * gesture that starts over a fish delays its first pellet one interval, so
-   * tapping a fish still reads as inspection rather than feeding it in the
-   * face. Siphon: hold and sweep like a real gravel vac — it pulls debris and
-   * pollution continuously under the pointer as it moves. */
-  const TAP_MAX_MS = 260
-  const SPRINKLE_INTERVAL_MS = 280
-  const SIPHON_INTERVAL_MS = 220
-  const SIPHON_SWEEP_DISTANCE = 55
-
-  type CanvasGesture = {
-    tool: Tool
-    pointerId: number
-    startedAtMs: number
-    startedOverFishId?: number
-    pelletsDropped: number
-    point: { x: number; y: number }
-    lastSiphonPoint: { x: number; y: number }
-    intervalId: ReturnType<typeof setInterval>
-  }
-  const gestureRef = useRef<CanvasGesture | null>(null)
-
-  /** Invalidate the active gesture: pause, session replacement, and pointer-up
-   * all funnel through here so no timer outlives the session that started it.
-   * A callback already queued behind clearInterval still fires once; it no-ops
-   * because gestureRef no longer points at its gesture. */
-  const cancelGesture = useCallback((): CanvasGesture | null => {
-    const gesture = gestureRef.current
-    if (gesture) clearInterval(gesture.intervalId)
-    gestureRef.current = null
-    return gesture
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      cancelGesture()
-    }
-  }, [cancelGesture])
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-
-    let sim: GameSim
-    const loaded = loadFromStorage(window.localStorage)
-    if (loaded.kind === 'loaded') {
-      sim = new GameSim(hydrate(loaded.document))
-      const awaySeconds = (Date.now() - loaded.document.savedAtMs) / 1000
-      // Emits an awaySummary event delivered on the first frame.
-      if (awaySeconds > 90) sim.advanceOffline(awaySeconds)
-    } else {
-      sim = GameSim.fresh(Date.now() >>> 0)
-      if (loaded.kind !== 'empty') {
-        // loadFromStorage already preserved the unreadable payload under the
-        // recovery key; say so instead of pretending this is a first visit.
-        pendingBootEvents.push({
-          type: 'toast',
-          tone: 'warning',
-          message: `Your saved tank could not be read, so this one starts fresh. The old data is kept in your browser under “${RECOVERY_KEY}”.`,
-        })
-      }
-    }
-    simRef.current = sim
-
-    let simSpeed = 1
-    if (process.env.NODE_ENV === 'development') {
-      const rawSpeed = new URLSearchParams(window.location.search).get('speed')
-      if (rawSpeed !== null) simSpeed = normaliseDevSpeed(Number(rawSpeed))
-    }
-    const renderer = new TankRenderer()
-    rendererRef.current = renderer
-
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
-    let renderScale = dpr
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect()
-      const width = Math.max(1, Math.round(rect.width * dpr))
-      canvas.width = width
-      canvas.height = Math.round((width * TANK.height) / TANK.width)
-      renderScale = width / TANK.width
-    }
-    resize()
-    window.addEventListener('resize', resize)
-    const ctx = canvas.getContext('2d')!
-
-    const save = () => {
-      // Quota or privacy-mode failure: the game stays playable, unsaved.
-      if (!saveToStorage(window.localStorage, serialize(sim.state, Date.now()))) {
-        console.warn('Glassgarden: could not save')
-      }
-    }
-    const refreshHud = () =>
-      setHud((previous) => buildHudSnapshot(sim, selectedFishRef.current, previous.waterQuality))
-    refreshHudRef.current = refreshHud
-
-    /** Atomic session replacement: everything the old session owned —
-     * gesture timers, tool, hover/selection, throttles, transient notices,
-     * renderer residue — is invalidated before the new sim is installed,
-     * and the save happens only once the new session is coherent. */
-    const replaceSession = (next: GameSim) => {
-      cancelGesture()
-      if (toolRef.current === 'siphon' && !next.state.ownsSiphon) setTool('feed')
-      hoverFishRef.current = undefined
-      selectedFishRef.current = undefined
-      affordWarnAtRef.current = 0
-      sim = next
-      simRef.current = next
-      setAwaySummary(null)
-      setToasts([])
-      renderer.resetTransient()
-      refreshHud()
-      save()
-    }
-    replaceSimRef.current = replaceSession
-    saveRef.current = save
-
-    let devTools: GlassgardenDevTools | undefined
-    if (process.env.NODE_ENV === 'development') {
-      devTools = createGlassgardenDevTools({
-        getSim: () => sim,
-        replaceSim: replaceSession,
-        getSpeed: () => simSpeed,
-        setSpeed: (next) => {
-          simSpeed = next
-        },
-        save,
-      })
-      window.__glassgardenDev = devTools
-    }
-
-    let raf = 0
-    let lastFrameMs: number | undefined
-    let hudAccumulator = 1
-    let saveAccumulator = 0
-
-    const applyEvents = (events: GameEvent[]) => {
-      if (events.length === 0) return
-      const summaryEvent = events.findLast((event) => event.type === 'awaySummary')
-      if (summaryEvent && summaryEvent.type === 'awaySummary') {
-        setAwaySummary(summaryEvent.summary)
-      }
-      const now = performance.now()
-      setToasts((current) => {
-        const alive = current.filter((toast) => toast.expiresAt > now)
-        const additions: Toast[] = []
-        for (const [index, event] of events.entries()) {
-          if (event.type !== 'toast') continue
-          const existing = alive.find(
-            (toast) => toast.message === event.message && toast.tone === event.tone,
-          )
-          if (existing) {
-            existing.expiresAt = now + TOAST_LIFETIME_MS[event.tone]
-            continue
-          }
-          additions.push({
-            key: now + index + Math.random(),
-            tone: event.tone,
-            message: event.message,
-            expiresAt: now + TOAST_LIFETIME_MS[event.tone],
-          })
-        }
-        return [...alive, ...additions].slice(-12)
-      })
-    }
-
-    const frame = (nowMs: number) => {
-      raf = requestAnimationFrame(frame)
-      if (lastFrameMs === undefined) lastFrameMs = nowMs
-      const dt = (nowMs - lastFrameMs) / 1000
-      lastFrameMs = nowMs
-
-      // One gap policy: a real absence (background tab, sleep) over five
-      // seconds runs the slowed, capped away-time catch-up; anything shorter
-      // is simulated in full at the fixed tick — nothing is discarded.
-      if (!pausedRef.current) {
-        if (dt > 5) {
-          sim.advanceOffline(dt)
-        } else {
-          sim.advanceElapsed(
-            dt * simSpeed,
-            document.visibilityState === 'visible' ? 'visible' : 'background',
-          )
-        }
-        applyEvents([...pendingBootEvents.splice(0), ...sim.drainEvents()])
-      }
-
-      ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
-      renderer.draw(ctx, sim.state, {
-        realTime: nowMs / 1000,
-        selectedFishId: selectedFishRef.current,
-        hoverFishId: hoverFishRef.current,
-      })
-
-      hudAccumulator += dt
-      if (hudAccumulator > 0.25) {
-        hudAccumulator = 0
-        refreshHud()
-        setToasts((current) => {
-          const now = performance.now()
-          return current.some((toast) => toast.expiresAt <= now)
-            ? current.filter((toast) => toast.expiresAt > now)
-            : current
-        })
-      }
-      saveAccumulator += dt
-      if (saveAccumulator > 15) {
-        saveAccumulator = 0
-        save()
-      }
-    }
-    raf = requestAnimationFrame(frame)
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') save()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    window.addEventListener('beforeunload', save)
+    const runtime = createGameRuntime(browserRuntimeDeps())
+    runtimeRef.current = runtime
+    const unsubscribe = runtime.subscribe(setView)
+    runtime.start(canvas)
     return () => {
-      cancelAnimationFrame(raf)
-      document.removeEventListener('visibilitychange', onVisibility)
-      window.removeEventListener('beforeunload', save)
-      window.removeEventListener('resize', resize)
-      if (window.__glassgardenDev === devTools) delete window.__glassgardenDev
-      save()
+      unsubscribe()
+      runtime.stop()
+      runtimeRef.current = null
     }
-  }, [cancelGesture])
+  }, [])
+
+  const hud = view.hud
 
   const toLogical = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -494,164 +64,59 @@ export default function GameRoot() {
     }
   }
 
-  const tryDropPellet = (x: number): boolean => {
-    const sim = simRef.current
-    if (!sim || pausedRef.current) return false
-    if (sim.dropFood(x)) {
-      rendererRef.current?.notifyFeed(x)
-      refreshHudRef.current()
-      return true
-    }
-    if (!sim.state.gameOver && performance.now() - affordWarnAtRef.current > 5000) {
-      affordWarnAtRef.current = performance.now()
-      setToasts((current) => [
-        ...current,
-        {
-          key: performance.now(),
-          tone: 'warning',
-          message: 'Not enough coins for food — they trickle in as your fish grow.',
-          expiresAt: performance.now() + TOAST_LIFETIME_MS.warning,
-        },
-      ])
-    }
-    return false
-  }
-
-  const siphonSweep = (gesture: CanvasGesture) => {
-    const sim = simRef.current
-    if (!sim || pausedRef.current) return
-    sim.siphonAt(gesture.point.x, gesture.point.y)
-    rendererRef.current?.notifySiphon(gesture.point.x, gesture.point.y)
-    gesture.lastSiphonPoint = { ...gesture.point }
-    refreshHudRef.current()
-  }
-
   const onCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const sim = simRef.current
-    if (!sim || pausedRef.current) return
     setHelpOpen(false)
     setJournalOpen(false)
-    const point = toLogical(event)
-    const tool = toolRef.current
-    const fish = tool === 'feed' ? sim.fishAt(point.x, point.y) : undefined
-    if (tool === 'feed' && !fish) selectedFishRef.current = undefined
-    cancelGesture()
-    const gesture: CanvasGesture = {
-      tool,
-      pointerId: event.pointerId,
-      startedAtMs: performance.now(),
-      startedOverFishId: fish?.id,
-      pelletsDropped: 0,
-      point,
-      lastSiphonPoint: point,
-      intervalId: setInterval(
-        () => {
-          const active = gestureRef.current
-          if (!active || pausedRef.current) return
-          if (active.tool === 'siphon') siphonSweep(active)
-          else if (tryDropPellet(active.point.x)) active.pelletsDropped += 1
-        },
-        tool === 'siphon' ? SIPHON_INTERVAL_MS : SPRINKLE_INTERVAL_MS,
-      ),
-    }
-    gestureRef.current = gesture
+    runtimeRef.current?.pointerDown(toLogical(event))
     event.currentTarget.setPointerCapture(event.pointerId)
-    if (tool === 'siphon') siphonSweep(gesture)
-    else if (!fish && tryDropPellet(point.x)) gesture.pelletsDropped += 1
-    refreshHudRef.current()
-  }
-
-  const onCanvasPointerUp = () => {
-    const gesture = cancelGesture()
-    if (!gesture) return
-    const quickTap = performance.now() - gesture.startedAtMs < TAP_MAX_MS
-    if (quickTap && gesture.startedOverFishId !== undefined && gesture.pelletsDropped === 0) {
-      selectedFishRef.current = gesture.startedOverFishId
-      refreshHudRef.current()
-    }
   }
 
   const onCanvasMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const sim = simRef.current
-    if (!sim) return
-    const point = toLogical(event)
-    const gesture = gestureRef.current
-    if (gesture && event.pointerId === gesture.pointerId) {
-      gesture.point = point
-      // Sweeping fast shouldn't wait for the next interval tick.
-      if (
-        gesture.tool === 'siphon' &&
-        Math.hypot(point.x - gesture.lastSiphonPoint.x, point.y - gesture.lastSiphonPoint.y) >
-          SIPHON_SWEEP_DISTANCE
-      ) {
-        siphonSweep(gesture)
-      }
-    }
-    const hovered = sim.fishAt(point.x, point.y)
-    hoverFishRef.current = hovered?.id
-    event.currentTarget.style.cursor = hovered
-      ? 'pointer'
-      : toolRef.current === 'siphon'
-        ? 'cell'
-        : 'default'
+    const hover = runtimeRef.current?.pointerMove(toLogical(event))
+    event.currentTarget.style.cursor =
+      hover === 'fish' ? 'pointer' : view.tool === 'siphon' ? 'cell' : 'default'
   }
 
-  const TOAST_PRIORITY: Record<Toast['tone'], number> = { warning: 0, development: 1, info: 2 }
-  const visibleToasts = [...toasts]
-    .sort((a, b) => TOAST_PRIORITY[a.tone] - TOAST_PRIORITY[b.tone] || b.key - a.key)
-    .slice(0, 3)
-
-  const dismissToast = (key: number) => {
-    setToasts((current) => current.filter((toast) => toast.key !== key))
+  const onCanvasPointerUp = () => {
+    runtimeRef.current?.pointerUp()
   }
 
-  const buy = (itemId: ShopItem['id']) => {
-    if (pausedRef.current) return
-    simRef.current?.buy(itemId)
-    refreshHudRef.current()
-  }
+  const setTool = (tool: Tool) => runtimeRef.current?.setTool(tool)
 
-  const closeInspector = () => {
-    selectedFishRef.current = undefined
-    refreshHudRef.current()
-  }
+  const buy = (itemId: ShopItem['id']) => runtimeRef.current?.buy(itemId)
+
+  const closeInspector = () => runtimeRef.current?.selectFish(undefined)
 
   const selectFish = (fishId: number) => {
-    selectedFishRef.current = fishId
     setJournalOpen(false)
-    refreshHudRef.current()
+    runtimeRef.current?.selectFish(fishId)
   }
 
-  /** Pausing must silence the player's hands, not just the clock: the held
-   * gesture is cancelled and every direct intent is gated on pausedRef, so
-   * resuming requires a fresh pointer-down. */
   const setMenuOpen = (open: boolean) => {
-    if (open) cancelGesture()
-    pausedRef.current = open
+    if (open) runtimeRef.current?.pause()
+    else runtimeRef.current?.resume()
     setMenuOpenState(open)
     setConfirmingNewGame(false)
     if (open) {
       setHelpOpen(false)
       setJournalOpen(false)
-      saveRef.current() // pausing is a safe point; keep the save fresh
     }
   }
 
   const startNewGame = () => {
-    replaceSimRef.current(GameSim.fresh(Date.now() >>> 0))
+    runtimeRef.current?.newGame()
     setMenuOpen(false)
   }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      pausedRef.current = false
       setMenuOpenState(false)
       setConfirmingNewGame(false)
       setHelpOpen(false)
       setJournalOpen(false)
-      selectedFishRef.current = undefined
-      refreshHudRef.current()
+      runtimeRef.current?.resume()
+      runtimeRef.current?.selectFish(undefined)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -741,7 +206,7 @@ export default function GameRoot() {
             onClick={() => setTool('feed')}
             data-testid="tool-feed"
             className={`rounded-xl border px-4 py-2 text-sm font-medium backdrop-blur transition ${
-              tool === 'feed'
+              view.tool === 'feed'
                 ? 'border-amber-300/60 bg-amber-400/20 text-amber-100'
                 : 'border-white/10 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
             }`}
@@ -754,7 +219,7 @@ export default function GameRoot() {
               onClick={() => setTool('siphon')}
               data-testid="tool-siphon"
               className={`rounded-xl border px-4 py-2 text-sm font-medium backdrop-blur transition ${
-                tool === 'siphon'
+                view.tool === 'siphon'
                   ? 'border-cyan-300/60 bg-cyan-400/20 text-cyan-100'
                   : 'border-white/10 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
               }`}
@@ -763,7 +228,7 @@ export default function GameRoot() {
             </button>
           )}
           <span className="ml-1 hidden rounded-full bg-slate-950/60 px-3 py-1 text-xs text-slate-200/90 backdrop-blur sm:block">
-            {tool === 'feed'
+            {view.tool === 'feed'
               ? 'click to drop food · hold to sprinkle'
               : 'hold and sweep the sand to clean'}
           </span>
@@ -1024,7 +489,7 @@ export default function GameRoot() {
           </div>
         )}
 
-        {awaySummary && (
+        {view.awaySummary && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
             <div
               className="w-96 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-6 shadow-2xl"
@@ -1032,26 +497,26 @@ export default function GameRoot() {
             >
               <h2 className="text-lg font-semibold text-cyan-100">While you were away…</h2>
               <p className="mt-1 text-xs text-slate-400">
-                {formatAway(awaySummary.awaySeconds)} passed. The tank drifted on without you, a
+                {formatAway(view.awaySummary.awaySeconds)} passed. The tank drifted on without you, a
                 little slower.
               </p>
-              {awaySummary.companion && (
+              {view.awaySummary.companion && (
                 <p className="mt-3 text-sm text-slate-300">
-                  {awaySummary.companion} kept circling the kelp, watching for you.
+                  {view.awaySummary.companion} kept circling the kelp, watching for you.
                 </p>
               )}
               <ul className="mt-4 flex flex-col gap-2 text-sm text-slate-200">
-                <li>◉ {Math.floor(awaySummary.coinsEarned)} coins collected</li>
-                {awaySummary.births.map((name) => (
+                <li>◉ {Math.floor(view.awaySummary.coinsEarned)} coins collected</li>
+                {view.awaySummary.births.map((name) => (
                   <li key={name}>🐟 {name} hatched!</li>
                 ))}
-                {awaySummary.developments.map((message) => (
+                {view.awaySummary.developments.map((message) => (
                   <li key={message}>✦ {message}</li>
                 ))}
               </ul>
               <button
                 type="button"
-                onClick={() => setAwaySummary(null)}
+                onClick={() => runtimeRef.current?.dismissAwaySummary()}
                 className="mt-5 w-full rounded-xl border border-cyan-300/40 bg-cyan-400/20 px-4 py-2 font-medium text-cyan-100 transition hover:bg-cyan-400/30"
               >
                 Back to the tank
@@ -1073,13 +538,13 @@ export default function GameRoot() {
           data-ui-anchor="sidebar"
           aria-live="polite"
         >
-          {visibleToasts.map((toast) => (
+          {view.toasts.map((toast) => (
             <button
               type="button"
               key={toast.key}
               data-testid={`toast-${toast.tone}`}
               title="Dismiss"
-              onClick={() => dismissToast(toast.key)}
+              onClick={() => runtimeRef.current?.dismissToast(toast.key)}
               className={`w-full cursor-pointer rounded-xl border px-4 py-2 text-left text-sm shadow-lg transition animate-in fade-in slide-in-from-right-2 duration-300 ${
                 toast.tone === 'development'
                   ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
