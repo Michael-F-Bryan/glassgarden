@@ -151,7 +151,10 @@ type FoodClaims = Map<number, number>
 
 function collectFoodClaims(state: GameState): FoodClaims {
   const claims: FoodClaims = new Map()
-  for (const entity of state.world.with('behaviour')) {
+  // Id order, like every other system: if two fish ever pointed at the same
+  // pellet, the winner must not depend on Miniplex's internal array order,
+  // which swap-removes reshuffle and a reload rebuilds differently.
+  for (const entity of sortedById(state.world.with('behaviour'))) {
     const activity = entity.behaviour.activity
     if (activity.kind === 'seekFood') claims.set(activity.foodId, entity.id)
   }
