@@ -1,42 +1,20 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import type { DevScenario, DevSnapshot } from '../../src/game/devtools'
+import { loadScenario, openGame, snapshot, tankPoint } from './support'
 
 type DevWindow = Window & {
   __glassgarden?: unknown
 }
 
-async function waitForDevTools(page: Page): Promise<void> {
-  await page.waitForFunction(() => Boolean((window as DevWindow).__glassgardenDev))
-}
-
-async function snapshot(page: Page): Promise<DevSnapshot> {
-  return page.evaluate(() => (window as DevWindow).__glassgardenDev!.snapshot())
-}
-
-async function loadScenario(page: Page, name: DevScenario, seed = 42): Promise<DevSnapshot> {
-  return page.evaluate(
-    ({ scenario, scenarioSeed }) =>
-      (window as DevWindow).__glassgardenDev!.loadScenario(scenario, scenarioSeed),
-    { scenario: name, scenarioSeed: seed },
-  )
-}
-
-async function clickTank(page: Page, state: DevSnapshot, x: number, y: number): Promise<void> {
-  const canvas = page.getByTestId('tank-canvas')
-  const box = await canvas.boundingBox()
-  if (!box) throw new Error('tank canvas has no browser bounding box')
-  await page.mouse.click(
-    box.x + (x / state.tank.width) * box.width,
-    box.y + (y / state.tank.height) * box.height,
-  )
-}
-
 test.beforeEach(async ({ page }) => {
-  await page.goto('/')
-  await waitForDevTools(page)
-  await page.evaluate(() => (window as DevWindow).__glassgardenDev!.setSpeed(0))
+  await openGame(page)
 })
+
+/** Click a point given in logical tank coordinates. */
+async function clickTank(page: Page, x: number, y: number): Promise<void> {
+  const point = await tankPoint(page, x, y)
+  await page.mouse.click(point.x, point.y)
+}
 
 test('feeds a fresh fish and persists the result across reload', async ({ page }) => {
   const before = await loadScenario(page, 'fresh', 23)
@@ -44,7 +22,7 @@ test('feeds a fresh fish and persists the result across reload', async ({ page }
   const dropX = Math.min(before.tank.width - 40, fish.x + 50)
 
   await page.getByTestId('tool-feed').click()
-  await clickTank(page, before, dropX, before.tank.waterTop + 40)
+  await clickTank(page, dropX, before.tank.waterTop + 40)
   await expect.poll(async () => (await snapshot(page)).food.length).toBe(1)
   await page.evaluate(() => (window as DevWindow).__glassgardenDev!.advance(12))
 
@@ -53,8 +31,7 @@ test('feeds a fresh fish and persists the result across reload', async ({ page }
   expect(fed.fish[0].hunger).toBeLessThan(fish.hunger)
 
   await page.reload()
-  await waitForDevTools(page)
-  await page.evaluate(() => (window as DevWindow).__glassgardenDev!.setSpeed(0))
+  await openGame(page)
   const reloaded = await snapshot(page)
   expect(reloaded.fish[0].name).toBe(fed.fish[0].name)
   expect(reloaded.fish[0].weight).toBeCloseTo(fed.fish[0].weight)
@@ -71,7 +48,7 @@ test('loads deterministic scenarios and cleans a dirty tank through the UI', asy
   expect(dirty.equipment.siphon).toBe(true)
 
   await page.getByTestId('tool-siphon').click()
-  await clickTank(page, dirty, dirty.waste[0].x, dirty.waste[0].y)
+  await clickTank(page, dirty.waste[0].x, dirty.waste[0].y)
 
   await expect.poll(async () => (await snapshot(page)).waste.length).toBeLessThan(3)
 })
@@ -91,7 +68,7 @@ test('simulates three hours away and rescues the fish through the UI', async ({ 
   const fish = before.fish[0]
   const dropX = Math.min(before.tank.width - 40, fish.x + 50)
   await page.getByTestId('tool-feed').click()
-  await clickTank(page, before, dropX, before.tank.waterTop + 40)
+  await clickTank(page, dropX, before.tank.waterTop + 40)
   await expect.poll(async () => (await snapshot(page)).food.length).toBe(1)
   await page.evaluate(() => (window as DevWindow).__glassgardenDev!.advance(12))
 

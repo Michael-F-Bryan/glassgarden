@@ -14,6 +14,48 @@ import {
 } from '@/game/runtime'
 import type { ShopOfferId } from '@/game/sim'
 
+/** Overlays, innermost last: Escape only ever closes the topmost one. */
+type Overlay =
+  | 'inspector'
+  | 'help'
+  | 'journal'
+  | 'gameOver'
+  | 'awaySummary'
+  | 'menu'
+  | 'confirmNewGame'
+
+/** Logical tank pixels the keyboard caret moves per press. */
+const CARET_STEP = 60
+const CARET_STEP_FINE = 15
+
+/**
+ * Move focus into a panel when it opens and put it back where it came from
+ * when it closes, so opening the menu and pressing Escape leaves the player
+ * exactly where they were. Focuses the panel's first control, or the panel
+ * itself when it has none to offer.
+ */
+function useDialogFocus(open: boolean) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const returnToRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    returnToRef.current = document.activeElement as HTMLElement | null
+    const panel = panelRef.current
+    if (!panel) return
+    const first = panel.querySelector<HTMLElement>(
+      'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    ;(first ?? panel).focus()
+    return () => {
+      const returnTo = returnToRef.current
+      if (returnTo?.isConnected) returnTo.focus()
+    }
+  }, [open])
+
+  return panelRef
+}
+
 const JOURNAL_GLYPHS: Record<JournalKind, string> = {
   arrival: '🐟',
   birth: '🐣',
@@ -108,27 +150,103 @@ export default function GameRoot() {
     setMenuOpen(false)
   }
 
+  /**
+   * Overlays are a stack, innermost last. Escape closes only the topmost, so
+   * dismissing the new-game confirmation does not also throw away the menu
+   * the player was standing in.
+   */
+  const activeOverlay: Overlay | null = confirmingNewGame
+    ? 'confirmNewGame'
+    : menuOpen
+      ? 'menu'
+      : view.awaySummary
+        ? 'awaySummary'
+        : hud.gameOver
+          ? 'gameOver'
+          : journalOpen
+            ? 'journal'
+            : helpOpen
+              ? 'help'
+              : hud.selectedFish
+                ? 'inspector'
+                : null
+
+  /** Overlays that own the screen: while one is up, the tank and the shop
+   * behind it stop taking focus or clicks. */
+  const modalOpen =
+    activeOverlay === 'menu' ||
+    activeOverlay === 'confirmNewGame' ||
+    activeOverlay === 'awaySummary' ||
+    activeOverlay === 'gameOver'
+
+  const menuPanelRef = useDialogFocus(menuOpen)
+  const awayPanelRef = useDialogFocus(Boolean(view.awaySummary))
+  const gameOverPanelRef = useDialogFocus(hud.gameOver)
+  const journalPanelRef = useDialogFocus(journalOpen)
+  const helpPanelRef = useDialogFocus(helpOpen)
+  const inspectorPanelRef = useDialogFocus(Boolean(hud.selectedFish))
+
+  const closeOverlay = (overlay: Overlay) => {
+    if (overlay === 'confirmNewGame') setConfirmingNewGame(false)
+    else if (overlay === 'menu') setMenuOpen(false)
+    else if (overlay === 'awaySummary') runtimeRef.current?.dismissAwaySummary()
+    else if (overlay === 'journal') setJournalOpen(false)
+    else if (overlay === 'help') setHelpOpen(false)
+    else if (overlay === 'inspector') runtimeRef.current?.selectFish(undefined)
+    // gameOver has no dismissal: it ends only by buying a starter fish.
+  }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === '1') {
-        runtimeRef.current?.setTool('feed')
+      if (event.key === 'Escape') {
+        if (activeOverlay) {
+          event.preventDefault()
+          closeOverlay(activeOverlay)
+        }
         return
       }
-      if (event.key === '2') {
-        runtimeRef.current?.setTool('siphon')
-        return
-      }
-      if (event.key !== 'Escape') return
-      setMenuOpenState(false)
-      setConfirmingNewGame(false)
-      setHelpOpen(false)
-      setJournalOpen(false)
-      runtimeRef.current?.resume()
-      runtimeRef.current?.selectFish(undefined)
+      // Tool shortcuts stay out of the way while typing in an overlay.
+      if (activeOverlay) return
+      if (event.key === '1') runtimeRef.current?.setTool('feed')
+      else if (event.key === '2') runtimeRef.current?.setTool('siphon')
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  })
+
+  /** Keyboard control of the tank itself, mirroring the pointer intents. */
+  const onCanvasKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+    const runtime = runtimeRef.current
+    if (!runtime) return
+    const step = event.shiftKey ? CARET_STEP_FINE : CARET_STEP
+    const moves: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    }
+    const move = moves[event.key]
+    if (move) {
+      event.preventDefault()
+      runtime.moveCaret(move[0], move[1])
+      return
+    }
+    if (event.key === 'Tab') {
+      // Cycle residents inside the tank; the canvas keeps focus.
+      event.preventDefault()
+      runtime.nextResident(event.shiftKey ? -1 : 1)
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      runtime.actAtCaret()
+      return
+    }
+    if (event.key === 'i' || event.key === 'I') {
+      event.preventDefault()
+      runtime.inspectAtCaret()
+    }
+  }
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_top,_#12303e,_#0a1a24_65%)] p-4 text-slate-100">
@@ -168,13 +286,30 @@ export default function GameRoot() {
       >
         <canvas
           ref={canvasRef}
-          className="block aspect-[16/9] w-full touch-none"
+          className="block aspect-[16/9] w-full touch-none outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-inset"
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasMove}
           onPointerUp={onCanvasPointerUp}
           onPointerCancel={onCanvasPointerUp}
+          onKeyDown={onCanvasKeyDown}
+          onFocus={() => runtimeRef.current?.showCaret()}
+          onBlur={() => runtimeRef.current?.hideCaret()}
+          tabIndex={modalOpen ? -1 : 0}
+          inert={modalOpen || undefined}
+          role="application"
+          aria-label="The tank. Arrow keys aim, Enter uses the selected tool, Tab moves between fish, I inspects the fish under the target."
+          aria-describedby="tank-caret-status"
           data-testid="tank-canvas"
         />
+
+        {/* What the keyboard is aiming at, announced as it changes. */}
+        <div id="tank-caret-status" role="status" aria-live="polite" className="sr-only">
+          {view.caret
+            ? view.caretTarget
+              ? `Target over ${view.caretTarget.name}.`
+              : `Target in open water. ${view.tool === 'feed' ? 'Enter drops food.' : 'Enter cleans here.'}`
+            : ''}
+        </div>
 
         {!hud.fedOnce && !hud.gameOver && (
           <div
@@ -289,6 +424,7 @@ export default function GameRoot() {
             type="button"
             data-testid="journal-toggle"
             aria-label="Tank Journal"
+            aria-expanded={journalOpen}
             onClick={() => {
               setJournalOpen((open) => !open)
               setHelpOpen(false)
@@ -299,6 +435,9 @@ export default function GameRoot() {
           </button>
           <button
             type="button"
+            data-testid="help-toggle"
+            aria-label="How to play"
+            aria-expanded={helpOpen}
             onClick={() => {
               setHelpOpen((open) => !open)
               setJournalOpen(false)
@@ -312,12 +451,17 @@ export default function GameRoot() {
         {journalOpen && (
           <div
             data-testid="tank-journal"
-            className="absolute right-3 bottom-14 z-20 flex max-h-[70%] w-80 flex-col rounded-xl border border-cyan-100/20 bg-slate-900/95 shadow-xl backdrop-blur"
+            ref={journalPanelRef}
+            role="dialog"
+            aria-labelledby="journal-title"
+            tabIndex={-1}
+            className="absolute right-3 bottom-14 z-20 flex max-h-[70%] w-80 flex-col rounded-xl border border-cyan-100/20 bg-slate-900/95 shadow-xl backdrop-blur outline-none"
           >
             <div className="flex items-center justify-between border-b border-cyan-100/10 px-4 py-2.5">
-              <p className="font-medium text-cyan-100">Tank Journal</p>
+              <p id="journal-title" className="font-medium text-cyan-100">Tank Journal</p>
               <button
                 type="button"
+                aria-label="Close the Tank Journal"
                 onClick={() => setJournalOpen(false)}
                 className="text-slate-400 hover:text-slate-200"
               >
@@ -347,8 +491,15 @@ export default function GameRoot() {
         )}
 
         {helpOpen && (
-          <div className="absolute right-3 bottom-14 w-72 rounded-xl border border-cyan-100/20 bg-slate-900/95 p-4 text-sm text-slate-300 shadow-xl backdrop-blur">
-            <p className="mb-2 font-medium text-cyan-100">How to play</p>
+          <div
+            ref={helpPanelRef}
+            role="dialog"
+            aria-labelledby="help-title"
+            tabIndex={-1}
+            data-testid="help-panel"
+            className="absolute right-3 bottom-14 w-72 rounded-xl border border-cyan-100/20 bg-slate-900/95 p-4 text-sm text-slate-300 shadow-xl backdrop-blur outline-none"
+          >
+            <p id="help-title" className="mb-2 font-medium text-cyan-100">How to play</p>
             <p className="mb-2">
               Click the water to drop food, or press and hold to sprinkle. Keep an eye on your fish
               — and on the water they swim in.
@@ -363,13 +514,20 @@ export default function GameRoot() {
 
         {hud.selectedFish && (
           <div
-            className="absolute right-3 bottom-14 w-72 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-4 shadow-2xl backdrop-blur"
+            ref={inspectorPanelRef}
+            role="dialog"
+            aria-labelledby="inspector-title"
+            tabIndex={-1}
+            className="absolute right-3 bottom-14 w-72 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-4 shadow-2xl backdrop-blur outline-none"
             data-testid="fish-inspector"
           >
             <div className="mb-1 flex items-center justify-between">
-              <h3 className="font-semibold text-cyan-100">{hud.selectedFish.name}</h3>
+              <h3 id="inspector-title" className="font-semibold text-cyan-100">
+                {hud.selectedFish.name}
+              </h3>
               <button
                 type="button"
+                aria-label={`Close details for ${hud.selectedFish.name}`}
                 onClick={closeInspector}
                 className="text-slate-400 hover:text-slate-200"
               >
@@ -403,10 +561,17 @@ export default function GameRoot() {
 
         {hud.gameOver && (
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/85 backdrop-blur-sm"
+            ref={gameOverPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="game-over-title"
+            tabIndex={-1}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/85 backdrop-blur-sm outline-none"
             data-testid="game-over"
           >
-            <h2 className="text-2xl font-semibold text-slate-100">The tank has gone quiet.</h2>
+            <h2 id="game-over-title" className="text-2xl font-semibold text-slate-100">
+              The tank has gone quiet.
+            </h2>
             <p className="max-w-md text-center text-sm text-slate-400">
               No fish remain. Your coins and equipment are still yours — the glass keeps its
               memories, and the shop has starter glimmerfins.
@@ -434,8 +599,15 @@ export default function GameRoot() {
             className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
             data-testid="main-menu"
           >
-            <div className="w-80 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-6 shadow-2xl">
-              <h2 className="text-lg font-semibold text-cyan-100">Paused</h2>
+            <div
+              ref={menuPanelRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="menu-title"
+              tabIndex={-1}
+              className="w-80 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-6 shadow-2xl outline-none"
+            >
+              <h2 id="menu-title" className="text-lg font-semibold text-cyan-100">Paused</h2>
               <p className="mt-1 text-xs text-slate-400">
                 the tank holds its breath while you&apos;re here
               </p>
@@ -504,10 +676,17 @@ export default function GameRoot() {
         {view.awaySummary && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
             <div
-              className="w-96 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-6 shadow-2xl"
+              ref={awayPanelRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="away-title"
+              tabIndex={-1}
+              className="w-96 rounded-2xl border border-cyan-100/20 bg-slate-900/95 p-6 shadow-2xl outline-none"
               data-testid="away-summary"
             >
-              <h2 className="text-lg font-semibold text-cyan-100">While you were away…</h2>
+              <h2 id="away-title" className="text-lg font-semibold text-cyan-100">
+                While you were away…
+              </h2>
               <p className="mt-1 text-xs text-slate-400">
                 {formatAway(view.awaySummary.awaySeconds)} passed. The tank drifted on without you, a
                 little slower.
@@ -538,6 +717,7 @@ export default function GameRoot() {
         )}
       </div>
       <aside
+        inert={modalOpen || undefined}
         className="flex min-h-56 flex-col rounded-2xl border border-cyan-100/15 bg-slate-950/80 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] lg:min-h-0"
         data-testid="shop-panel"
         data-ui-anchor="right-sidebar"

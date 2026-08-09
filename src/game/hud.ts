@@ -106,27 +106,41 @@ export const EMPTY_HUD: HudSnapshot = {
   residents: [],
 }
 
-function describeMood(body: Physiology, behaviour: Behaviour, pollution = 0): string {
-  if (body.hunger >= 0.999) return 'starving'
-  if (body.sickness >= 0.75) return 'gravely ill'
-  if (body.sickness > 0.4) return 'sick'
-  if (body.hunger > 0.85) return 'very hungry'
-  if (body.hunger > 0.5) return 'peckish'
-  if (pollution > TUNING.sicknessAbovePollution) return 'uneasy in the murk'
-  if (behaviour.activity.kind === 'court') return 'smitten'
-  return 'content'
-}
+/**
+ * One ordered table for both the label and the emoji, so a resident can
+ * never be described as starving while wearing the sick face. The first
+ * matching row wins; rows are ordered most urgent first.
+ */
+const MOODS: {
+  label: string
+  emoji: string
+  matches: (body: Physiology, behaviour: Behaviour, pollution: number) => boolean
+}[] = [
+  { label: 'starving', emoji: '😫', matches: (body) => body.hunger >= 0.999 },
+  { label: 'gravely ill', emoji: '🤢', matches: (body) => body.sickness >= 0.75 },
+  { label: 'sick', emoji: '🤒', matches: (body) => body.sickness > 0.4 },
+  { label: 'very hungry', emoji: '😟', matches: (body) => body.hunger > 0.85 },
+  { label: 'peckish', emoji: '😐', matches: (body) => body.hunger > 0.5 },
+  {
+    label: 'uneasy in the murk',
+    emoji: '😖',
+    matches: (_body, _behaviour, pollution) => pollution > TUNING.sicknessAbovePollution,
+  },
+  {
+    label: 'smitten',
+    emoji: '🥰',
+    matches: (_body, behaviour) => behaviour.activity.kind === 'court',
+  },
+  {
+    label: 'unsettled',
+    emoji: '😰',
+    matches: (_body, behaviour) => behaviour.activity.kind === 'distress',
+  },
+  { label: 'content', emoji: '😊', matches: () => true },
+]
 
-function moodEmoji(body: Physiology, behaviour: Behaviour, pollution = 0): string {
-  if (body.sickness >= 0.75) return '🤢'
-  if (body.sickness > 0.4) return '🤒'
-  if (body.hunger >= 0.999) return '😫'
-  if (body.hunger > 0.85) return '😟'
-  if (body.hunger > 0.5) return '😐'
-  if (pollution > TUNING.sicknessAbovePollution) return '😖'
-  if (behaviour.activity.kind === 'court') return '🥰'
-  if (behaviour.activity.kind === 'distress') return '😰'
-  return '😊'
+function describeMood(body: Physiology, behaviour: Behaviour, pollution = 0) {
+  return MOODS.find((mood) => mood.matches(body, behaviour, pollution))!
 }
 
 function describeStage(body: Physiology, genome: Genome): string {
@@ -221,8 +235,8 @@ export function buildHudSnapshot(
         hue: entity.genome.hue,
         saturation: entity.genome.saturation,
         weightGrams: entity.physiology.weight,
-        mood: describeMood(entity.physiology, entity.behaviour, pollution),
-        moodEmoji: moodEmoji(entity.physiology, entity.behaviour, pollution),
+        mood: describeMood(entity.physiology, entity.behaviour, pollution).label,
+        moodEmoji: describeMood(entity.physiology, entity.behaviour, pollution).emoji,
       }
     }),
     selectedFish:
@@ -236,7 +250,7 @@ export function buildHudSnapshot(
               selected.physiology,
               selected.behaviour,
               pollutionAt(state.water, selected.position),
-            ),
+            ).label,
             weightGrams: selected.physiology.weight,
             age: formatAge(selected.physiology.ageSeconds),
             origin: selected.resident.parents ? 'hatched' : 'arrived',

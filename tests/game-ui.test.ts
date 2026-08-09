@@ -61,6 +61,20 @@ describe('game UI layout', () => {
     })
   })
 
+  test('a fish that is both starving and gravely ill gets one consistent mood', () => {
+    const state = createFreshGame(321)
+    const sim = new GameSim(state)
+    const fish = [...state.world.with('physiology')][0]
+    fish.physiology.hunger = 1
+    fish.physiology.sickness = 0.9
+
+    const resident = buildHudSnapshot(sim, undefined, 'clear').residents[0]
+
+    // Label and emoji must agree; starving is the more urgent of the two.
+    expect(resident.mood).toBe('starving')
+    expect(resident.moodEmoji).toBe('😫')
+  })
+
   test('a healthy fish in polluted water reads as uneasy, not content', () => {
     const state = createFreshGame(123)
     const sim = new GameSim(state)

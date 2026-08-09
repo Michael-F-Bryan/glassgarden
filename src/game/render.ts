@@ -16,6 +16,8 @@ export type DrawOptions = {
   realTime: number
   selectedFishId?: number
   hoverFishId?: number
+  /** Where the keyboard is aiming, drawn as a visible target. */
+  caret?: { x: number; y: number }
 }
 
 /** Deterministic per-entity variation without touching the sim RNG. */
@@ -155,6 +157,39 @@ export class TankRenderer {
     this.drawCoinFloats(ctx, realTime)
     this.drawBubbles(ctx, realTime)
     this.drawSurface(ctx, realTime)
+    if (options.caret) this.drawCaret(ctx, options.caret, realTime)
+  }
+
+  /** The keyboard's aiming target. Drawn last and with a pulse so it stays
+   * findable against a busy tank — a keyboard player has no cursor. */
+  private drawCaret(ctx: CanvasRenderingContext2D, caret: { x: number; y: number }, realTime: number): void {
+    const pulse = 1 + Math.sin(realTime * 4) * 0.12
+    ctx.save()
+    ctx.translate(caret.x, caret.y)
+    ctx.strokeStyle = 'rgba(232, 244, 246, 0.95)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(0, 0, 16 * pulse, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(10, 26, 36, 0.9)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc(0, 0, 16 * pulse + 1.5, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(232, 244, 246, 0.95)'
+    ctx.lineWidth = 2
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
+      ctx.beginPath()
+      ctx.moveTo(dx * 10, dy * 10)
+      ctx.lineTo(dx * 24, dy * 24)
+      ctx.stroke()
+    }
+    ctx.restore()
   }
 
   /** Each feeder stage reads as a bigger machine: one chamber, two, then a

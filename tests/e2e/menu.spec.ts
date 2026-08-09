@@ -1,18 +1,10 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
-import type { DevSnapshot } from '../../src/game/devtools'
-
-async function waitForDevTools(page: Page): Promise<void> {
-  await page.waitForFunction(() => Boolean(window.__glassgardenDev))
-}
-
-async function snapshot(page: Page): Promise<DevSnapshot> {
-  return page.evaluate(() => window.__glassgardenDev!.snapshot())
-}
+import { openGame, snapshot } from './support'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-  await waitForDevTools(page)
+  await page.waitForFunction(() => Boolean(window.__glassgardenDev))
 })
 
 test('opening the menu pauses the tank; resuming lets it flow again', async ({ page }) => {
@@ -58,6 +50,6 @@ test('starting a new game requires confirmation and resets the tank for good', a
 
   // The reset is saved immediately, not lost to a reload.
   await page.reload()
-  await waitForDevTools(page)
+  await openGame(page)
   expect((await snapshot(page)).time).toBeLessThan(30)
 })

@@ -5,8 +5,8 @@ import {
   type GlassgardenDevTools,
 } from './devtools'
 import { buildHudSnapshot, EMPTY_HUD, type HudSnapshot, type WaterTier } from './hud'
-import type { OfflineSummary, UiNotification, Vec2 } from './model'
-import { createCanvasPresenter } from './render'
+import { TANK, type OfflineSummary, type UiNotification, type Vec2 } from './model'
+import { createCanvasPresenter, type DrawOptions } from './render'
 import { hydrate } from './save'
 import { GameSim, type AdvanceResult, type ShopOfferId } from './sim'
 import type { GameReadModel } from './state'
@@ -31,6 +31,12 @@ export type GameView = {
   awaySummary: OfflineSummary | null
   tool: Tool
   paused: boolean
+  /** Where the keyboard is aiming inside the tank, in logical tank
+   * coordinates, or null while the player is using a pointer. Drawn as a
+   * visible target so a keyboard user can see where an action will land. */
+  caret: Vec2 | null
+  /** What the caret is currently over, for the canvas's accessible name. */
+  caretTarget: { fishId: number; name: string } | null
 }
 
 export const EMPTY_VIEW: GameView = {
@@ -39,13 +45,15 @@ export const EMPTY_VIEW: GameView = {
   awaySummary: null,
   tool: 'feed',
   paused: false,
+  caret: null,
+  caretTarget: null,
 }
 
 /** What the runtime needs from the canvas: drawing and cosmetic reset. The
  * production implementation (render.ts) owns the 2d context, DPR, and window
  * resize; tests use a recording fake. */
 export type TankPresenter = {
-  draw(state: GameReadModel, options: { realTime: number; selectedFishId?: number; hoverFishId?: number }): void
+  draw(state: GameReadModel, options: DrawOptions): void
   /** Cosmetic confirmations that a feed/siphon action landed. */
   notifyFeed(x: number): void
   notifySiphon(x: number, y: number): void
@@ -82,6 +90,20 @@ export type GameRuntime = {
   setTool(tool: Tool): void
   buy(itemId: ShopOfferId): void
   selectFish(fishId: number | undefined): void
+  /**
+   * Keyboard aiming. The caret is the keyboard's equivalent of the pointer:
+   * it is shown in the tank, moved in steps, and `actAtCaret` runs the same
+   * intents a click would. `nextResident` jumps it from fish to fish so
+   * inspection does not require pixel hunting.
+   */
+  showCaret(): void
+  hideCaret(): void
+  moveCaret(dx: number, dy: number): void
+  nextResident(step: 1 | -1): void
+  /** One action with the current tool at the caret, like a click. */
+  actAtCaret(): void
+  /** Inspect whatever the caret is over, like a tap on a fish. */
+  inspectAtCaret(): void
   pointerDown(point: Vec2): void
   /** Returns whether a fish is under the pointer, for cursor styling. */
   pointerMove(point: Vec2): 'fish' | 'none'
@@ -155,6 +177,10 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
   let toastKey = 0
   let awaySummary: OfflineSummary | null = null
   let waterTier: WaterTier = 'clear'
+  let caret: Vec2 | null = null
+  /** Where the caret was when the tank last lost focus, so coming back —
+   * after closing an inspector, say — resumes where the player left off. */
+  let lastCaret: Vec2 | null = null
 
   const listeners = new Set<(view: GameView) => void>()
 
@@ -165,7 +191,19 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       .sort((a, b) => TOAST_PRIORITY[a.tone] - TOAST_PRIORITY[b.tone] || b.key - a.key)
       .slice(0, 3)
       .map(({ key, tone, message }) => ({ key, tone, message }))
-    return { hud, toasts: visibleToasts, awaySummary, tool, paused }
+    const overFish = caret && sim ? sim.fishAt(caret.x, caret.y) : undefined
+    return {
+      hud,
+      toasts: visibleToasts,
+      awaySummary,
+      tool,
+      paused,
+      caret: caret ? { ...caret } : null,
+      caretTarget:
+        overFish?.resident && caret
+          ? { fishId: overFish.id, name: overFish.resident.name }
+          : null,
+    }
   }
 
   const publish = () => {
@@ -291,7 +329,14 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       pulseGesture(nowMs)
     }
 
-    if (sim) presenter?.draw(sim.read, { realTime: nowMs / 1000, selectedFishId, hoverFishId })
+    if (sim) {
+      presenter?.draw(sim.read, {
+        realTime: nowMs / 1000,
+        selectedFishId,
+        hoverFishId,
+        caret: caret ?? undefined,
+      })
+    }
 
     hudAccumulator += dt
     if (hudAccumulator > 0.25) {
@@ -430,8 +475,68 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       publish()
     },
 
+    showCaret() {
+      if (!caret) {
+        caret = lastCaret ?? { x: TANK.width / 2, y: (TANK.waterTop + TANK.sandTop) / 2 }
+      }
+      publish()
+    },
+
+    hideCaret() {
+      lastCaret = caret
+      caret = null
+      publish()
+    },
+
+    moveCaret(dx, dy) {
+      if (!caret) caret = { x: TANK.width / 2, y: (TANK.waterTop + TANK.sandTop) / 2 }
+      caret = {
+        x: Math.min(TANK.width, Math.max(0, caret.x + dx)),
+        y: Math.min(TANK.sandTop, Math.max(TANK.waterTop, caret.y + dy)),
+      }
+      hoverFishId = sim?.fishAt(caret.x, caret.y)?.id
+      publish()
+    },
+
+    /** Jump the caret between residents in a stable order, so inspecting a
+     * fish never requires aiming at a moving target. */
+    nextResident(step) {
+      if (!sim) return
+      const residents = [...sim.read.world.with('resident')].sort((a, b) => a.id - b.id)
+      if (residents.length === 0) return
+      const currentId = caret ? sim.fishAt(caret.x, caret.y)?.id : undefined
+      const currentIndex = residents.findIndex((entity) => entity.id === currentId)
+      const nextIndex =
+        currentIndex === -1
+          ? step === 1
+            ? 0
+            : residents.length - 1
+          : (currentIndex + step + residents.length) % residents.length
+      const target = residents[nextIndex]
+      caret = { x: target.position.x, y: target.position.y }
+      hoverFishId = target.id
+      publish()
+    },
+
+    actAtCaret() {
+      if (!sim || paused || !caret) return
+      if (tool === 'siphon') {
+        if (sim.siphonAt(caret.x, caret.y).ok) presenter?.notifySiphon(caret.x, caret.y)
+      } else {
+        tryDropPellet(caret.x)
+      }
+      publish()
+    },
+
+    inspectAtCaret() {
+      if (!sim || !caret) return
+      selectedFishId = sim.fishAt(caret.x, caret.y)?.id
+      publish()
+    },
+
     pointerDown(point) {
       if (!sim || paused) return
+      caret = null // the pointer takes over aiming
       const fish = tool === 'feed' ? sim.fishAt(point.x, point.y) : undefined
       if (tool === 'feed' && !fish) selectedFishId = undefined
       cancelGesture()

@@ -284,6 +284,70 @@ describe('game runtime', () => {
     runtime.stop()
   })
 
+  test('the keyboard caret aims, acts, and survives losing focus', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+    h.tick(16)
+
+    // No caret until the tank takes focus.
+    expect(lastView(views).caret).toBeNull()
+    runtime.showCaret()
+    expect(lastView(views).caret).not.toBeNull()
+
+    // Arrows aim; acting drops a pellet through the same intent a click uses.
+    const coinsBefore = lastView(views).hud.coins
+    runtime.moveCaret(-100, -40)
+    const aimed = lastView(views).caret!
+    runtime.actAtCaret()
+    expect(lastView(views).hud.coins).toBeLessThan(coinsBefore)
+
+    // Losing and regaining focus resumes at the same spot.
+    runtime.hideCaret()
+    expect(lastView(views).caret).toBeNull()
+    runtime.showCaret()
+    expect(lastView(views).caret).toEqual(aimed)
+
+    runtime.stop()
+  })
+
+  test('the caret can step to a resident and inspect it', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+    h.tick(16)
+
+    runtime.showCaret()
+    runtime.nextResident(1)
+    const view = lastView(views)
+    expect(view.caretTarget).not.toBeNull()
+
+    runtime.inspectAtCaret()
+    expect(lastView(views).hud.selectedFish?.id).toBe(view.caretTarget!.fishId)
+    runtime.stop()
+  })
+
+  test('a paused tank ignores keyboard actions, like pointer ones', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+    h.tick(16)
+    runtime.showCaret()
+
+    runtime.pause()
+    const coins = lastView(views).hud.coins
+    runtime.actAtCaret()
+
+    expect(lastView(views).hud.coins).toBe(coins)
+    runtime.stop()
+  })
+
   test('stop saves the tank and halts the frame loop', () => {
     const h = harness()
     const runtime = createGameRuntime(h.deps)

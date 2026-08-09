@@ -1,19 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import type { DevScenario } from '../../src/game/devtools'
-
-async function waitForDevTools(page: Page): Promise<void> {
-  await page.waitForFunction(() => Boolean(window.__glassgardenDev))
-}
-
-async function loadScenario(page: Page, name: DevScenario, seed = 42): Promise<void> {
-  await page.evaluate(
-    ({ scenario, scenarioSeed }) => {
-      window.__glassgardenDev!.loadScenario(scenario, scenarioSeed)
-    },
-    { scenario: name, scenarioSeed: seed },
-  )
-}
+import { loadScenario, openGame } from './support'
 
 /** Mean colour of a patch of mid-water pixels, straight off the canvas. */
 async function midWaterColour(page: Page): Promise<{ r: number; g: number; b: number }> {
@@ -44,9 +31,7 @@ async function midWaterColour(page: Page): Promise<{ r: number; g: number; b: nu
 test('polluted water is visibly murkier than clear water, on the glass itself', async ({
   page,
 }) => {
-  await page.goto('/')
-  await waitForDevTools(page)
-  await page.evaluate(() => window.__glassgardenDev!.setSpeed(0))
+  await openGame(page)
 
   await loadScenario(page, 'fresh', 31)
   const clear = await midWaterColour(page)
