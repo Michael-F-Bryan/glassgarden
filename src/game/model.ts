@@ -154,6 +154,9 @@ export const TUNING = {
   sicknessAbovePollution: 0.3,
   sicknessPerSecondAtFullPollution: 1 / 45,
   sicknessRecoveryPerSecond: 1 / 90,
+  /** Debris self-degrades (after leaching pollution) so entities stay bounded. */
+  wasteBreakdownPerSecond: 0.004,
+  spoiledFoodLingerSeconds: 180,
   siphonRadius: 70,
   siphonPollutionClear: 0.35, // fraction of local cell pollution removed per use
 

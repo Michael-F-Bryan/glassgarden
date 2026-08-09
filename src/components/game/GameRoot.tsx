@@ -172,7 +172,12 @@ export default function GameRoot() {
     const ctx = canvas.getContext('2d')!
 
     const save = () => {
-      window.localStorage.setItem(SAVE_KEY, JSON.stringify(serialize(sim!.state, Date.now())))
+      try {
+        window.localStorage.setItem(SAVE_KEY, JSON.stringify(serialize(sim!.state, Date.now())))
+      } catch (error) {
+        // Quota or privacy-mode failure: the game stays playable, unsaved.
+        console.warn('Glassgarden: could not save', error)
+      }
     }
     const refreshHud = () => setHud(buildHudSnapshot(sim!, selectedFishRef.current))
     refreshHudRef.current = refreshHud
@@ -208,7 +213,9 @@ export default function GameRoot() {
       const dt = (nowMs - lastFrameMs) / 1000
       lastFrameMs = nowMs
 
-      if (dt > 90) {
+      // Any real gap (background tab, sleep, reload) runs at the slowed,
+      // clamped away-time rate; the modal only appears for longer absences.
+      if (dt > 5) {
         sim!.advanceOffline(dt)
       } else {
         sim!.step(dt * simSpeed, document.visibilityState === 'visible')

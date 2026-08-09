@@ -173,12 +173,17 @@ export class GameSim {
     }
     if (this.state.unlocks.fishInShop && !this.state.gameOver) {
       const cost = fishPrice(this.state.fishPurchased)
+      const population =
+        this.state.world.with('fish').entities.length + this.state.world.with('egg').entities.length
+      const atCapacity = population >= TUNING.maxPopulation
       items.push({
         id: 'fish',
         label: 'Young glimmerfin',
-        description: 'A new resident for the tank. Each one is harder to source than the last.',
+        description: atCapacity
+          ? 'The tank is at capacity — no responsible shop would add another fish.'
+          : 'A new resident for the tank. Each one is harder to source than the last.',
         cost,
-        affordable: coins >= cost,
+        affordable: !atCapacity && coins >= cost,
       })
     }
     if (this.state.gameOver) {

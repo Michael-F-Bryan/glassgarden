@@ -214,6 +214,97 @@ describe('breeding', () => {
   })
 })
 
+describe('critique regressions', () => {
+  test('a starving fish still chases and eats dropped food — rescue is possible', () => {
+    const sim = GameSim.fresh(701)
+    const fish = onlyFish(sim)
+    fish.fish.hunger = 1
+    for (let t = 0; t < 120; t += TUNING.tick) {
+      if ([...sim.state.world.with('food')].length === 0) {
+        sim.state.coins = 10
+        sim.dropFood(onlyFish(sim).position.x)
+      }
+      sim.step(TUNING.tick, true)
+      if (onlyFish(sim).fish.hunger < 0.9) break
+    }
+    expect(onlyFish(sim).fish.hunger).toBeLessThan(0.9)
+    expect([...sim.state.world.with('fish')]).toHaveLength(1)
+  })
+
+  test('a fish recovered from illness leaves the distress posture', () => {
+    const sim = GameSim.fresh(703)
+    const fish = onlyFish(sim)
+    fish.fish.hunger = 0.1
+    fish.fish.sickness = 0.8
+    runFor(sim, 2)
+    expect(onlyFish(sim).fish.activity.kind).toBe('distress')
+    onlyFish(sim).fish.sickness = 0
+    runFor(sim, 2)
+    expect(onlyFish(sim).fish.activity.kind).not.toBe('distress')
+  })
+
+  test('no game over while an egg is incubating; the hatchling revives the tank', () => {
+    const sim = new GameSim(pairedState(705))
+    runFor(sim, 25)
+    expect([...sim.state.world.with('egg')]).toHaveLength(1)
+    for (const entity of [...sim.state.world.with('fish')]) {
+      entity.fish.hunger = 1
+      entity.fish.health = 0.001
+      entity.fish.criticalSince = sim.state.time - TUNING.warningGraceSeconds - 1
+    }
+    runFor(sim, 10)
+    expect([...sim.state.world.with('fish')]).toHaveLength(0)
+    expect(sim.state.gameOver).toBe(false)
+    runFor(sim, 80)
+    expect([...sim.state.world.with('fish')]).toHaveLength(1)
+    expect(sim.state.gameOver).toBe(false)
+    expect(sim.dropFood(600)).toBe(true)
+  })
+
+  test('waste and spoiled food break down on their own, keeping entities bounded', () => {
+    const sim = GameSim.fresh(707)
+    addEntity(sim.state, {
+      position: { x: 600, y: 609 },
+      velocity: { x: 0, y: 0 },
+      waste: { size: 1.2, restingOnSand: true },
+    })
+    sim.state.coins = 10
+    sim.dropFood(1100) // far from the fish; left to spoil
+    onlyFish(sim).fish.hunger = 0 // keep the fish uninterested
+    for (let t = 0; t < 700; t += TUNING.tick) {
+      onlyFish(sim).fish.hunger = 0
+      sim.step(TUNING.tick, true)
+    }
+    expect([...sim.state.world.with('waste')]).toHaveLength(0)
+    expect([...sim.state.world.with('food')]).toHaveLength(0)
+  })
+
+  test('offline catch-up pulls pre-existing sickness down to its ceiling', () => {
+    const sim = GameSim.fresh(709)
+    onlyFish(sim).fish.sickness = 1
+    sim.advanceOffline(3600)
+    expect(onlyFish(sim).fish.sickness).toBeLessThanOrEqual(TUNING.offlineSicknessCeiling)
+  })
+
+  test('the shop refuses fish at the population cap', () => {
+    const sim = GameSim.fresh(711)
+    sim.state.unlocks.fishInShop = true
+    sim.state.coins = 100_000
+    for (let i = 0; i < TUNING.maxPopulation - 1; i += 1) {
+      spawnFish(sim.state, {
+        genome: randomGenome(sim.state.rng, 20),
+        name: `Filler${i}`,
+        weight: 5,
+        generation: 1,
+      })
+    }
+    const item = sim.shopItems().find((i) => i.id === 'fish')
+    expect(item?.affordable).toBe(false)
+    expect(sim.buy('fish')).toBe(false)
+    expect([...sim.state.world.with('fish')]).toHaveLength(TUNING.maxPopulation)
+  })
+})
+
 describe('neglect, death, and game over', () => {
   test('a starving fish is warned, then dies only after sustained visible neglect', () => {
     const sim = GameSim.fresh(201)
@@ -307,6 +398,28 @@ describe('persistence', () => {
     runFor(sim, 30)
     runFor(resumed, 30)
     expect(serialize(resumed.state, 2_000)).toEqual(serialize(sim.state, 2_000))
+  })
+
+  test('determinism across the real JSON save path with a rich, removal-scarred world', () => {
+    // Entity removals reorder miniplex's arrays (swap-remove), so this pins
+    // that id-ordered iteration keeps a loaded game in lockstep with one that
+    // was never saved — with multiple fish, food, waste, and eggs in play.
+    const sim = new GameSim(pairedState(801))
+    sim.state.coins = 200
+    for (let round = 0; round < 6; round += 1) {
+      sim.dropFood(200 + round * 120)
+      runFor(sim, 12)
+    }
+    expect([...sim.state.world.entities].length).toBeGreaterThan(3)
+
+    const json = JSON.stringify(serialize(sim.state, 5_000))
+    const parsed = parseSave(json)
+    expect(parsed).toBeDefined()
+    const resumed = new GameSim(deserialize(parsed!))
+
+    runFor(sim, 90)
+    runFor(resumed, 90)
+    expect(serialize(resumed.state, 6_000)).toEqual(serialize(sim.state, 6_000))
   })
 
   test('undelivered toasts survive a save/load cycle', () => {

@@ -37,7 +37,9 @@ export function serialize(state: GameState, savedAtMs: number): SaveFile {
     rngState: state.rng.state(),
     nextEntityId: state.nextEntityId,
     gameOver: state.gameOver,
-    entities: [...state.world.entities].map((entity) => structuredClone(entity)),
+    entities: [...state.world.entities]
+      .sort((a, b) => a.id - b.id)
+      .map((entity) => structuredClone(entity)),
     pendingEvents: state.events.map((event) => structuredClone(event)),
   }
 }
@@ -83,5 +85,12 @@ export function parseSave(json: string): SaveFile | undefined {
   }
   if (typeof candidate.savedAtMs !== 'number' || typeof candidate.time !== 'number') return undefined
   if (typeof candidate.coins !== 'number' || typeof candidate.rngState !== 'number') return undefined
+  if (!Number.isFinite(candidate.nextEntityId) || (candidate.nextEntityId as number) < 1) return undefined
+  if (typeof candidate.unlocks !== 'object' || candidate.unlocks === null) return undefined
+  if (!candidate.waterCells.every((cell) => Number.isFinite(cell))) return undefined
+  if (!candidate.entities.every((entity) => Number.isFinite(entity?.id))) return undefined
+  if (candidate.pendingEvents !== undefined && !Array.isArray(candidate.pendingEvents)) {
+    return undefined
+  }
   return candidate as SaveFile
 }

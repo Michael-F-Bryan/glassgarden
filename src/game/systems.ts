@@ -25,6 +25,13 @@ import {
  */
 export type TickFlags = { visible: boolean; offline: boolean }
 
+/** Copy of a query's entities in id order, so iteration (and therefore RNG
+ * consumption and float summation) is identical before and after save/load —
+ * miniplex's swap-remove otherwise reorders the underlying arrays. */
+function sortedById<T extends Entity>(query: Iterable<T>): T[] {
+  return [...query].sort((a, b) => a.id - b.id)
+}
+
 export function stepTick(state: GameState, dt: number, flags: TickFlags): void {
   state.time += dt
   hungerSystem(state, dt, flags)
@@ -37,11 +44,11 @@ export function stepTick(state: GameState, dt: number, flags: TickFlags): void {
   breedingSystem(state)
   economySystem(state, dt)
   developmentSystem(state)
-  cleanupSystem(state)
+  cleanupSystem(state, dt)
 }
 
 function hungerSystem(state: GameState, dt: number, flags: TickFlags): void {
-  for (const entity of state.world.with('fish')) {
+  for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish
     fish.ageSeconds += dt
     const maturity = Math.min(1, fish.weight / fish.genome.maxWeight)
@@ -57,7 +64,7 @@ function hungerSystem(state: GameState, dt: number, flags: TickFlags): void {
 const EAT_HUNGER_CUTOFF = 0.08
 
 function edibleFood(state: GameState): Entity[] {
-  return [...state.world.with('food')].filter((entity) => !entity.food.spoiled)
+  return sortedById(state.world.with('food')).filter((entity) => !entity.food!.spoiled)
 }
 
 function nearestEdibleFood(state: GameState, from: Vec2): Entity | undefined {
@@ -74,7 +81,7 @@ function nearestEdibleFood(state: GameState, from: Vec2): Entity | undefined {
 }
 
 function movementSystem(state: GameState, dt: number): void {
-  for (const entity of state.world.with('fish')) {
+  for (const entity of sortedById(state.world.with('fish'))) {
     steerFish(state, entity, dt)
   }
   for (const entity of state.world.with('food')) {
@@ -111,11 +118,13 @@ function steerFish(state: GameState, entity: Entity, dt: number): void {
   const speedScale = (0.55 + 0.45 * maturity) * (1 - 0.5 * fish.sickness)
   const cruise = fish.genome.speed * speedScale
 
-  // Re-evaluate what the fish wants to do.
+  // Re-evaluate what the fish wants to do. A starving fish must still chase
+  // food — the death warning exists so the player can rescue it by feeding.
   const starving = fish.hunger >= 0.999
   const gravelyIll = fish.sickness >= 0.75
   if (starving || gravelyIll) {
-    fish.activity = { kind: 'distress' }
+    const food = starving ? nearestEdibleFood(state, entity.position) : undefined
+    fish.activity = food ? { kind: 'seekFood', foodId: food.id } : { kind: 'distress' }
   } else if (fish.activity.kind === 'court') {
     const partner = state.byId.get(fish.activity.partnerId)
     if (!partner?.fish) fish.activity = wanderActivity(state)
@@ -123,7 +132,7 @@ function steerFish(state: GameState, entity: Entity, dt: number): void {
     const food = nearestEdibleFood(state, entity.position)
     if (food) fish.activity = { kind: 'seekFood', foodId: food.id }
     else if (fish.activity.kind === 'seekFood') fish.activity = wanderActivity(state)
-  } else if (fish.activity.kind === 'seekFood') {
+  } else if (fish.activity.kind === 'seekFood' || fish.activity.kind === 'distress') {
     fish.activity = wanderActivity(state)
   }
 
@@ -192,7 +201,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function eatingSystem(state: GameState): void {
-  for (const entity of state.world.with('fish')) {
+  for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish
     if (fish.activity.kind !== 'seekFood' || fish.hunger < EAT_HUNGER_CUTOFF) continue
     const food = state.byId.get(fish.activity.foodId)
@@ -213,7 +222,7 @@ function eatingSystem(state: GameState): void {
 }
 
 function digestionSystem(state: GameState): void {
-  for (const entity of state.world.with('fish')) {
+  for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish
     if (fish.digesting < TUNING.digestionPerDropping) continue
     fish.digesting -= TUNING.digestionPerDropping
@@ -226,11 +235,11 @@ function digestionSystem(state: GameState): void {
 }
 
 function waterSystem(state: GameState, dt: number): void {
-  for (const entity of state.world.with('waste')) {
+  for (const entity of sortedById(state.world.with('waste'))) {
     addPollution(state.water, entity.position, entity.waste.size * TUNING.wastePollutionPerSecond * dt)
   }
-  for (const entity of state.world.with('food')) {
-    const food = entity.food
+  for (const entity of sortedById(state.world.with('food'))) {
+    const food = entity.food!
     if (!food.spoiled && state.time >= food.spoilsAt) food.spoiled = true
     if (food.spoiled) {
       addPollution(state.water, entity.position, food.nutrition * TUNING.spoiledFoodPollutionPerSecond * dt)
@@ -240,7 +249,7 @@ function waterSystem(state: GameState, dt: number): void {
 }
 
 function sicknessSystem(state: GameState, dt: number, flags: TickFlags): void {
-  for (const entity of state.world.with('fish')) {
+  for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish
     const pollution = pollutionAt(state.water, entity.position)
     if (pollution > TUNING.sicknessAbovePollution) {
@@ -258,8 +267,8 @@ function sicknessSystem(state: GameState, dt: number, flags: TickFlags): void {
 }
 
 function healthSystem(state: GameState, dt: number, flags: TickFlags): void {
-  for (const entity of [...state.world.with('fish')]) {
-    const fish = entity.fish
+  for (const entity of sortedById(state.world.with('fish'))) {
+    const fish = entity.fish!
     const distressed =
       fish.hunger > TUNING.distressHungerAbove || fish.sickness > TUNING.distressSicknessAbove
     const critical = fish.hunger >= 0.999 || fish.sickness >= 0.75
@@ -297,7 +306,8 @@ function dieOf(state: GameState, entity: Entity): void {
   })
   emit(state, { type: 'death', name: fish.name })
   emit(state, { type: 'toast', tone: 'warning', message: `${fish.name} has died.` })
-  if (livingFish(state).length === 0) {
+  // An incubating egg means the tank is not actually lost yet.
+  if (livingFish(state).length === 0 && state.world.with('egg').entities.length === 0) {
     state.gameOver = true
     emit(state, { type: 'gameOver' })
   }
@@ -305,8 +315,8 @@ function dieOf(state: GameState, entity: Entity): void {
 
 function breedingSystem(state: GameState): void {
   // Hatch or advance incubating eggs.
-  for (const entity of [...state.world.with('egg')]) {
-    const egg = entity.egg
+  for (const entity of sortedById(state.world.with('egg'))) {
+    const egg = entity.egg!
     egg.peakPollution = Math.max(egg.peakPollution, pollutionAt(state.water, entity.position))
     if (state.time < egg.hatchAt) continue
     removeEntity(state, entity)
@@ -316,6 +326,7 @@ function breedingSystem(state: GameState): void {
       genome.maxWeight *= 0.75
       genome.resilience *= 0.6
     }
+    state.gameOver = false // defensive: a hatchling always means a living tank
     const baby = spawnFish(state, {
       genome,
       name: generateName(state.rng, takenNames(state)),
@@ -337,11 +348,13 @@ function breedingSystem(state: GameState): void {
   }
 
   // Complete courtships whose dance has finished.
-  for (const entity of state.world.with('fish')) {
+  for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish
     if (fish.activity.kind !== 'court' || state.time < fish.activity.until) continue
     const partner = state.byId.get(fish.activity.partnerId)
-    if (!partner?.fish || partner.fish.activity.kind !== 'court') {
+    const reciprocal =
+      partner?.fish?.activity.kind === 'court' && partner.fish.activity.partnerId === entity.id
+    if (!partner?.fish || !reciprocal) {
       fish.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
       continue
     }
@@ -447,8 +460,20 @@ function developmentSystem(state: GameState): void {
   }
 }
 
-function cleanupSystem(state: GameState): void {
+function cleanupSystem(state: GameState, dt: number): void {
   for (const entity of [...state.world.with('remains')]) {
     if (state.time >= entity.remains.expiresAt) removeEntity(state, entity)
+  }
+  // Debris breaks down on its own (having already leached pollution), so a
+  // neglected tank converts mess into water quality rather than accumulating
+  // entities without bound over a long session.
+  for (const entity of sortedById(state.world.with('waste'))) {
+    entity.waste!.size -= TUNING.wasteBreakdownPerSecond * dt
+    if (entity.waste!.size <= 0.15) removeEntity(state, entity)
+  }
+  for (const entity of sortedById(state.world.with('food'))) {
+    if (entity.food!.spoiled && state.time >= entity.food!.spoilsAt + TUNING.spoiledFoodLingerSeconds) {
+      removeEntity(state, entity)
+    }
   }
 }

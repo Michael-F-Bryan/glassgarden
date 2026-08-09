@@ -75,7 +75,8 @@ export function emit(state: GameState, event: GameEvent): void {
 }
 
 export function livingFish(state: GameState): Entity[] {
-  return [...state.world.with('fish')]
+  // id order, so callers iterate identically before and after a save/load.
+  return [...state.world.with('fish')].sort((a, b) => a.id - b.id)
 }
 
 export function takenNames(state: GameState): Set<string> {

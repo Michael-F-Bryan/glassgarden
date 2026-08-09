@@ -35,6 +35,7 @@ const KELP = [
 export class TankRenderer {
   private pollutionLayer = document.createElement('canvas')
   private bubbles: Bubble[] = []
+  private lastBubbleTime: number | undefined
 
   constructor() {
     this.pollutionLayer.width = WATER_COLS
@@ -451,10 +452,12 @@ export class TankRenderer {
   }
 
   private drawBubbles(ctx: CanvasRenderingContext2D, realTime: number): void {
+    const dt = Math.min(0.1, Math.max(0, realTime - (this.lastBubbleTime ?? realTime)))
+    this.lastBubbleTime = realTime
     ctx.save()
     for (const bubble of this.bubbles) {
-      bubble.y -= bubble.speed / 60
-      bubble.x += Math.sin(realTime * 2 + bubble.wobble) * 0.3
+      bubble.y -= bubble.speed * dt
+      bubble.x += Math.sin(realTime * 2 + bubble.wobble) * 18 * dt
       if (bubble.y < TANK.waterTop + 6) {
         Object.assign(bubble, this.newBubble(false))
       }
