@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest'
 import GameRoot from '@/components/game/GameRoot'
 import { buildHudSnapshot } from '@/game/hud'
 import { GameSim } from '@/game/sim'
+import { createFreshGame } from '@/game/state'
 
 function renderGame(): string {
   return renderToStaticMarkup(createElement(GameRoot))
@@ -47,7 +48,7 @@ describe('game UI layout', () => {
 
   test('fish roster summarises weight and mood with an emoji', () => {
     const sim = GameSim.fresh(123)
-    const fish = [...sim.state.world.with('fish')][0].fish
+    const fish = [...sim.read.world.with('fish')][0].fish
     fish.hunger = 0.9
 
     const resident = buildHudSnapshot(sim, undefined, 'clear').residents[0]
@@ -61,8 +62,9 @@ describe('game UI layout', () => {
   })
 
   test('a healthy fish in polluted water reads as uneasy, not content', () => {
-    const sim = GameSim.fresh(123)
-    sim.state.water.cells.fill(0.5)
+    const state = createFreshGame(123)
+    const sim = new GameSim(state)
+    state.water.cells.fill(0.5)
 
     const resident = buildHudSnapshot(sim, undefined, 'clear').residents[0]
 
@@ -71,18 +73,20 @@ describe('game UI layout', () => {
   })
 
   test('hud exposes worst pollution for the water-quality meter', () => {
-    const sim = GameSim.fresh(123)
+    const state = createFreshGame(123)
+    const sim = new GameSim(state)
     expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBe(0)
 
-    sim.state.water.cells.fill(0.4)
+    state.water.cells.fill(0.4)
 
     expect(buildHudSnapshot(sim, undefined, 'clear').worstPollution).toBeCloseTo(0.4)
   })
 
   test('journal entries reach the HUD newest-first with readable ages', () => {
-    const sim = GameSim.fresh(123)
-    sim.state.coins = 100
-    sim.state.unlocks.siphonInShop = true
+    const state = createFreshGame(123)
+    const sim = new GameSim(state)
+    state.coins = 100
+    state.unlocks.siphonInShop = true
     sim.buy('siphon')
 
     const journal = buildHudSnapshot(sim, undefined, 'clear').journal

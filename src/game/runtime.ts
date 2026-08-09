@@ -7,9 +7,9 @@ import {
 import { buildHudSnapshot, EMPTY_HUD, type HudSnapshot, type WaterTier } from './hud'
 import type { GameEvent, OfflineSummary, Vec2 } from './model'
 import { createCanvasPresenter } from './render'
-import { hydrate, serialize } from './save'
+import { hydrate } from './save'
 import { GameSim } from './sim'
-import type { GameState } from './state'
+import type { GameReadModel } from './state'
 
 export type Tool = 'feed' | 'siphon'
 
@@ -45,7 +45,7 @@ export const EMPTY_VIEW: GameView = {
  * production implementation (render.ts) owns the 2d context, DPR, and window
  * resize; tests use a recording fake. */
 export type TankPresenter = {
-  draw(state: GameState, options: { realTime: number; selectedFishId?: number; hoverFishId?: number }): void
+  draw(state: GameReadModel, options: { realTime: number; selectedFishId?: number; hoverFishId?: number }): void
   /** Cosmetic confirmations that a feed/siphon action landed. */
   notifyFeed(x: number): void
   notifySiphon(x: number, y: number): void
@@ -193,7 +193,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
   const save = () => {
     if (!sim) return
     // Quota or privacy-mode failure: the game stays playable, unsaved.
-    if (!saveToStorage(deps.storage, serialize(sim.state, deps.now()))) {
+    if (!saveToStorage(deps.storage, sim.toSave(deps.now()))) {
       console.warn('Glassgarden: could not save')
     }
   }
@@ -210,7 +210,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       presenter?.notifyFeed(x)
       return true
     }
-    if (!sim.state.gameOver && deps.monotonicNow() - affordWarnAtMs > 5000) {
+    if (!sim.read.gameOver && deps.monotonicNow() - affordWarnAtMs > 5000) {
       affordWarnAtMs = deps.monotonicNow()
       pushToast('warning', 'Not enough coins for food — they trickle in as your fish grow.')
     }
@@ -241,7 +241,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
    * the save happens only once the new session is coherent. */
   const replace = (next: GameSim) => {
     cancelGesture()
-    if (tool === 'siphon' && !next.state.ownsSiphon) tool = 'feed'
+    if (tool === 'siphon' && !next.read.ownsSiphon) tool = 'feed'
     hoverFishId = undefined
     selectedFishId = undefined
     affordWarnAtMs = 0
@@ -272,7 +272,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       pulseGesture(nowMs)
     }
 
-    if (sim) presenter?.draw(sim.state, { realTime: nowMs / 1000, selectedFishId, hoverFishId })
+    if (sim) presenter?.draw(sim.read, { realTime: nowMs / 1000, selectedFishId, hoverFishId })
 
     hudAccumulator += dt
     if (hudAccumulator > 0.25) {

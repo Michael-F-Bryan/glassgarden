@@ -6,6 +6,7 @@ import {
   type GameEvent,
   type OfflineSummary,
 } from './model'
+import { serialize, type SaveFile } from './save'
 import {
   createFreshGame,
   emit,
@@ -15,6 +16,7 @@ import {
   spawnFish,
   spawnPellet,
   takenNames,
+  type GameReadModel,
   type GameState,
 } from './state'
 import { stepTick, type SimulationMode } from './systems'
@@ -39,13 +41,24 @@ export type ShopItem = {
 }
 
 /**
- * Facade over the ECS state: the UI calls step() from its animation loop,
- * issues player intents, and reads the state snapshot for rendering.
+ * Facade over the ECS state: the runtime advances it from the frame loop,
+ * issues player intents, and reads the GameReadModel for rendering.
  * All rules live in the systems; intents only validate and apply changes
- * a player is allowed to make.
+ * a player is allowed to make. Constructing a GameSim transfers ownership of
+ * the GameState into the core — from then on, outsiders only read.
  */
 export class GameSim {
-  readonly state: GameState
+  private readonly state: GameState
+
+  /** The read-only window for the runtime, renderer, HUD, and devtools. */
+  get read(): GameReadModel {
+    return this.state
+  }
+
+  /** Snapshot the whole session for persistence. */
+  toSave(savedAtMs: number): SaveFile {
+    return serialize(this.state, savedAtMs)
+  }
 
   /**
    * Sub-tick remainder of elapsed time not yet simulated, in seconds —

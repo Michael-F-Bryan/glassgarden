@@ -1,6 +1,6 @@
 import { TANK, type GameEvent, type OfflineSummary, type Unlocks } from './model'
 import { GameSim, type ShopItem } from './sim'
-import { addEntity } from './state'
+import { addEntity, createFreshGame } from './state'
 
 export const DEV_TOOLS_VERSION = 1 as const
 export const DEFAULT_DEV_SEED = 42
@@ -84,7 +84,7 @@ export function normaliseDevSpeed(value: number): number {
 }
 
 export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
-  const state = sim.state
+  const state = sim.read
   const cells = state.water.cells
   const meanPollution = cells.reduce((sum, cell) => sum + cell, 0) / cells.length
   const position = (entity: { id: number; position: { x: number; y: number } }) => ({
@@ -131,32 +131,34 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
   }
 }
 
+/** Scenarios shape the state before the sim takes ownership of it; after
+ * `new GameSim(state)` nothing outside the core can mutate the tank. */
 export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): GameSim {
-  const sim = GameSim.fresh(seed)
-  if (name === 'fresh') return sim
+  const state = createFreshGame(seed)
+  if (name === 'fresh') return new GameSim(state)
 
-  const fish = [...sim.state.world.with('fish')][0]
+  const fish = [...state.world.with('fish')][0]
   if (name === 'starving-rescuable') {
     fish.fish.hunger = 1
     fish.fish.health = 0.4
     fish.fish.activity = { kind: 'distress' }
-    return sim
+    return new GameSim(state)
   }
 
-  sim.state.coins = 100
-  sim.state.ownsSiphon = true
-  sim.state.unlocks.siphonInShop = true
-  sim.state.unlocks.noticedPollution = true
-  sim.state.water.cells.fill(0.4)
+  state.coins = 100
+  state.ownsSiphon = true
+  state.unlocks.siphonInShop = true
+  state.unlocks.noticedPollution = true
+  state.water.cells.fill(0.4)
   fish.fish.sickness = 0.35
   for (const x of [360, 600, 840]) {
-    addEntity(sim.state, {
+    addEntity(state, {
       position: { x, y: TANK.sandTop - 6 },
       velocity: { x: 0, y: 0 },
       waste: { size: 2, restingOnSand: true },
     })
   }
-  return sim
+  return new GameSim(state)
 }
 
 export function createGlassgardenDevTools(bindings: DevToolsBindings): GlassgardenDevTools {

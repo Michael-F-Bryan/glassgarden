@@ -12,6 +12,11 @@ export type WaterGrid = {
   cells: number[] // WATER_COLS * WATER_ROWS, row-major
 }
 
+/** What read-only consumers (HUD, renderer) may see of the grid. */
+export type WaterGridView = {
+  readonly cells: readonly number[]
+}
+
 export function createWaterGrid(): WaterGrid {
   return { cells: new Array(WATER_COLS * WATER_ROWS).fill(0) }
 }
@@ -29,7 +34,7 @@ export function cellIndexAt(position: Vec2): number {
   return row * WATER_COLS + col
 }
 
-export function pollutionAt(grid: WaterGrid, position: Vec2): number {
+export function pollutionAt(grid: WaterGridView, position: Vec2): number {
   return grid.cells[cellIndexAt(position)]
 }
 
@@ -43,11 +48,11 @@ export function clearPollutionNear(grid: WaterGrid, position: Vec2, fraction: nu
   grid.cells[index] *= 1 - fraction
 }
 
-export function maxPollution(grid: WaterGrid): number {
+export function maxPollution(grid: WaterGridView): number {
   return Math.max(...grid.cells)
 }
 
-export function averagePollution(grid: WaterGrid): number {
+export function averagePollution(grid: WaterGridView): number {
   return grid.cells.reduce((sum, value) => sum + value, 0) / grid.cells.length
 }
 

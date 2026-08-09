@@ -18,7 +18,11 @@ import { createWaterGrid, type WaterGrid } from './water'
 
 /**
  * The whole mutable simulation: the ECS world plus singleton resources.
- * Systems mutate this; the UI only reads snapshots and issues intents.
+ * Ownership contract: whoever constructs a GameState (createFreshGame,
+ * hydrate, a test, a dev scenario) may shape it freely; once it is handed to
+ * a GameSim it belongs to the simulation core, which exposes only
+ * GameReadModel and named intents. Entity membership and the stable-ID index
+ * are mutated exclusively through addEntity()/removeEntity() below.
  */
 export type GameState = {
   world: World<Entity>
@@ -40,6 +44,26 @@ export type GameState = {
   /** The Tank Journal: a permanent, capped chronicle of the tank's life. */
   journal: JournalEntry[]
   gameOver: boolean
+}
+
+/**
+ * Read-only window onto the live simulation for the runtime, renderer, HUD,
+ * and devtools. Structural, not a copy: consumers keep Miniplex query access
+ * and readonly-typed resources, while mutation stays inside the core.
+ */
+export type GameReadModel = {
+  world: Pick<World<Entity>, 'with' | 'entities'>
+  byId: ReadonlyMap<number, Entity>
+  readonly time: number
+  readonly coins: number
+  readonly ownsSiphon: boolean
+  readonly ownsFeeder: boolean
+  readonly fishPurchased: number
+  readonly unlocks: Readonly<Unlocks>
+  water: { readonly cells: readonly number[] }
+  readonly events: readonly GameEvent[]
+  readonly journal: readonly JournalEntry[]
+  readonly gameOver: boolean
 }
 
 export function createState(seed: number): GameState {
@@ -77,11 +101,62 @@ export function recordJournal(state: GameState, kind: JournalKind, message: stri
 }
 
 export function addEntity(state: GameState, entity: Omit<Entity, 'id'>): Entity {
-  const withId = { ...entity, id: state.nextEntityId } as Entity
+  const withId: Entity = { ...entity, id: state.nextEntityId }
   state.nextEntityId += 1
   state.world.add(withId)
   state.byId.set(withId.id, withId)
   return withId
+}
+
+const ARCHETYPES = ['fish', 'food', 'waste', 'egg', 'remains'] as const
+
+/**
+ * Development/test invariant check: the promises the rest of the game relies
+ * on but no single call site can see being broken. Throws with context on
+ * the first violation. Not called in production frames.
+ */
+export function assertStateInvariants(state: GameState): void {
+  const fail = (message: string): never => {
+    throw new Error(`state invariant violated: ${message}`)
+  }
+  if (state.byId.size !== state.world.entities.length) {
+    fail(`byId has ${state.byId.size} entries but the world has ${state.world.entities.length}`)
+  }
+  let maxId = 0
+  for (const entity of state.world.entities) {
+    maxId = Math.max(maxId, entity.id)
+    if (state.byId.get(entity.id) !== entity) fail(`entity ${entity.id} missing from byId`)
+    const present = ARCHETYPES.filter((key) => entity[key] !== undefined)
+    if (present.length !== 1) {
+      fail(`entity ${entity.id} has ${present.length} archetype components (${present.join(', ')})`)
+    }
+    if (!Number.isFinite(entity.position.x) || !Number.isFinite(entity.position.y)) {
+      fail(`entity ${entity.id} has a non-finite position`)
+    }
+    const fish = entity.fish
+    if (fish) {
+      for (const [name, value] of [
+        ['hunger', fish.hunger],
+        ['sickness', fish.sickness],
+        ['health', fish.health],
+      ] as const) {
+        if (!Number.isFinite(value) || value < 0 || value > 1) {
+          fail(`fish ${entity.id} ${name} is ${value}, outside [0, 1]`)
+        }
+      }
+      if (!Number.isFinite(fish.weight) || fish.weight <= 0) {
+        fail(`fish ${entity.id} weight is ${fish.weight}`)
+      }
+    }
+  }
+  if (state.nextEntityId <= maxId) {
+    fail(`nextEntityId ${state.nextEntityId} would collide with live id ${maxId}`)
+  }
+  for (const [index, cell] of state.water.cells.entries()) {
+    if (!Number.isFinite(cell) || cell < 0 || cell > 1) {
+      fail(`water cell ${index} is ${cell}, outside [0, 1]`)
+    }
+  }
 }
 
 export function removeEntity(state: GameState, entity: Entity): void {

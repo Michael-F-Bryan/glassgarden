@@ -133,7 +133,7 @@ export function buildHudSnapshot(
   selectedFishId: number | undefined,
   previousWater: WaterTier,
 ): HudSnapshot {
-  const state = sim.state
+  const state = sim.read
   const fishEntities = [...state.world.with('fish')].sort((a, b) => a.id - b.id)
   const selected = selectedFishId !== undefined ? state.byId.get(selectedFishId) : undefined
   return {

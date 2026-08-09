@@ -1,9 +1,9 @@
 import { fishLength, TANK, type Entity } from './model'
-import type { GameState } from './state'
+import type { GameReadModel } from './state'
 import { averagePollution, WATER_COLS, WATER_ROWS } from './water'
 
 /**
- * Canvas presentation of the simulation. Pure observer: reads GameState,
+ * Canvas presentation of the simulation. Pure observer: reads the GameReadModel,
  * never mutates it. Keeps its own cosmetic state (bubbles, offscreen
  * pollution layer) that is irrelevant to the sim.
  */
@@ -56,7 +56,7 @@ export function createCanvasPresenter(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d')!
 
   return {
-    draw(state: GameState, options: DrawOptions): void {
+    draw(state: GameReadModel, options: DrawOptions): void {
       ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
       renderer.draw(ctx, state, options)
     },
@@ -113,7 +113,7 @@ export class TankRenderer {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, state: GameState, options: DrawOptions): void {
+  draw(ctx: CanvasRenderingContext2D, state: GameReadModel, options: DrawOptions): void {
     const { realTime } = options
     // Overall murk drives every water-quality cue at once: green tint, dying
     // light, drifting particulate. The tank itself must tell the truth.
@@ -248,7 +248,7 @@ export class TankRenderer {
     ctx.restore()
   }
 
-  private drawPollution(ctx: CanvasRenderingContext2D, state: GameState, murk: number): void {
+  private drawPollution(ctx: CanvasRenderingContext2D, state: GameReadModel, murk: number): void {
     const layer = this.pollutionLayer.getContext('2d')!
     const image = layer.createImageData(WATER_COLS, WATER_ROWS)
     for (let i = 0; i < state.water.cells.length; i += 1) {

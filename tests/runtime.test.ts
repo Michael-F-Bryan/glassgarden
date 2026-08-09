@@ -2,8 +2,9 @@
 import { describe, expect, test } from 'vitest'
 
 import { RECOVERY_KEY } from '@/game/browser-save'
-import { SAVE_KEY, serialize } from '@/game/save'
+import { SAVE_KEY } from '@/game/save'
 import { GameSim } from '@/game/sim'
+import { createFreshGame } from '@/game/state'
 import {
   createGameRuntime,
   type GameRuntimeDeps,
@@ -112,11 +113,12 @@ describe('game runtime', () => {
   })
 
   test('resumes a saved tank and surfaces the away summary after a long gap', () => {
-    const sim = GameSim.fresh(7)
-    sim.state.coins = 555
+    const state = createFreshGame(7)
+    const sim = new GameSim(state)
+    state.coins = 555
     // Saved two hours before "now" in the resuming harness.
     const h = harness({
-      [SAVE_KEY]: JSON.stringify(serialize(sim.state, WALL_START_MS - 2 * 3600 * 1000)),
+      [SAVE_KEY]: JSON.stringify(sim.toSave(WALL_START_MS - 2 * 3600 * 1000)),
     })
     const runtime = createGameRuntime(h.deps)
     const views: GameView[] = []
@@ -244,8 +246,9 @@ describe('game runtime', () => {
     runtime.start(canvas())
     h.tick(16)
 
-    const dirty = GameSim.fresh(11)
-    dirty.state.ownsSiphon = true
+    const dirtyState = createFreshGame(11)
+    const dirty = new GameSim(dirtyState)
+    dirtyState.ownsSiphon = true
     runtime.replace(dirty)
     runtime.setTool('siphon')
     runtime.selectFish(lastView(views).hud.residents[0].id)

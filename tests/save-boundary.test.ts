@@ -27,7 +27,7 @@ function memoryStorage(overrides?: Partial<Storage>): Storage {
 
 describe('decodeSave: regressions from the persistence boundary probe', () => {
   test('a null fish genome decodes as invalid, not a document that crashes the next step', () => {
-    const save = serialize(GameSim.fresh(99).state, 1_000)
+    const save = GameSim.fresh(99).toSave(1_000)
     ;(save.entities[0].fish as { genome: unknown }).genome = null
     const json = JSON.stringify(save)
 
@@ -41,7 +41,7 @@ describe('decodeSave: regressions from the persistence boundary probe', () => {
   })
 
   test('a stale nextEntityId is corrected on hydrate, so a new pellet cannot overwrite the fish in byId', () => {
-    const save = serialize(GameSim.fresh(100).state, 1_000)
+    const save = GameSim.fresh(100).toSave(1_000)
     const fishId = save.entities[0].id
     save.nextEntityId = fishId
 
@@ -53,8 +53,8 @@ describe('decodeSave: regressions from the persistence boundary probe', () => {
 
     const resumed = new GameSim(hydrate(result.document))
     expect(resumed.dropFood(600)).toBe(true)
-    expect([...resumed.state.world.entities].filter((entity) => entity.id === fishId)).toHaveLength(1)
-    expect(resumed.state.byId.get(fishId)?.fish).toBeDefined()
+    expect([...resumed.read.world.entities].filter((entity) => entity.id === fishId)).toHaveLength(1)
+    expect(resumed.read.byId.get(fishId)?.fish).toBeDefined()
   })
 })
 
@@ -70,7 +70,7 @@ describe('decodeSave: structural and semantic validation', () => {
   })
 
   test('duplicate entity ids are rejected', () => {
-    const save = serialize(GameSim.fresh(101).state, 1_000)
+    const save = GameSim.fresh(101).toSave(1_000)
     const clone = { ...save.entities[0], id: save.entities[0].id }
     save.entities.push(clone)
 
@@ -82,7 +82,7 @@ describe('decodeSave: structural and semantic validation', () => {
   })
 
   test('an entity with more than one archetype component is rejected', () => {
-    const save = serialize(GameSim.fresh(102).state, 1_000)
+    const save = GameSim.fresh(102).toSave(1_000)
     const fishEntity = save.entities.find((entity) => entity.fish)!
     ;(fishEntity as unknown as { waste: unknown }).waste = { size: 1, restingOnSand: false }
 
@@ -90,7 +90,7 @@ describe('decodeSave: structural and semantic validation', () => {
   })
 
   test('a water grid of the wrong length is rejected', () => {
-    const save = serialize(GameSim.fresh(103).state, 1_000)
+    const save = GameSim.fresh(103).toSave(1_000)
     save.waterCells = save.waterCells.slice(1)
 
     expect(decodeSave(JSON.stringify(save)).kind).toBe('invalid')
@@ -98,9 +98,9 @@ describe('decodeSave: structural and semantic validation', () => {
 
   test('a fish activity referencing a food entity that no longer exists normalises to wander instead of rejecting', () => {
     const sim = GameSim.fresh(104)
-    const fish = [...sim.state.world.with('fish')][0]
+    const fish = [...sim.read.world.with('fish')][0]
     fish.fish.activity = { kind: 'seekFood', foodId: 999_999 }
-    const save = serialize(sim.state, 1_000)
+    const save = sim.toSave(1_000)
 
     const result = decodeSave(JSON.stringify(save))
     expect(result.kind).toBe('loaded')
@@ -112,9 +112,9 @@ describe('decodeSave: structural and semantic validation', () => {
 
   test('a fish courting a partner that no longer exists normalises to wander instead of rejecting', () => {
     const sim = GameSim.fresh(105)
-    const fish = [...sim.state.world.with('fish')][0]
+    const fish = [...sim.read.world.with('fish')][0]
     fish.fish.activity = { kind: 'court', partnerId: 999_999, until: 100 }
-    const save = serialize(sim.state, 1_000)
+    const save = sim.toSave(1_000)
 
     const result = decodeSave(JSON.stringify(save))
     expect(result.kind).toBe('loaded')
@@ -131,7 +131,7 @@ describe('round-trip and migration determinism', () => {
     sim.dropFood(600)
     for (let t = 0; t < 30; t += 0.25) sim.step(0.25, true)
 
-    const saved = serialize(sim.state, 5_000)
+    const saved = sim.toSave(5_000)
     const result = decodeSave(JSON.stringify(saved))
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
@@ -141,7 +141,7 @@ describe('round-trip and migration determinism', () => {
   })
 
   test('a historical minimal V1 fixture with no journal, feeder fields, or fedOnce migrates with documented defaults', () => {
-    const save = serialize(GameSim.fresh(201).state, 1_000) as Partial<SaveFile>
+    const save = GameSim.fresh(201).toSave(1_000) as Partial<SaveFile>
     delete save.journal
     delete save.pendingEvents
     delete save.retiredNames
@@ -169,7 +169,7 @@ describe('round-trip and migration determinism', () => {
   })
 
   test('a historical fixture with noticedGrowth but no fedOnce infers fedOnce true', () => {
-    const save = serialize(GameSim.fresh(202).state, 1_000) as Partial<SaveFile>
+    const save = GameSim.fresh(202).toSave(1_000) as Partial<SaveFile>
     save.unlocks!.noticedGrowth = true
     delete (save.unlocks as Partial<SaveFile['unlocks']>).fedOnce
 
@@ -188,7 +188,7 @@ describe('browser-save: dependency-injected storage adapter', () => {
 
   test('loadFromStorage round-trips a save written by saveToStorage', () => {
     const storage = memoryStorage()
-    const save = serialize(GameSim.fresh(300).state, 1_000)
+    const save = GameSim.fresh(300).toSave(1_000)
 
     expect(saveToStorage(storage, save)).toBe(true)
     const result = loadFromStorage(storage)
@@ -202,7 +202,7 @@ describe('browser-save: dependency-injected storage adapter', () => {
         throw new DOMException('quota exceeded', 'QuotaExceededError')
       },
     })
-    const save = serialize(GameSim.fresh(301).state, 1_000)
+    const save = GameSim.fresh(301).toSave(1_000)
 
     expect(saveToStorage(storage, save)).toBe(false)
   })
@@ -225,7 +225,7 @@ describe('browser-save: dependency-injected storage adapter', () => {
     expect(storage.getItem(RECOVERY_KEY)).toBe('not json')
 
     // A subsequent autosave must not have destroyed the recovery copy.
-    const fresh = serialize(GameSim.fresh(302).state, 2_000)
+    const fresh = GameSim.fresh(302).toSave(2_000)
     saveToStorage(storage, fresh)
     expect(storage.getItem(RECOVERY_KEY)).toBe('not json')
   })
