@@ -1,0 +1,579 @@
+{
+ "version": 1,
+ "savedAtMs": 1700000000000,
+ "time": 119.99999999999575,
+ "coins": 591.1130534404833,
+ "ownsSiphon": true,
+ "ownsFeeder": true,
+ "feederLastDropAt": 0,
+ "fishPurchased": 1,
+ "retiredNames": [],
+ "unlocks": {
+  "fedOnce": true,
+  "noticedGrowth": true,
+  "noticedPollution": true,
+  "siphonInShop": true,
+  "fishInShop": true,
+  "feederInShop": true,
+  "seenEgg": false
+ },
+ "waterCells": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.0003678371716750759,
+  0.08160206959063666,
+  0.008660804679368039,
+  0.0377165653816366,
+  0.009108629987197947,
+  0.08030378255985968,
+  0.00033252540116970116,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.12136988549654616,
+  0.7898191041224364,
+  0.21867403978943004,
+  0.5622665733625672,
+  0.21759668683185326,
+  0.7563468833860862,
+  0.12022138313200466,
+  0,
+  0,
+  0
+ ],
+ "rngState": 1568256062,
+ "nextEntityId": 28,
+ "gameOver": false,
+ "entities": [
+  {
+   "position": {
+    "x": 855.5680905658728,
+    "y": 538.5585560502833
+   },
+   "velocity": {
+    "x": -41.24374079482659,
+    "y": 15.596768514490078
+   },
+   "fish": {
+    "name": "Kelpshine",
+    "genome": {
+     "hue": 250.01622637733817,
+     "saturation": 0.5828960759565234,
+     "maxWeight": 26,
+     "finShape": "forked",
+     "finFlair": 0.6811384935397655,
+     "bodyAspect": 0.4441226438432932,
+     "pattern": "plain",
+     "patternIntensity": 0.4203683670144528,
+     "speed": 77.73300249828026,
+     "resilience": 0.684955253789667
+    },
+    "weight": 4.338124745155579,
+    "hunger": 0.2599895130564015,
+    "sickness": 0,
+    "health": 1,
+    "ageSeconds": 119.99999999999575,
+    "generation": 1,
+    "hatchedInMurkyWater": false,
+    "digesting": 1,
+    "breedingCooldownUntil": 0,
+    "activity": {
+     "kind": "seekFood",
+     "foodId": 23
+    },
+    "facing": -1
+   },
+   "id": 1
+  },
+  {
+   "position": {
+    "x": 305.2568842861197,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 45,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 2
+  },
+  {
+   "position": {
+    "x": 725.3417704502431,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 54.99999999999997,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 4
+  },
+  {
+   "position": {
+    "x": 307.3507771258029,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 59.99999999999996,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 5
+  },
+  {
+   "position": {
+    "x": 536.5672034262037,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 65.00000000000016,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 6
+  },
+  {
+   "position": {
+    "x": 343.19305115334583,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 75.00000000000065,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 8
+  },
+  {
+   "position": {
+    "x": 524.7018953094821,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 80.00000000000057,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 9
+  },
+  {
+   "position": {
+    "x": 728.2190525827958,
+    "y": 629
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "waste": {
+    "size": 0.6052664201183611,
+    "restingOnSand": true
+   },
+   "id": 10
+  },
+  {
+   "position": {
+    "x": 731.182942177976,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 85.00000000000028,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 11
+  },
+  {
+   "position": {
+    "x": 336.2592710944331,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 90,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 12
+  },
+  {
+   "position": {
+    "x": 535.8585247016148,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 94.99999999999972,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 13
+  },
+  {
+   "position": {
+    "x": 758.2347818839802,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 99.99999999999943,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 14
+  },
+  {
+   "position": {
+    "x": 350.24868699235105,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 104.99999999999915,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 15
+  },
+  {
+   "position": {
+    "x": 582.2342760718403,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 109.99999999999888,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 16
+  },
+  {
+   "position": {
+    "x": 767.5280747231195,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 114.9999999999986,
+    "spoiled": true,
+    "restingOnSand": true
+   },
+   "id": 17
+  },
+  {
+   "position": {
+    "x": 591.7374031962648,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 124.99999999999802,
+    "spoiled": false,
+    "restingOnSand": true
+   },
+   "id": 19
+  },
+  {
+   "position": {
+    "x": 790.2049634314558,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 129.99999999999773,
+    "spoiled": false,
+    "restingOnSand": true
+   },
+   "id": 20
+  },
+  {
+   "position": {
+    "x": 388.6640287313243,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 134.99999999999744,
+    "spoiled": false,
+    "restingOnSand": true
+   },
+   "id": 21
+  },
+  {
+   "position": {
+    "x": 592.2705241753376,
+    "y": 621
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 139.99999999999716,
+    "spoiled": false,
+    "restingOnSand": true
+   },
+   "id": 22
+  },
+  {
+   "position": {
+    "x": 786.539887964203,
+    "y": 574.0000000000034
+   },
+   "velocity": {
+    "x": -1.7070084636878565e-05,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 144.99999999999687,
+    "spoiled": false,
+    "restingOnSand": false
+   },
+   "id": 23
+  },
+  {
+   "position": {
+    "x": 409.58221539973647,
+    "y": 444.0000000000023
+   },
+   "velocity": {
+    "x": 0.00018188751785624924,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 149.9999999999966,
+    "spoiled": false,
+    "restingOnSand": false
+   },
+   "id": 24
+  },
+  {
+   "position": {
+    "x": 603.7520904427407,
+    "y": 314.00000000000114
+   },
+   "velocity": {
+    "x": -0.002727353461369547,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 154.9999999999963,
+    "spoiled": false,
+    "restingOnSand": false
+   },
+   "id": 25
+  },
+  {
+   "position": {
+    "x": 811.8072445804555,
+    "y": 184
+   },
+   "velocity": {
+    "x": 0.1620803155566536,
+    "y": 0
+   },
+   "food": {
+    "nutrition": 1,
+    "spoilsAt": 159.99999999999602,
+    "spoiled": false,
+    "restingOnSand": false
+   },
+   "id": 26
+  },
+  {
+   "position": {
+    "x": 381.91310819238424,
+    "y": 473.19498519203626
+   },
+   "velocity": {
+    "x": 0,
+    "y": 0
+   },
+   "fish": {
+    "name": "Wispble",
+    "genome": {
+     "hue": 216.43647766672075,
+     "saturation": 0.8235826512798667,
+     "maxWeight": 31.0926063247025,
+     "finShape": "forked",
+     "finFlair": 0.23227314199320973,
+     "bodyAspect": 0.38481707212980837,
+     "pattern": "stripes",
+     "patternIntensity": 0.7081468919757754,
+     "speed": 73.15143004991114,
+     "resilience": 0.49610791793093084
+    },
+    "weight": 2.099752737907693,
+    "hunger": 0.15,
+    "sickness": 0,
+    "health": 1,
+    "ageSeconds": 0,
+    "generation": 1,
+    "hatchedInMurkyWater": false,
+    "digesting": 0,
+    "breedingCooldownUntil": 0,
+    "activity": {
+     "kind": "wander",
+     "target": {
+      "x": 381.91310819238424,
+      "y": 473.19498519203626
+     },
+     "idleUntil": 0
+    },
+    "facing": 1
+   },
+   "id": 27
+  }
+ ],
+ "journal": [
+  {
+   "atSim": 0,
+   "kind": "arrival",
+   "message": "Kelpshine arrived in the bare tank."
+  },
+  {
+   "atSim": 119.99999999999575,
+   "kind": "arrival",
+   "message": "Wispble joined the tank for \u25c9120."
+  }
+ ]
+}

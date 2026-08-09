@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, test } from 'vitest'
 
 import { loadFromStorage, RECOVERY_KEY, saveToStorage } from '@/game/browser-save'
@@ -233,6 +235,61 @@ describe('the wire format is independent of runtime components', () => {
     const sim = new GameSim(state)
     sim.advanceElapsed(1, 'visible')
     expect(sim.toSave(2_000).entities.find((entity) => entity.fish)!.fish!.name).toBe('Pella')
+  })
+})
+
+describe('a save written by the previous build', () => {
+  /** Captured by running the pre-equipment build (commit a70d720) and
+   * serializing a played tank: a siphon, a feeder, 24 entities, a journal.
+   * Hand-written fixtures can drift from what the old code really wrote;
+   * this one cannot. */
+  const realV1 = JSON.parse(
+    readFileSync(new URL('./fixtures/v1-save.json', import.meta.url), 'utf8'),
+  )
+
+  test('migrates to the current format with its tank intact', () => {
+    const result = decodeSave(JSON.stringify(realV1))
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+    const document = result.document
+
+    expect(document.version).toBe(2)
+    expect(document.equipment).toEqual({ siphon: true, feeder: 'drip', filter: 'none' })
+    expect(document.developments).toEqual([
+      'fedOnce',
+      'growthNoticed',
+      'pollutionNoticed',
+      'siphonOffered',
+      'fishOffered',
+      'dripFeederOffered',
+    ])
+    // Nothing about the tank itself is lost in the migration.
+    expect(document.entities).toHaveLength(realV1.entities.length)
+    expect(document.coins).toBe(realV1.coins)
+    expect(document.journal).toHaveLength(realV1.journal.length)
+    expect(document.retiredNames).toEqual(realV1.retiredNames)
+    expect(document.rngState).toBe(realV1.rngState)
+  })
+
+  test('keeps playing after the migration', () => {
+    const result = decodeSave(JSON.stringify(realV1))
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+
+    const sim = new GameSim(hydrate(result.document))
+    const before = [...sim.read.world.with('resident')].length
+    sim.advanceElapsed(60, 'visible')
+
+    expect([...sim.read.world.with('resident')].length).toBeGreaterThanOrEqual(before)
+    expect(sim.read.equipment.feeder).toBe('drip')
+    // And it re-saves in the current format.
+    expect(sim.toSave(2_000).version).toBe(2)
+  })
+
+  test('migration is deterministic', () => {
+    const once = decodeSave(JSON.stringify(realV1))
+    const twice = decodeSave(JSON.stringify(realV1))
+    expect(once).toEqual(twice)
   })
 })
 
