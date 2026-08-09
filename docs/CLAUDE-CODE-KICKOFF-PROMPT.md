@@ -18,6 +18,14 @@ The concrete feeding, growth, waste, pollution, economy, population, and breedin
 
 Use a proper entity–component–system (ECS) architecture for the simulation and game logic rather than accumulating ad hoc state and behaviour in UI components. The ECS should own entities, component data, and systems; presentation should observe it and issue player intents. Choose a suitable TypeScript ECS implementation and concrete component/system boundaries based on the game as it develops—do not build a generic engine beyond Glassgarden’s actual needs.
 
+## Visual assets
+
+You have confirmed access on this workstation to OpenAI image generation through the Hermes tools MCP server. In Claude Code the tool is `mcp__hermes-tools__image_generate`. Use it when custom textures, sprites, visual references, or source artwork would materially improve the game; do not stop or ask Michael merely because artwork is needed.
+
+Treat generated images as candidates, not production-ready assets. Copy accepted outputs into the repository because provider URLs and Hermes cache paths are not durable project storage. Verify actual dimensions, alpha transparency, cropping, edge quality, web optimisation, and appearance at in-game scale. For tiled textures, test the real edges for visible seams rather than trusting “seamless” in a prompt. Build coherent families from selected references and deterministic variations instead of accumulating unrelated generations.
+
+The MCP boundary owns authentication. Never inspect, print, copy, or commit its credentials. If the tool is unavailable or a generation fails, continue with procedural artwork or clearly licensed assets and recorded provenance rather than blocking the build or shipping unexplained third-party art.
+
 ## Your mandate
 
 Design and build the strongest first playable you can. Own the full loop: explore the existing code, make product and technical decisions, implement the game, test it, play it in a real browser, inspect the result critically, and keep refining it.

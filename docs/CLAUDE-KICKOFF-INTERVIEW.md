@@ -21,7 +21,7 @@
 
 ## Current calibrated direction
 
-The kickoff prompt should ask Claude Code to build from the existing creative handoff rather than transcribe it into a fixed feature specification. It must preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution. Claude has broad authority to continue designing, implementing, browser-testing, and refining the strongest first playable it can with minimal direction from Michael. It should stop only when the intended experience works end to end and repeated browser playtesting has produced a game Michael can open and enjoy, not merely technically valid scaffolding. Claude remains the coordinator, decision-maker, and final integrator; it may use bounded sub-agents and fresh-context audits where they improve the result, while retaining one owner for shared-state implementation. Routine design and implementation choices belong to Claude. The existing `main`-to-GitHub-Pages path is the delivery route.
+The kickoff prompt should ask Claude Code to build from the existing creative handoff rather than transcribe it into a fixed feature specification. It must preserve the aquarium-idle premise, nurturing fantasy, and hidden action-driven evolution. Claude has broad authority to continue designing, implementing, browser-testing, and refining the strongest first playable it can with minimal direction from Michael. It should stop only when the intended experience works end to end and repeated browser playtesting has produced a game Michael can open and enjoy, not merely technically valid scaffolding. Claude remains the coordinator, decision-maker, and final integrator; it may use bounded sub-agents and fresh-context audits where they improve the result, while retaining one owner for shared-state implementation. Routine design and implementation choices belong to Claude. Claude has locally configured access to OpenAI image generation through the authenticated Hermes MCP boundary and should use it when custom visual assets materially improve the game, while validating generated files in context and retaining credential-free fallbacks. The existing `main`-to-GitHub-Pages path is the delivery route.
 
 ## Registers
 
@@ -41,6 +41,7 @@ The kickoff prompt should ask Claude Code to build from the existing creative ha
 | C4 | The finished autonomous run should leave Michael with a deployed game he can play and enjoy. | Q2 and existing GitHub Pages workflow | Technical checks alone cannot satisfy the prompt; the live experience must be verified. |
 | C5 | Claude remains coordinator and final integrator; delegation is selective, bounded, and evidence-driven. | Post-interview amendment 1 | Sub-agents provide isolated work or fresh judgement without creating a reviewer bureaucracy or concurrent shared-state ownership. |
 | C6 | Significant features and coherent milestones are locally validated, committed, and pushed as durable checkpoints; remote deployment is not the iterative validation loop. | Post-interview amendment 2 | Claude continues immediately against the local dev server after checkpoint pushes, waiting for Actions and verifying Pages only at final delivery. |
+| C7 | Claude has locally configured image generation through the authenticated Hermes tools MCP boundary; credentials remain outside Claude and the repository. | Post-interview amendment 3 and verified MCP test | Claude may generate needed visual assets autonomously, but must validate and persist accepted outputs and retain credential-free fallbacks. |
 
 ### Unknowns
 
@@ -58,6 +59,7 @@ The kickoff prompt should ask Claude Code to build from the existing creative ha
 | L3 | Completion means Michael can play and have fun with the resulting game; repeated browser playtesting must shape both game feel and presentation. | Q2 |
 | L4 | Fresh-context critique and root-cause-driven prompt refinement can improve the autonomous loop when Claude verifies findings and changes the smallest owning instruction. | Post-interview amendment 1 |
 | L5 | Local headless-browser testing is the fast feedback path, while regular tested pushes preserve significant progress without blocking on Pages deployments. | Post-interview amendment 2 |
+| L6 | Claude can use OpenAI image generation without receiving or exposing the provider credential because Hermes brokers `image_generate` through MCP; generated outputs still require file-level and in-game validation. | Post-interview amendment 3 and verified direct/MCP generation tests |
 
 ### Deferred decisions
 
@@ -164,3 +166,17 @@ The interview can stop because Claude’s operating authority and completion evi
 **Effect:** Separates local iteration, durable Git checkpoints, and final deployment verification so regular pushes preserve progress without introducing remote-deployment latency into the autonomous feedback loop.
 
 **Register updates:** C6 and L5 added.
+
+### Amendment 3 — Image-generation access
+
+**Received:** 2026-08-09T10:25:24+0800 (AWST)
+
+**Direction:**
+
+> Okay, good. Let's make sure Claude knows it has access to image generation.
+
+**Interpretation:** Claude should know that this workstation exposes OpenAI image generation as `mcp__hermes-tools__image_generate` through a locally configured Hermes tools MCP server. Hermes retains the provider credential; Claude uses the tool without reading, copying, or storing that credential. Generated files remain candidate assets until their real dimensions, alpha, edges, optimisation, and in-game appearance are validated.
+
+**Effect:** Adds explicit image-generation capability and asset handling guidance to the kickoff prompt, and registers the credential-free MCP launcher in Claude Code’s local project configuration.
+
+**Register updates:** C7 and L6 added.
