@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest'
 
 import { RECOVERY_KEY } from '@/game/browser-save'
 import { SAVE_KEY } from '@/game/save'
+import { TANK } from '@/game/model'
 import { GameSim } from '@/game/sim'
 import { createFreshGame } from '@/game/state'
 import {
@@ -310,6 +311,33 @@ describe('game runtime', () => {
     runtime.showCaret()
     expect(lastView(views).caret).toEqual(aimed)
 
+    runtime.stop()
+  })
+
+  test('the caret stays fully on the glass and clear of the tool palette', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+    h.tick(16)
+    runtime.showCaret()
+
+    // Drive hard into every corner; the reticle must never reach an edge or
+    // hide under the palette floating over the top of the tank.
+    for (const [dx, dy] of [
+      [-9999, -9999],
+      [9999, -9999],
+      [-9999, 9999],
+      [9999, 9999],
+    ] as const) {
+      runtime.moveCaret(dx, dy)
+      const caret = lastView(views).caret!
+      expect(caret.x).toBeGreaterThan(0)
+      expect(caret.x).toBeLessThan(TANK.width)
+      expect(caret.y).toBeGreaterThan(TANK.waterTop + 40)
+      expect(caret.y).toBeLessThan(TANK.sandTop)
+    }
     runtime.stop()
   })
 

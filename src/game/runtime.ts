@@ -128,6 +128,11 @@ const TOAST_PRIORITY: Record<ToastTone, number> = { warning: 0, development: 1, 
  * face. Siphon: hold and sweep like a real gravel vac — it pulls debris and
  * pollution continuously under the pointer as it moves. Repetition is driven
  * by the frame loop, so there is no timer that could outlive the session. */
+/** Half the reticle's drawn size, plus a little, so it is never clipped. */
+const CARET_MARGIN = 30
+/** Clear of the tool palette floating over the top-left of the tank. */
+const CARET_TOP_MARGIN = 72
+
 const TAP_MAX_MS = 260
 const SPRINKLE_INTERVAL_MS = 280
 const SIPHON_INTERVAL_MS = 220
@@ -183,6 +188,13 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
   let lastCaret: Vec2 | null = null
 
   const listeners = new Set<(view: GameView) => void>()
+
+  /** Keep the whole reticle on screen and out from under the floating tool
+   * palette, so the keyboard target is always visible where it lands. */
+  const clampCaret = (point: Vec2): Vec2 => ({
+    x: Math.min(TANK.width - CARET_MARGIN, Math.max(CARET_MARGIN, point.x)),
+    y: Math.min(TANK.sandTop - CARET_MARGIN, Math.max(TANK.waterTop + CARET_TOP_MARGIN, point.y)),
+  })
 
   const buildView = (): GameView => {
     const hud = sim ? buildHudSnapshot(sim, selectedFishId, waterTier) : EMPTY_HUD
@@ -490,10 +502,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
 
     moveCaret(dx, dy) {
       if (!caret) caret = { x: TANK.width / 2, y: (TANK.waterTop + TANK.sandTop) / 2 }
-      caret = {
-        x: Math.min(TANK.width, Math.max(0, caret.x + dx)),
-        y: Math.min(TANK.sandTop, Math.max(TANK.waterTop, caret.y + dy)),
-      }
+      caret = clampCaret({ x: caret.x + dx, y: caret.y + dy })
       hoverFishId = sim?.fishAt(caret.x, caret.y)?.id
       publish()
     },
@@ -513,7 +522,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
             : residents.length - 1
           : (currentIndex + step + residents.length) % residents.length
       const target = residents[nextIndex]
-      caret = { x: target.position.x, y: target.position.y }
+      caret = clampCaret({ x: target.position.x, y: target.position.y })
       hoverFishId = target.id
       publish()
     },

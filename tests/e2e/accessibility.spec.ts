@@ -100,11 +100,11 @@ test('a modal overlay keeps the tank and shop out of the tab order', async ({ pa
   await page.getByTestId('menu-toggle').click()
   await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible()
 
-  expect(await page.getByTestId('tank-canvas').evaluate((el) => el.hasAttribute('inert'))).toBe(true)
+  expect(await page.getByTestId('tank-surface').evaluate((el) => el.hasAttribute('inert'))).toBe(true)
   expect(await page.getByTestId('shop-panel').evaluate((el) => el.hasAttribute('inert'))).toBe(true)
 
   await page.getByTestId('menu-resume').click()
-  expect(await page.getByTestId('tank-canvas').evaluate((el) => el.hasAttribute('inert'))).toBe(false)
+  expect(await page.getByTestId('tank-surface').evaluate((el) => el.hasAttribute('inert'))).toBe(false)
 })
 
 test('the journal and help panels are labelled dialogs reachable by keyboard', async ({ page }) => {
@@ -197,14 +197,40 @@ test('only one overlay is ever open at a time', async ({ page }) => {
   await expect(page.getByTestId('tank-journal')).not.toBeVisible()
 })
 
-test('a modal overlay keeps the header out of the tab order too', async ({ page }) => {
-  await startScenario(page, 'fresh', 512)
+test('a modal overlay keeps everything behind it out of the tab order', async ({ page }) => {
+  await startScenario(page, 'dirty-tank', 512)
   await page.getByTestId('menu-toggle').click()
   await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible()
 
-  // Tabbing inside the dialog must not walk out to the header's Menu button.
-  for (let i = 0; i < 6; i += 1) {
+  // Nothing behind the dialog — header, tools, journal/help, shop, canvas —
+  // may take focus while it is up.
+  const behind = ['menu-toggle', 'tool-feed', 'tool-siphon', 'journal-toggle', 'help-toggle', 'tank-canvas']
+  for (let i = 0; i < 12; i += 1) {
     await page.keyboard.press('Tab')
-    expect(await focused(page)).not.toBe('menu-toggle')
+    expect(behind).not.toContain(await focused(page))
   }
+})
+
+test('the destructive new-game confirmation takes focus rather than dropping it', async ({
+  page,
+}) => {
+  await startScenario(page, 'fresh', 513)
+  await page.getByTestId('menu-toggle').click()
+  await page.getByTestId('menu-new-game').click()
+
+  await expect(page.getByRole('dialog', { name: /Start over\?/ })).toBeVisible()
+  // Focus must land on a control, not the document body.
+  expect(await focused(page)).toBe('menu-confirm-new-game')
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('menu-confirm-new-game')).not.toBeVisible()
+  expect(await focused(page)).toBe('menu-new-game')
+})
+
+test('the tank shows a visible ring while the keyboard is aiming it', async ({ page }) => {
+  await startScenario(page, 'fresh', 514)
+  await expect(page.getByTestId('tank-focus-ring')).toHaveCount(0)
+
+  await page.getByTestId('tank-canvas').focus()
+  await expect(page.getByTestId('tank-focus-ring')).toBeVisible()
 })

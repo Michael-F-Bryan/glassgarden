@@ -189,11 +189,24 @@ export default function GameRoot() {
     activeOverlay === 'gameOver'
 
   const menuPanelRef = useDialogFocus(menuOpen)
+  const confirmPanelRef = useDialogFocus(confirmingNewGame)
   const awayPanelRef = useDialogFocus(Boolean(view.awaySummary))
   const gameOverPanelRef = useDialogFocus(hud.gameOver)
   const journalPanelRef = useDialogFocus(journalOpen)
   const helpPanelRef = useDialogFocus(helpOpen)
   const inspectorPanelRef = useDialogFocus(Boolean(hud.selectedFish))
+
+  /** Closing the confirmation unmounts the button that opened it, so the
+   * generic focus-restore has nothing to return to. Put focus back on the
+   * re-rendered "Start a new game" button — but only on that transition, or
+   * it would steal focus from the menu's own opening. */
+  const wasConfirmingRef = useRef(false)
+  useEffect(() => {
+    const closedConfirmation = wasConfirmingRef.current && !confirmingNewGame
+    wasConfirmingRef.current = confirmingNewGame
+    if (!closedConfirmation || !menuOpen) return
+    menuPanelRef.current?.querySelector<HTMLElement>('[data-testid="menu-new-game"]')?.focus()
+  }, [confirmingNewGame, menuOpen, menuPanelRef])
 
   const closeOverlay = (overlay: Overlay) => {
     if (overlay === 'confirmNewGame') setConfirmingNewGame(false)
@@ -312,9 +325,13 @@ export default function GameRoot() {
         className="relative min-w-0 overflow-hidden rounded-2xl border border-cyan-100/15 bg-slate-950 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
         data-testid="tank-shell"
       >
+      {/* Everything the modal overlays sit on top of. One inert wrapper, so
+        * no control behind a dialog can take focus or a click — adding a new
+        * tank control cannot silently reopen that hole. */}
+      <div inert={modalOpen || undefined} data-testid="tank-surface">
         <canvas
           ref={canvasRef}
-          className="block aspect-[16/9] w-full touch-none outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-inset"
+          className="block aspect-[16/9] w-full touch-none outline-none"
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasMove}
           onPointerUp={onCanvasPointerUp}
@@ -328,13 +345,22 @@ export default function GameRoot() {
             }
           }}
           onBlur={() => runtimeRef.current?.hideCaret()}
-          tabIndex={modalOpen ? -1 : 0}
-          inert={modalOpen || undefined}
+          tabIndex={0}
           role="application"
           aria-label="The tank. Arrow keys aim, Enter uses the selected tool, N and P step between fish, I inspects the fish under the target, Tab leaves the tank."
           aria-describedby="tank-caret-status"
           data-testid="tank-canvas"
         />
+
+        {/* A canvas repaints over any focus ring drawn on itself, so the
+          * keyboard-aiming state gets its own overlay ring instead. */}
+        {view.caret && (
+          <div
+            data-testid="tank-focus-ring"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-cyan-300/70 ring-inset"
+          />
+        )}
 
         {/* What the keyboard is aiming at, announced as it changes. */}
         <div id="tank-caret-status" role="status" aria-live="polite" className="sr-only">
@@ -527,7 +553,17 @@ export default function GameRoot() {
             data-testid="help-panel"
             className="absolute right-3 bottom-14 w-72 rounded-xl border border-cyan-100/20 bg-slate-900/95 p-4 text-sm text-slate-300 shadow-xl backdrop-blur outline-none"
           >
-            <p id="help-title" className="mb-2 font-medium text-cyan-100">How to play</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p id="help-title" className="font-medium text-cyan-100">How to play</p>
+              <button
+                type="button"
+                aria-label="Close how to play"
+                onClick={() => setHelpOpen(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
             <p className="mb-2">
               Click the water to drop food, or press and hold to sprinkle. Keep an eye on your fish
               — and on the water they swim in.
@@ -586,6 +622,8 @@ export default function GameRoot() {
             )}
           </div>
         )}
+
+      </div>
 
         {hud.gameOver && (
           <div
@@ -662,8 +700,15 @@ export default function GameRoot() {
                   How to play
                 </button>
                 {confirmingNewGame ? (
-                  <div className="rounded-xl border border-red-400/30 bg-red-950/40 p-3">
-                    <p className="text-sm text-red-100">
+                  <div
+                    ref={confirmPanelRef}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="confirm-new-game-title"
+                    tabIndex={-1}
+                    className="rounded-xl border border-red-400/30 bg-red-950/40 p-3 outline-none"
+                  >
+                    <p id="confirm-new-game-title" className="text-sm text-red-100">
                       Start over? Your fish, coins, and equipment are gone for good — the journal
                       too.
                     </p>
