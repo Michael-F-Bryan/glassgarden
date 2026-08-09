@@ -22,8 +22,8 @@ pnpm build
 
 ## Project direction
 
-- [Direction interview](docs/INTERVIEW.md)
-- [Creative handoff interview](docs/FIRST-PLAYABLE-INTERVIEW.md)
-- [Claude Code kickoff prompt](docs/CLAUDE-CODE-KICKOFF-PROMPT.md)
+- [Direction interview](docs/interview.md)
+- [Creative handoff interview](docs/first-playable-interview.md)
+- [Claude Code kickoff prompt](docs/claude-code-kickoff-prompt.md)
 
 Pushes to `main` build the static export and deploy it to GitHub Pages.

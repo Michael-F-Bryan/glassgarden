@@ -16,7 +16,7 @@
 
 ## Source basis
 
-- `INTERVIEW.md`, completed 2026-08-09: the authoritative Glassgarden direction interview.
+- `interview.md`, completed 2026-08-09: the authoritative Glassgarden direction interview.
 - Its first-playable validation target: players should feel that the aquarium grows and evolves in response to their actions.
 
 ## Calibrated brief

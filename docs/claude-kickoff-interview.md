@@ -15,8 +15,8 @@
 
 ## Source basis
 
-- `docs/INTERVIEW.md`: establishes the aquarium-idle premise, nurturing fantasy, desktop-web target, hidden action-driven development, and first-playable validation target.
-- `docs/FIRST-PLAYABLE-INTERVIEW.md`: provides a concrete opening scenario and explicitly grants Claude authority to reshape mechanics while preserving the creative core.
+- `docs/interview.md`: establishes the aquarium-idle premise, nurturing fantasy, desktop-web target, hidden action-driven development, and first-playable validation target.
+- `docs/first-playable-interview.md`: provides a concrete opening scenario and explicitly grants Claude authority to reshape mechanics while preserving the creative core.
 - `README.md`: records the current Next.js, TypeScript, Tailwind CSS, shadcn/ui, test, and GitHub Pages environment.
 
 ## Current calibrated direction

@@ -4,8 +4,8 @@ You are taking ownership of building **Glassgarden** into a genuinely playable a
 
 Start by reading the repository, especially:
 
-- `docs/INTERVIEW.md`
-- `docs/FIRST-PLAYABLE-INTERVIEW.md`
+- `docs/interview.md`
+- `docs/first-playable-interview.md`
 - the existing application, tests, and GitHub Pages workflow
 
 The interviews are a creative handoff, not an implementation specification. Preserve the stable core:

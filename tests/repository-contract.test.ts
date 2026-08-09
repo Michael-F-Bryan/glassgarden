@@ -4,10 +4,10 @@ import { expect, test } from 'vitest'
 const read = (path: string) => readFileSync(path, 'utf8')
 
 test('interview records live under docs', () => {
-  expect(existsSync('INTERVIEW.md')).toBe(false)
-  expect(existsSync('FIRST-PLAYABLE-INTERVIEW.md')).toBe(false)
-  expect(existsSync('docs/INTERVIEW.md')).toBe(true)
-  expect(existsSync('docs/FIRST-PLAYABLE-INTERVIEW.md')).toBe(true)
+  expect(existsSync('interview.md')).toBe(false)
+  expect(existsSync('first-playable-interview.md')).toBe(false)
+  expect(existsSync('docs/interview.md')).toBe(true)
+  expect(existsSync('docs/first-playable-interview.md')).toBe(true)
 })
 
 test('Next exports a prefix-aware static site for GitHub Pages', () => {
