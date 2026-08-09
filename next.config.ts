@@ -7,6 +7,7 @@ const pagesBasePath =
     : "";
 
 const nextConfig = {
+  distDir: process.env.GLASSGARDEN_NEXT_DIST_DIR || ".next",
   output: "export",
   basePath: pagesBasePath,
   assetPrefix: pagesBasePath,

@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+import {
+  createGlassgardenDevTools,
+  normaliseDevSpeed,
+  type GlassgardenDevTools,
+} from '@/game/devtools'
 import { TANK, TUNING, type Fish, type GameEvent } from '@/game/model'
 import { TankRenderer } from '@/game/render'
 import { deserialize, parseSave, SAVE_KEY, serialize } from '@/game/save'
@@ -222,12 +227,10 @@ export default function GameRoot() {
     if (!sim) sim = GameSim.fresh(Date.now() >>> 0)
     simRef.current = sim
 
-    // Dev-only playtest accelerator and automation handle; absent in production builds.
     let simSpeed = 1
     if (process.env.NODE_ENV === 'development') {
-      const speedParam = Number(new URLSearchParams(window.location.search).get('speed'))
-      if (Number.isFinite(speedParam) && speedParam >= 1) simSpeed = Math.min(16, speedParam)
-      ;(window as unknown as { __glassgarden?: unknown }).__glassgarden = sim
+      const rawSpeed = new URLSearchParams(window.location.search).get('speed')
+      if (rawSpeed !== null) simSpeed = normaliseDevSpeed(Number(rawSpeed))
     }
     const renderer = new TankRenderer()
     rendererRef.current = renderer
@@ -256,6 +259,27 @@ export default function GameRoot() {
     const refreshHud = () =>
       setHud((previous) => buildHudSnapshot(sim!, selectedFishRef.current, previous.waterQuality))
     refreshHudRef.current = refreshHud
+
+    let devTools: GlassgardenDevTools | undefined
+    if (process.env.NODE_ENV === 'development') {
+      devTools = createGlassgardenDevTools({
+        getSim: () => sim!,
+        replaceSim: (next) => {
+          sim = next
+          simRef.current = next
+          selectedFishRef.current = undefined
+          setAwaySummary(null)
+          setToasts([])
+          refreshHud()
+        },
+        getSpeed: () => simSpeed,
+        setSpeed: (next) => {
+          simSpeed = next
+        },
+        save,
+      })
+      window.__glassgardenDev = devTools
+    }
 
     let raf = 0
     let lastFrameMs: number | undefined
@@ -343,6 +367,7 @@ export default function GameRoot() {
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('beforeunload', save)
       window.removeEventListener('resize', resize)
+      if (window.__glassgardenDev === devTools) delete window.__glassgardenDev
       save()
     }
   }, [])
