@@ -40,6 +40,7 @@ The kickoff prompt should ask Claude Code to build from the existing creative ha
 | C3 | This phase drafts a prompt; it does not authorise game implementation. | User request | No code changes beyond the interview and prompt artefacts. |
 | C4 | The finished autonomous run should leave Michael with a deployed game he can play and enjoy. | Q2 and existing GitHub Pages workflow | Technical checks alone cannot satisfy the prompt; the live experience must be verified. |
 | C5 | Claude remains coordinator and final integrator; delegation is selective, bounded, and evidence-driven. | Post-interview amendment 1 | Sub-agents provide isolated work or fresh judgement without creating a reviewer bureaucracy or concurrent shared-state ownership. |
+| C6 | Significant features and coherent milestones are locally validated, committed, and pushed as durable checkpoints; remote deployment is not the iterative validation loop. | Post-interview amendment 2 | Claude continues immediately against the local dev server after checkpoint pushes, waiting for Actions and verifying Pages only at final delivery. |
 
 ### Unknowns
 
@@ -56,6 +57,7 @@ The kickoff prompt should ask Claude Code to build from the existing creative ha
 | L2 | Claude should keep building and testing autonomously rather than stop after a plan or first thin slice. | Q1 |
 | L3 | Completion means Michael can play and have fun with the resulting game; repeated browser playtesting must shape both game feel and presentation. | Q2 |
 | L4 | Fresh-context critique and root-cause-driven prompt refinement can improve the autonomous loop when Claude verifies findings and changes the smallest owning instruction. | Post-interview amendment 1 |
+| L5 | Local headless-browser testing is the fast feedback path, while regular tested pushes preserve significant progress without blocking on Pages deployments. | Post-interview amendment 2 |
 
 ### Deferred decisions
 
@@ -148,3 +150,17 @@ The interview can stop because Claude’s operating authority and completion evi
 **Effect:** Adds a compact coordination and refinement operating model to the kickoff prompt without changing Claude’s broad creative and implementation authority.
 
 **Register updates:** C5 and L4 added.
+
+### Amendment 2 — Local validation and GitHub checkpoints
+
+**Received:** 2026-08-09T10:02:32+0800 (AWST)
+
+**Direction:**
+
+> Let's also make sure it is committing and pushing to GitHub regularly (E.g. after building a significant feature), but it should do all validation locally until the end. Don't wait for the GitHub pages to deploy so you can do validation there - just run the dev server locally and use your headless browser .
+
+**Interpretation:** GitHub is the durable checkpoint and eventual release path, not the development test environment. Claude should locally validate each significant feature, commit and push it, then continue immediately using a headless browser against the local development server. Only the final delivery waits for GitHub Actions and verifies the deployed Pages site.
+
+**Effect:** Separates local iteration, durable Git checkpoints, and final deployment verification so regular pushes preserve progress without introducing remote-deployment latency into the autonomous feedback loop.
+
+**Register updates:** C6 and L5 added.

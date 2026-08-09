@@ -36,7 +36,7 @@ If an approach or delegated task fails, inspect its artefacts and evidence, iden
 
 ## Feedback loop
 
-Repeatedly play from both a fresh start and a developed aquarium. Use browser automation and screenshots where useful. Judge the experience as a player, not only as its implementer:
+Run the development server locally and use a headless browser against that local instance for iterative validation. Repeatedly play from both a fresh start and a developed aquarium. Use screenshots, rendered DOM inspection, browser logs, and interaction checks where useful. Judge the experience as a player, not only as its implementer:
 
 - Is it obvious what to do without exposing hidden formulas?
 - Does care produce visible, attributable change?
@@ -46,6 +46,8 @@ Repeatedly play from both a fresh start and a developed aquarium. Use browser au
 - Is the visual presentation coherent and pleasant over an extended browser session?
 
 Fix problems you observe, then play again. Automated checks support this loop; they do not replace it.
+
+Do not wait for GitHub Actions or GitHub Pages between development milestones, and do not use the deployed site as the iterative test environment. Validate locally, checkpoint the work, then continue.
 
 ## Completion
 
@@ -58,4 +60,6 @@ The run is complete only when:
 - the deployed GitHub Pages build works at `https://michael-f-bryan.github.io/glassgarden/`; and
 - Michael can open that URL and reasonably expect to have fun playing it.
 
-Work directly on `main`. Keep coherent changes in tested commits. When the game meets the completion standard, push the finished state, wait for GitHub Actions, verify the live deployment and its assets, and leave a concise handover covering the playable experience, important design decisions, verification evidence, and any honest limitations.
+Work directly on `main`. After each significant feature or coherent milestone, run the relevant local checks, commit the tested change, and push it to GitHub as a durable checkpoint. Continue working immediately against the local development server; ordinary checkpoint pushes do not require waiting for CI or Pages deployment.
+
+When the game meets the completion standard, run the full local validation suite, commit and push the finished state, then wait for GitHub Actions once and verify the live deployment and its assets. Leave a concise handover covering the playable experience, important design decisions, verification evidence, and any honest limitations.
