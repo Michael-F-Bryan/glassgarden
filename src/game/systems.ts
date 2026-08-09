@@ -20,12 +20,14 @@ import {
 } from './water'
 
 /**
- * Context for one fixed tick. `visible` gates fatal neglect (death may only
- * happen while the player can see the tank); `offline` marks slowed catch-up
- * simulation, which additionally clamps deterioration so absence is never
- * catastrophic.
+ * The simulation's mode for one fixed tick. `'visible'` is the only mode
+ * where fatal neglect can kill a fish. `'offline'` is slowed catch-up
+ * simulation, which additionally clamps hunger/sickness deterioration so
+ * absence is never catastrophic. `'background'` (a hidden/throttled tab)
+ * runs the same numeric partitioning as `'visible'` but neither kills nor
+ * clamps deterioration.
  */
-export type TickFlags = { visible: boolean; offline: boolean }
+export type SimulationMode = 'visible' | 'background' | 'offline'
 
 /** Copy of a query's entities in id order, so iteration (and therefore RNG
  * consumption and float summation) is identical before and after save/load —
@@ -34,15 +36,15 @@ function sortedById<T extends Entity>(query: Iterable<T>): T[] {
   return [...query].sort((a, b) => a.id - b.id)
 }
 
-export function stepTick(state: GameState, dt: number, flags: TickFlags): void {
+export function stepTick(state: GameState, dt: number, mode: SimulationMode): void {
   state.time += dt
-  hungerSystem(state, dt, flags)
+  hungerSystem(state, dt, mode)
   movementSystem(state, dt)
   eatingSystem(state)
   digestionSystem(state)
   waterSystem(state, dt)
-  sicknessSystem(state, dt, flags)
-  healthSystem(state, dt, flags)
+  sicknessSystem(state, dt, mode)
+  healthSystem(state, dt, mode)
   breedingSystem(state)
   feederSystem(state)
   economySystem(state, dt)
@@ -50,14 +52,14 @@ export function stepTick(state: GameState, dt: number, flags: TickFlags): void {
   cleanupSystem(state, dt)
 }
 
-function hungerSystem(state: GameState, dt: number, flags: TickFlags): void {
+function hungerSystem(state: GameState, dt: number, mode: SimulationMode): void {
   for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish
     fish.ageSeconds += dt
     const maturity = Math.min(1, fish.weight / fish.genome.maxWeight)
     const satiation = fish.hunger < TUNING.satiationBelow ? TUNING.satiationFactor : 1
     const rate = TUNING.hungerPerSecondAdult * (0.45 + 0.55 * maturity) * satiation
-    const ceiling = flags.offline ? TUNING.offlineHungerCeiling : 1
+    const ceiling = mode === 'offline' ? TUNING.offlineHungerCeiling : 1
     fish.hunger = Math.min(ceiling, fish.hunger + rate * dt)
     if (fish.hunger >= 1) {
       fish.weight = Math.max(0.5, fish.weight - 0.005 * dt)
@@ -251,14 +253,14 @@ function waterSystem(state: GameState, dt: number): void {
   stepWater(state.water, dt, TUNING.pollutionDiffusionPerSecond, TUNING.pollutionDecayPerSecond)
 }
 
-function sicknessSystem(state: GameState, dt: number, flags: TickFlags): void {
+function sicknessSystem(state: GameState, dt: number, mode: SimulationMode): void {
   for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish
     const pollution = pollutionAt(state.water, entity.position)
     if (pollution > TUNING.sicknessAbovePollution) {
       const exposure = (pollution - TUNING.sicknessAbovePollution) / (1 - TUNING.sicknessAbovePollution)
       const susceptibility = 1 - 0.7 * fish.genome.resilience
-      const ceiling = flags.offline ? TUNING.offlineSicknessCeiling : 1
+      const ceiling = mode === 'offline' ? TUNING.offlineSicknessCeiling : 1
       fish.sickness = Math.min(
         ceiling,
         fish.sickness + exposure * susceptibility * TUNING.sicknessPerSecondAtFullPollution * dt,
@@ -269,7 +271,7 @@ function sicknessSystem(state: GameState, dt: number, flags: TickFlags): void {
   }
 }
 
-function healthSystem(state: GameState, dt: number, flags: TickFlags): void {
+function healthSystem(state: GameState, dt: number, mode: SimulationMode): void {
   for (const entity of sortedById(state.world.with('fish'))) {
     const fish = entity.fish!
     const distressed =
@@ -283,7 +285,9 @@ function healthSystem(state: GameState, dt: number, flags: TickFlags): void {
     }
     if (!distressed) fish.lastWarningAt = undefined
 
-    if (critical && flags.visible && !flags.offline) {
+    // Fatal neglect is gated to 'visible': the player must be able to see
+    // the tank for a death to occur.
+    if (critical && mode === 'visible') {
       if (fish.criticalSince === undefined) fish.criticalSince = state.time
       fish.health = Math.max(0, fish.health - TUNING.healthLossPerSecond * dt)
       const warnedLongEnough = state.time - fish.criticalSince >= TUNING.warningGraceSeconds

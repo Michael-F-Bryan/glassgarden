@@ -181,10 +181,7 @@ export function createGlassgardenDevTools(bindings: DevToolsBindings): Glassgard
         throw new RangeError('advance seconds must be between 0 and 3600')
       }
       const sim = bindings.getSim()
-      const stepSeconds = 0.25
-      for (let elapsed = 0; elapsed < seconds; elapsed += stepSeconds) {
-        sim.step(Math.min(stepSeconds, seconds - elapsed), true)
-      }
+      sim.advanceElapsed(seconds, 'visible')
       bindings.save()
       return createDevSnapshot(sim, bindings.getSpeed())
     },

@@ -81,6 +81,10 @@ describe('simulation timing', () => {
     fish.velocity = { x: 40, y: 0 }
     fish.fish.activity = { kind: 'wander', target: { x: 900, y: 300 }, idleUntil: 0 }
 
+    // A single animation-frame-sized delta (1/60s) is smaller than the fixed
+    // simulation quantum (1/30s); it accumulates rather than ticking
+    // immediately. Two frames' worth crosses one quantum.
+    sim.step(1 / 60, true)
     sim.step(1 / 60, true)
 
     expect(fish.position.x).toBeGreaterThan(300)

@@ -17,10 +17,18 @@ import {
   takenNames,
   type GameState,
 } from './state'
-import { stepTick } from './systems'
+import { stepTick, type SimulationMode } from './systems'
 import { clearPollutionNear } from './water'
 
 export type { OfflineSummary } from './model'
+export type { SimulationMode } from './systems'
+
+/** A tiny guard against floating-point noise near an exact tick boundary,
+ * far smaller than any real elapsed-time difference this simulation cares
+ * about (the quantum itself is ~0.033s/0.017s). Without it, summing the
+ * same total elapsed time through different call sizes can round a hair
+ * below vs. above a tick boundary and silently disagree by one tick. */
+const TICK_BOUNDARY_EPSILON = 1e-9
 
 export type ShopItem = {
   id: 'siphon' | 'feeder' | 'fish' | 'starterFish'
@@ -39,6 +47,15 @@ export type ShopItem = {
 export class GameSim {
   readonly state: GameState
 
+  /**
+   * Sub-tick remainder of elapsed time not yet simulated, in seconds —
+   * always within [0, TUNING.simTickSeconds). This is deliberately NOT part
+   * of the save format: a save captures whole-tick state only, so at most
+   * one quantum of elapsed time is silently dropped across a save/load
+   * cycle. Resuming a save starts a fresh accumulator at zero.
+   */
+  private accumulator = 0
+
   constructor(state: GameState) {
     this.state = state
   }
@@ -47,13 +64,40 @@ export class GameSim {
     return new GameSim(createFreshGame(seed))
   }
 
-  /** Advance by real elapsed seconds while the page is open. */
+  /**
+   * The only path into the simulation's fixed tick. Accumulates `seconds`
+   * of elapsed time and runs as many whole `TUNING.simTickSeconds` ticks as
+   * have accrued, carrying any leftover remainder into the next call. The
+   * quantum is identical in every mode — mode selects death/deterioration
+   * policy (see `SimulationMode`), never how elapsed time is partitioned,
+   * so equal elapsed time always reaches the same state regardless of how
+   * a caller chops it up.
+   */
+  advanceElapsed(seconds: number, mode: SimulationMode): void {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      throw new RangeError(
+        `advanceElapsed: seconds must be a finite, non-negative number, got ${seconds}`,
+      )
+    }
+    this.accumulator += seconds
+    const quantum = TUNING.simTickSeconds
+    // Compute the whole-tick count in one division rather than repeatedly
+    // subtracting the quantum: repeated subtraction's rounding error grows
+    // with the number of subtractions, which — right at an exact tick
+    // boundary — can make a large single call (few, large subtractions)
+    // disagree with many small calls (many, tiny subtractions) by one tick.
+    const ticks = Math.floor(this.accumulator / quantum + TICK_BOUNDARY_EPSILON)
+    for (let i = 0; i < ticks; i += 1) {
+      stepTick(this.state, quantum, mode)
+    }
+    this.accumulator -= ticks * quantum
+  }
+
+  /**
+   * @deprecated Call `advanceElapsed(realDt, visible ? 'visible' : 'background')` directly.
+   */
   step(realDt: number, visible: boolean): void {
-    // A background tab throttles rAF; clamp any single hop so one frame never
-    // fast-forwards the tank. Larger gaps go through advanceOffline().
-    const dt = Math.min(realDt, 2)
-    if (dt <= 0) return
-    stepTick(this.state, dt, { visible, offline: false })
+    this.advanceElapsed(realDt, visible ? 'visible' : 'background')
   }
 
   /**
@@ -70,11 +114,7 @@ export class GameSim {
     const coinsBefore = this.state.coins
     const pendingBefore = this.state.events.splice(0, this.state.events.length)
 
-    const flags = { visible: false, offline: true }
-    const tick = 1
-    for (let elapsed = 0; elapsed < simulatedSeconds; elapsed += tick) {
-      stepTick(this.state, Math.min(tick, simulatedSeconds - elapsed), flags)
-    }
+    this.advanceElapsed(simulatedSeconds, 'offline')
 
     const awayEvents = this.state.events.splice(0, this.state.events.length)
     const births = awayEvents.filter((e) => e.type === 'birth').map((e) => e.name)

@@ -215,6 +215,17 @@ export const TUNING = {
   offlineMaxSimSeconds: 20 * 60,
   offlineHungerCeiling: 0.8,
   offlineSicknessCeiling: 0.5,
+
+  /**
+   * The one fixed simulation quantum: every mode (visible/background/offline)
+   * advances in whole steps of this size, so equal elapsed time always
+   * produces the same state regardless of how callers partition it.
+   * Benchmarked at 1200 sim-seconds of offline catch-up (a dozen fish, 20
+   * waste) on dev hardware: ~979ms at 1/30s vs ~1852ms at 1/60s — 1/30 is
+   * not "comfortably fast" enough to justify the finer quantum, so it stays
+   * the default (see tests/time-contract.test.ts for the benchmark).
+   */
+  simTickSeconds: 1 / 30,
 } as const
 
 export function fishLength(weight: number): number {
