@@ -31,7 +31,7 @@ type HudSnapshot = {
   criticalNames: string[]
   ownsSiphon: boolean
   gameOver: boolean
-  waterQuality: 'clear' | 'tinged' | 'murky' | 'foul'
+  waterQuality: WaterTier
   shopItems: ShopItem[]
   selectedFish?: {
     id: number
@@ -76,11 +76,28 @@ function describeStage(fish: Fish): string {
   return 'adult'
 }
 
-function describeWater(worstPollution: number): 'clear' | 'tinged' | 'murky' | 'foul' {
-  if (worstPollution < 0.08) return 'clear'
-  if (worstPollution < 0.22) return 'tinged'
-  if (worstPollution < 0.45) return 'murky'
-  return 'foul'
+const WATER_TIERS = [
+  { tier: 'clear', below: 0.12 },
+  { tier: 'tinged', below: 0.3 },
+  { tier: 'murky', below: 0.5 },
+  { tier: 'foul', below: Infinity },
+] as const
+
+type WaterTier = (typeof WATER_TIERS)[number]['tier']
+
+/** Sticky tiering: needs to cross a boundary by a margin to change, so the
+ * pill doesn't flicker while pollution hovers at a threshold. */
+function describeWater(worstPollution: number, previous: WaterTier): WaterTier {
+  const index = WATER_TIERS.findIndex((entry) => worstPollution < entry.below)
+  const previousIndex = WATER_TIERS.findIndex((entry) => entry.tier === previous)
+  if (index > previousIndex) {
+    const boundary = WATER_TIERS[index - 1].below
+    if (worstPollution < boundary + 0.04) return previous
+  } else if (index < previousIndex) {
+    const boundary = WATER_TIERS[index].below
+    if (worstPollution > boundary - 0.04) return previous
+  }
+  return WATER_TIERS[index].tier
 }
 
 function formatAge(seconds: number): string {
@@ -95,7 +112,11 @@ function formatAway(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)} hours`
 }
 
-function buildHudSnapshot(sim: GameSim, selectedFishId: number | undefined): HudSnapshot {
+function buildHudSnapshot(
+  sim: GameSim,
+  selectedFishId: number | undefined,
+  previousWater: WaterTier,
+): HudSnapshot {
   const state = sim.state
   const fishEntities = [...state.world.with('fish')]
   const selected = selectedFishId !== undefined ? state.byId.get(selectedFishId) : undefined
@@ -113,7 +134,7 @@ function buildHudSnapshot(sim: GameSim, selectedFishId: number | undefined): Hud
       .map((entity) => entity.fish.name),
     ownsSiphon: state.ownsSiphon,
     gameOver: state.gameOver,
-    waterQuality: describeWater(sim.worstPollution()),
+    waterQuality: describeWater(sim.worstPollution(), previousWater),
     shopItems: sim.shopItems(),
     selectedFish: selected?.fish
       ? {
@@ -203,7 +224,8 @@ export default function GameRoot() {
         console.warn('Glassgarden: could not save', error)
       }
     }
-    const refreshHud = () => setHud(buildHudSnapshot(sim!, selectedFishRef.current))
+    const refreshHud = () =>
+      setHud((previous) => buildHudSnapshot(sim!, selectedFishRef.current, previous.waterQuality))
     refreshHudRef.current = refreshHud
 
     let raf = 0
@@ -219,15 +241,25 @@ export default function GameRoot() {
       }
       const now = performance.now()
       setToasts((current) => {
-        const additions = events
-          .filter((event): event is Extract<GameEvent, { type: 'toast' }> => event.type === 'toast')
-          .map((event, index) => ({
+        const alive = current.filter((toast) => toast.expiresAt > now)
+        const additions: Toast[] = []
+        for (const [index, event] of events.entries()) {
+          if (event.type !== 'toast') continue
+          const existing = alive.find(
+            (toast) => toast.message === event.message && toast.tone === event.tone,
+          )
+          if (existing) {
+            existing.expiresAt = now + TOAST_LIFETIME_MS[event.tone]
+            continue
+          }
+          additions.push({
             key: now + index + Math.random(),
             tone: event.tone,
             message: event.message,
             expiresAt: now + TOAST_LIFETIME_MS[event.tone],
-          }))
-        return [...current.filter((toast) => toast.expiresAt > now), ...additions].slice(-12)
+          })
+        }
+        return [...alive, ...additions].slice(-12)
       })
     }
 
@@ -410,7 +442,7 @@ export default function GameRoot() {
 
         {hud.criticalNames.length > 0 && !hud.gameOver && (
           <div
-            className="absolute inset-x-0 top-0 bg-gradient-to-b from-red-950/90 to-red-950/0 px-6 pt-3 pb-8 text-center"
+            className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-red-950/90 to-red-950/0 px-6 pt-3 pb-8 text-center"
             data-testid="critical-banner"
           >
             <span className="rounded-full bg-red-500/20 px-4 py-1 text-sm font-semibold text-red-200">
@@ -429,7 +461,7 @@ export default function GameRoot() {
             <div
               key={toast.key}
               data-testid={`toast-${toast.tone}`}
-              className={`pointer-events-auto max-w-xl rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-top-2 duration-300 ${
+              className={`pointer-events-none max-w-xl rounded-xl border px-4 py-2 text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-top-2 duration-300 ${
                 toast.tone === 'development'
                   ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
                   : toast.tone === 'warning'
