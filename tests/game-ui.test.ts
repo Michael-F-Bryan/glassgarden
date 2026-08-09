@@ -50,4 +50,15 @@ describe('game UI layout', () => {
       moodEmoji: '😟',
     })
   })
+
+  test('first-feed hint follows the sim and never flashes on the placeholder HUD', () => {
+    const sim = GameSim.fresh(123)
+    expect(buildHudSnapshot(sim, undefined, 'clear').fedOnce).toBe(false)
+
+    sim.dropFood(600)
+
+    expect(buildHudSnapshot(sim, undefined, 'clear').fedOnce).toBe(true)
+    // Before the sim mounts, GameRoot renders EMPTY_HUD — the hint must stay hidden.
+    expect(renderGame()).not.toContain('first-feed-hint')
+  })
 })

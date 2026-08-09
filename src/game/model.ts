@@ -113,6 +113,8 @@ export type GameEvent =
   | { type: 'awaySummary'; summary: OfflineSummary }
 
 export type Unlocks = {
+  /** The player has dropped food at least once; gates the first-feed hint. */
+  fedOnce: boolean
   /** Development milestones already announced, so each toast fires once. */
   noticedGrowth: boolean
   noticedPollution: boolean
@@ -144,6 +146,8 @@ export const TUNING = {
   growthPerNutrition: 1.15,
   starterMaxWeight: 26,
   starterWeight: 1.2,
+  /** Peckish enough to chase the tutorial pellet, far from a crisis. */
+  starterHunger: 0.35,
   babyWeight: 1.0,
   /** Hunger accumulated per second by a full-grown fish (smaller fish less).
    * Recently fed fish (hunger < satiationBelow) digest at satiationFactor. */

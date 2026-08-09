@@ -69,7 +69,12 @@ export function deserialize(save: SaveFile): GameState {
     feederLastDropAt: save.feederLastDropAt ?? 0,
     fishPurchased: save.fishPurchased,
     retiredNames: (save.retiredNames ?? []).slice(),
-    unlocks: { ...save.unlocks, feederInShop: save.unlocks.feederInShop ?? false },
+    unlocks: {
+      ...save.unlocks,
+      feederInShop: save.unlocks.feederInShop ?? false,
+      // Pre-flag saves have no fedOnce; a noticeably grown fish proves they fed.
+      fedOnce: save.unlocks.fedOnce ?? save.unlocks.noticedGrowth,
+    },
     water: { cells: save.waterCells.slice() },
     rng: createRng(save.rngState),
     events: (save.pendingEvents ?? []).map((event) => structuredClone(event)),

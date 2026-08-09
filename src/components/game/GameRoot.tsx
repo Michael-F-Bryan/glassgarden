@@ -36,6 +36,8 @@ type HudSnapshot = {
   criticalNames: string[]
   ownsSiphon: boolean
   gameOver: boolean
+  /** False only until the player's very first pellet; drives the feed hint. */
+  fedOnce: boolean
   waterQuality: WaterTier
   shopItems: ShopItem[]
   residents: {
@@ -69,6 +71,7 @@ const EMPTY_HUD: HudSnapshot = {
   criticalNames: [],
   ownsSiphon: false,
   gameOver: false,
+  fedOnce: true, // no hint until the real sim reports otherwise
   waterQuality: 'clear',
   shopItems: [],
   residents: [],
@@ -160,6 +163,7 @@ export function buildHudSnapshot(
       .map((entity) => entity.fish.name),
     ownsSiphon: state.ownsSiphon,
     gameOver: state.gameOver,
+    fedOnce: state.unlocks.fedOnce,
     waterQuality: describeWater(sim.worstPollution(), previousWater),
     shopItems: sim.shopItems(),
     residents: fishEntities.map((entity) => ({
@@ -489,6 +493,22 @@ export default function GameRoot() {
           onPointerMove={onCanvasMove}
           data-testid="tank-canvas"
         />
+
+        {!hud.fedOnce && !hud.gameOver && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-[16%] flex justify-center"
+            data-testid="first-feed-hint"
+          >
+            <div className="flex animate-pulse flex-col items-center gap-1.5">
+              <span className="text-2xl drop-shadow" aria-hidden="true">
+                🫘
+              </span>
+              <span className="rounded-full bg-slate-950/70 px-4 py-1.5 text-sm text-cyan-100 shadow-lg backdrop-blur">
+                click the water to drop a pinch of food
+              </span>
+            </div>
+          </div>
+        )}
 
         {hud.criticalNames.length > 0 && !hud.gameOver && (
           <div

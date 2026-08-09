@@ -6,6 +6,7 @@ import {
   createGlassgardenDevTools,
   normaliseDevSpeed,
 } from '@/game/devtools'
+import { TUNING } from '@/game/model'
 import { GameSim } from '@/game/sim'
 
 describe('development snapshots', () => {
@@ -15,7 +16,7 @@ describe('development snapshots', () => {
     expect(snapshot.version).toBe(1)
     expect(snapshot.tank).toEqual({ width: 1200, height: 675, waterTop: 48, sandTop: 615 })
     expect(snapshot.fish).toHaveLength(1)
-    expect(snapshot.fish[0]).toMatchObject({ id: 1, generation: 1, hunger: 0.6 })
+    expect(snapshot.fish[0]).toMatchObject({ id: 1, generation: 1, hunger: TUNING.starterHunger })
     expect(snapshot).not.toHaveProperty('state')
     expect(snapshot).not.toHaveProperty('world')
     expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot)

@@ -119,6 +119,7 @@ export class GameSim {
   dropFood(x: number): boolean {
     if (this.state.gameOver || this.state.coins < TUNING.pelletCost) return false
     this.state.coins -= TUNING.pelletCost
+    this.state.unlocks.fedOnce = true
     spawnPellet(this.state, x)
     return true
   }

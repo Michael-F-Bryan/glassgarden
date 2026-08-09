@@ -51,6 +51,7 @@ export function createState(seed: number): GameState {
     fishPurchased: 0,
     retiredNames: [],
     unlocks: {
+      fedOnce: false,
       noticedGrowth: false,
       noticedPollution: false,
       siphonInShop: false,
@@ -145,7 +146,7 @@ export function spawnFish(state: GameState, options: SpawnFishOptions): Entity {
   return addEntity(state, { position, velocity: { x: 0, y: 0 }, fish })
 }
 
-/** The opening scenario: a bare tank and one small, hungry fish. */
+/** The opening scenario: a bare tank and one small, gently peckish fish. */
 export function spawnStarterFish(state: GameState): Entity {
   const genome = randomGenome(state.rng, TUNING.starterMaxWeight)
   return spawnFish(state, {
@@ -153,7 +154,7 @@ export function spawnStarterFish(state: GameState): Entity {
     name: generateName(state.rng, takenNames(state)),
     weight: TUNING.starterWeight,
     generation: 1,
-    hunger: 0.6,
+    hunger: TUNING.starterHunger,
   })
 }
 
@@ -163,7 +164,7 @@ export function createFreshGame(seed: number): GameState {
   emit(state, {
     type: 'toast',
     tone: 'info',
-    message: `A small glimmerfin named ${starter.fish!.name} arrives in your bare tank. They look hungry.`,
+    message: `A small glimmerfin named ${starter.fish!.name} settles into your bare tank. A pinch of food would be a warm welcome.`,
   })
   return state
 }

@@ -39,15 +39,37 @@ function pairedState(seed: number, options?: { hunger?: number }) {
 }
 
 describe('fresh game', () => {
-  test('starts with a bare tank, one hungry starter fish, and starting coins', () => {
+  test('starts with a bare tank, one gently peckish starter fish, and starting coins', () => {
     const sim = GameSim.fresh(42)
     const fish = [...sim.state.world.with('fish')]
     expect(fish).toHaveLength(1)
-    expect(fish[0].fish.hunger).toBeGreaterThan(0.5)
+    // Peckish enough to chase the first pellet, nowhere near a crisis.
+    expect(fish[0].fish.hunger).toBeGreaterThan(TUNING.seekFoodAbove)
+    expect(fish[0].fish.hunger).toBeLessThan(TUNING.distressHungerAbove)
     expect(fish[0].fish.weight).toBe(TUNING.starterWeight)
     expect(sim.state.coins).toBe(TUNING.startingCoins)
     expect([...sim.state.world.with('waste')]).toHaveLength(0)
     expect(maxPollution(sim.state.water)).toBe(0)
+  })
+
+  test('the first pellet retires the first-feed hint, permanently', () => {
+    const sim = GameSim.fresh(42)
+    expect(sim.state.unlocks.fedOnce).toBe(false)
+
+    sim.dropFood(600)
+
+    expect(sim.state.unlocks.fedOnce).toBe(true)
+    const resumed = new GameSim(deserialize(serialize(sim.state, 1_000)))
+    expect(resumed.state.unlocks.fedOnce).toBe(true)
+  })
+
+  test('pre-fedOnce saves infer feeding from a noticeably grown fish', () => {
+    const sim = GameSim.fresh(42)
+    sim.state.unlocks.noticedGrowth = true
+    const save = serialize(sim.state, 1_000)
+    delete (save.unlocks as Partial<typeof save.unlocks>).fedOnce
+
+    expect(deserialize(save).unlocks.fedOnce).toBe(true)
   })
 })
 
