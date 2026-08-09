@@ -110,6 +110,14 @@ export default function GameRoot() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '1') {
+        runtimeRef.current?.setTool('feed')
+        return
+      }
+      if (event.key === '2') {
+        runtimeRef.current?.setTool('siphon')
+        return
+      }
       if (event.key !== 'Escape') return
       setMenuOpenState(false)
       setConfirmingNewGame(false)
@@ -205,6 +213,8 @@ export default function GameRoot() {
             type="button"
             onClick={() => setTool('feed')}
             data-testid="tool-feed"
+            aria-keyshortcuts="1"
+            aria-pressed={view.tool === 'feed'}
             className={`rounded-xl border px-4 py-2 text-sm font-medium backdrop-blur transition ${
               view.tool === 'feed'
                 ? 'border-amber-300/60 bg-amber-400/20 text-amber-100'
@@ -218,6 +228,8 @@ export default function GameRoot() {
               type="button"
               onClick={() => setTool('siphon')}
               data-testid="tool-siphon"
+              aria-keyshortcuts="2"
+              aria-pressed={view.tool === 'siphon'}
               className={`rounded-xl border px-4 py-2 text-sm font-medium backdrop-blur transition ${
                 view.tool === 'siphon'
                   ? 'border-cyan-300/60 bg-cyan-400/20 text-cyan-100'

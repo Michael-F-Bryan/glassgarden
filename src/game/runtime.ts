@@ -409,6 +409,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     },
 
     setTool(next) {
+      if (next === 'siphon' && !sim?.read.ownsSiphon) return
       tool = next
       publish()
     },

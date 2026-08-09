@@ -238,6 +238,24 @@ describe('game runtime', () => {
     runtime.stop()
   })
 
+  test('does not select the siphon until the tank owns one', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+
+    runtime.setTool('siphon')
+    expect(lastView(views).tool).toBe('feed')
+
+    const equippedState = createFreshGame(12)
+    equippedState.ownsSiphon = true
+    runtime.replace(new GameSim(equippedState))
+    runtime.setTool('siphon')
+    expect(lastView(views).tool).toBe('siphon')
+    runtime.stop()
+  })
+
   test('replacing the session resets tool, selection, toasts, and renderer residue', () => {
     const h = harness()
     const runtime = createGameRuntime(h.deps)

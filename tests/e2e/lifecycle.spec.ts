@@ -36,6 +36,17 @@ test('replacing the simulation resets the tool, so the first click feeds', async
   await expect.poll(async () => (await snapshot(page)).food.length).toBe(1)
 })
 
+test('number keys select the feed and siphon tools', async ({ page }) => {
+  await ready(page)
+  await page.evaluate(() => window.__glassgardenDev!.loadScenario('dirty-tank', 84))
+
+  await page.keyboard.press('2')
+  await expect(page.getByTestId('tool-siphon')).toHaveAttribute('aria-pressed', 'true')
+
+  await page.keyboard.press('1')
+  await expect(page.getByTestId('tool-feed')).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('pausing cancels a held feed gesture; resuming needs a fresh press', async ({ page }) => {
   await ready(page)
   await page.evaluate(() => window.__glassgardenDev!.loadScenario('fresh', 83))
