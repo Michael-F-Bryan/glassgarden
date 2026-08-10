@@ -31,6 +31,8 @@ export type DevFishSnapshot = {
   health: number
   generation: number
   parents?: [string, string]
+  /** Durable mate's name, once bonded. */
+  partner?: string
   activity: string
 }
 
@@ -133,6 +135,10 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
         health: entity.physiology.health,
         generation: entity.resident.generation,
         parents: entity.resident.parents ? ([...entity.resident.parents] as [string, string]) : undefined,
+        partner:
+          entity.breeding?.partnerId !== undefined
+            ? state.byId.get(entity.breeding.partnerId)?.resident?.name
+            : undefined,
         activity: entity.behaviour.activity.kind,
       })),
     food: [...state.world.with('food')]

@@ -87,9 +87,16 @@ export type Behaviour = {
   facing: 1 | -1
 }
 
-/** Readiness to court again. */
+/** Readiness to court again, and who this fish courts. */
 export type Breeding = {
   cooldownUntil: number
+  /**
+   * Entity id of a durable mate. Set for both fish when a pair leaves their
+   * first egg together; from then on each only courts the other, so broods
+   * come from lasting pairs rather than whoever drifted past. Cleared when
+   * the partner dies, after which a widowed fish may eventually pair again.
+   */
+  partnerId?: number
 }
 
 /** Corpse animation: a fish that died, floating up and fading out. Carries
@@ -215,6 +222,7 @@ export type DevelopmentId =
   | 'rotaryFeederOffered'
   | 'spongeFilterOffered'
   | 'habitatExpansionOffered'
+  | 'bondSeen'
 
 export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'fedOnce',
@@ -228,6 +236,7 @@ export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'rotaryFeederOffered',
   'spongeFilterOffered',
   'habitatExpansionOffered',
+  'bondSeen',
 ]
 
 /**

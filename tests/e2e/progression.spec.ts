@@ -110,6 +110,33 @@ test('a stable full tank reveals the habitat expansion; buying it visibly enlarg
   expect(Math.abs(newest.x - 1500)).toBeLessThan(40)
 })
 
+test('a first shared egg forms a visible partnership that survives reload', async ({ page }) => {
+  await startScenario(page, 'growing-tank', 4244)
+
+  // Let the healthy tank court and lay its first egg.
+  for (let i = 0; i < 30; i += 1) {
+    await advance(page, 20)
+    if ((await snapshot(page)).fish.some((fish) => fish.partner)) break
+  }
+  let state = await snapshot(page)
+  const bonded = state.fish.find((fish) => fish.partner)
+  expect(bonded).toBeDefined()
+  expect(state.fish.find((fish) => fish.name === bonded!.partner)?.partner).toBe(bonded!.name)
+
+  // The relationship is a player-visible fact, not private sim state.
+  await page.getByTestId(`resident-${bonded!.id}`).click()
+  await expect(page.getByTestId('inspector-partner')).toContainText(
+    `partnered with ${bonded!.partner}`,
+  )
+
+  // And it is durable: the bond is still there after a reload.
+  await page.reload()
+  await page.waitForFunction(() => Boolean(window.__glassgardenDev))
+  await page.evaluate(() => window.__glassgardenDev!.setSpeed(0))
+  state = await snapshot(page)
+  expect(state.fish.find((fish) => fish.name === bonded!.name)?.partner).toBe(bonded!.partner)
+})
+
 test('a straining feeder reveals the next tier, and the upgrade relieves the tank', async ({
   page,
 }) => {

@@ -612,6 +612,11 @@ export default function GameRoot() {
                 {hud.selectedFish.weightGrams.toFixed(1)} g
               </dd>
             </dl>
+            {hud.selectedFish.partner && (
+              <p className="mt-2 text-xs text-rose-200/80" data-testid="inspector-partner">
+                partnered with {hud.selectedFish.partner}
+              </p>
+            )}
             {hud.selectedFish.parents && (
               <p className="mt-2 text-xs text-slate-400">
                 child of {hud.selectedFish.parents[0]} &amp; {hud.selectedFish.parents[1]}

@@ -12,6 +12,7 @@ import {
   fishLength,
   TUNING,
   type Entity,
+  type ResidentEntity,
   type Vec2,
 } from './model'
 import {
@@ -529,6 +530,24 @@ function breedingSystem(state: GameState): void {
     partner.breeding.cooldownUntil = state.time + TUNING.breedingCooldownSeconds
     behaviour.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
     partner.behaviour.activity = { kind: 'wander', target: { ...partner.position }, idleUntil: 0 }
+    // A first egg together makes the pair durable: from now on these two
+    // only court each other.
+    if (entity.breeding.partnerId === undefined && partner.breeding.partnerId === undefined) {
+      entity.breeding.partnerId = partner.id
+      partner.breeding.partnerId = entity.id
+      if (discover(state, 'bondSeen')) {
+        emit(state, {
+          type: 'toast',
+          tone: 'development',
+          message: `${entity.resident.name} and ${partner.resident.name} keep returning to each other — they seem to have chosen one another.`,
+        })
+      }
+      recordJournal(
+        state,
+        'development',
+        `${entity.resident.name} & ${partner.resident.name} became partners.`,
+      )
+    }
     if (discover(state, 'eggSeen')) {
       emit(state, {
         type: 'toast',
@@ -545,6 +564,15 @@ function breedingSystem(state: GameState): void {
     )
   }
 
+  // Widowhood: a fish whose partner is gone lets go of the bond, and may —
+  // in time — pair again.
+  for (const entity of livingFish(state)) {
+    const partnerId = entity.breeding.partnerId
+    if (partnerId !== undefined && !state.byId.get(partnerId)?.resident) {
+      entity.breeding.partnerId = undefined
+    }
+  }
+
   // Pair up newly eligible couples — only while the habitat has room.
   const population = residentCount(state) + state.world.with('egg').entities.length
   if (population >= capacityFor(state.equipment.habitat)) return
@@ -558,7 +586,25 @@ function breedingSystem(state: GameState): void {
       pollutionAt(state.water, entity.position, bounds) < TUNING.breedingMaxPollution,
   )
   if (eligible.length < 2) return
-  const [a, b] = eligible
+
+  // Bonded pairs come first, and a bonded fish is faithful: it courts its
+  // own partner or no one, even while that partner is off its food or
+  // recovering. Only the unbonded may form a new couple.
+  const eligibleIds = new Set(eligible.map((entity) => entity.id))
+  let couple: [ResidentEntity, ResidentEntity] | undefined
+  for (const entity of eligible) {
+    const partnerId = entity.breeding.partnerId
+    if (partnerId !== undefined && partnerId > entity.id && eligibleIds.has(partnerId)) {
+      couple = [entity, eligible.find((candidate) => candidate.id === partnerId)!]
+      break
+    }
+  }
+  if (!couple) {
+    const unbonded = eligible.filter((entity) => entity.breeding.partnerId === undefined)
+    if (unbonded.length < 2) return
+    couple = [unbonded[0], unbonded[1]]
+  }
+  const [a, b] = couple
   const until = state.time + TUNING.courtshipSeconds
   a.behaviour.activity = { kind: 'court', partnerId: b.id, until }
   b.behaviour.activity = { kind: 'court', partnerId: a.id, until }

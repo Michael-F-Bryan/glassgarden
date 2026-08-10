@@ -13,7 +13,14 @@ import { randomGenome } from '@/game/genome'
 import { TANK, TUNING } from '@/game/model'
 import { decodeSave, hydrate } from '@/game/save'
 import { GameSim } from '@/game/sim'
-import { addEntity, createState, spawnFish, type GameState } from '@/game/state'
+import {
+  addEntity,
+  createState,
+  livingFish,
+  removeEntity,
+  spawnFish,
+  type GameState,
+} from '@/game/state'
 
 /**
  * Progression is hidden from the player but must be provable here: each
@@ -480,5 +487,101 @@ describe('habitat expansion', () => {
     const resumed = new GameSim(hydrate(result.document))
     expect(resumed.read.equipment.habitat).toBe('expanded')
     expect(resumed.toSave(1_000)).toEqual(sim.toSave(1_000))
+  })
+})
+
+describe('relational breeding', () => {
+  /** Advance until the first egg appears, or fail loudly. */
+  function untilFirstEgg(sim: GameSim, state: GameState): void {
+    for (let i = 0; i < 120; i += 1) {
+      sim.advanceElapsed(1, 'visible')
+      if ([...state.world.with('egg')].length > 0) return
+    }
+    throw new Error('no egg appeared within two minutes')
+  }
+
+  test('a first shared egg makes the pair durable and announces it once', () => {
+    const { state, sim } = stockedTank({ seed: 830, residents: 2, feeder: 'none' })
+    const collected: string[] = []
+    for (let i = 0; i < 120 && [...state.world.with('egg')].length === 0; i += 1) {
+      collected.push(
+        ...sim.advanceElapsed(1, 'visible').notifications.map((n) => n.message),
+      )
+    }
+
+    const [a, b] = livingFish(state)
+    expect(a.breeding.partnerId).toBe(b.id)
+    expect(b.breeding.partnerId).toBe(a.id)
+    expect(state.developments.has('bondSeen')).toBe(true)
+    expect(collected.some((message) => /chosen one another/.test(message))).toBe(true)
+    expect(
+      state.journal.some((entry) => /became partners/.test(entry.message)),
+    ).toBe(true)
+
+    // The announcement is one-shot; later bonds only reach the journal.
+    const again = sim.advanceElapsed(1, 'visible')
+    expect(again.notifications.some((n) => /chosen one another/.test(n.message))).toBe(false)
+  })
+
+  test('a bonded fish waits for its partner instead of courting a stranger', () => {
+    const { state, sim } = stockedTank({ seed: 831, residents: 4, feeder: 'none' })
+    const [a, b, c, d] = livingFish(state)
+    a.breeding.partnerId = b.id
+    b.breeding.partnerId = a.id
+
+    // The partner is out of condition; the other two are unbonded and ready.
+    b.physiology.sickness = TUNING.breedingMaxSickness + 0.2
+    sim.advanceElapsed(1, 'visible')
+
+    expect(a.behaviour.activity.kind).not.toBe('court')
+    expect(c.behaviour.activity.kind).toBe('court')
+    expect(d.behaviour.activity.kind).toBe('court')
+
+    // Partner recovered: the bonded pair courts before any new couple forms.
+    c.behaviour.activity = { kind: 'wander', target: { ...c.position }, idleUntil: 0 }
+    d.behaviour.activity = { kind: 'wander', target: { ...d.position }, idleUntil: 0 }
+    c.breeding.cooldownUntil = Number.MAX_SAFE_INTEGER
+    d.breeding.cooldownUntil = Number.MAX_SAFE_INTEGER
+    b.physiology.sickness = 0
+    sim.advanceElapsed(1, 'visible')
+    expect(a.behaviour.activity.kind).toBe('court')
+    expect(b.behaviour.activity.kind).toBe('court')
+  })
+
+  test('losing a partner dissolves the bond so a widow can pair again', () => {
+    const { state, sim } = stockedTank({ seed: 832, residents: 3, feeder: 'none' })
+    const [a, b] = livingFish(state)
+    a.breeding.partnerId = b.id
+    b.breeding.partnerId = a.id
+
+    removeEntity(state, b)
+    sim.advanceElapsed(1, 'visible')
+
+    expect(a.breeding.partnerId).toBeUndefined()
+  })
+
+  test('bonds survive a save/load round-trip; a stale partner id is dropped', () => {
+    const { state, sim } = stockedTank({ seed: 833, residents: 2, feeder: 'none' })
+    untilFirstEgg(sim, state)
+    const [a, b] = livingFish(state)
+    expect(a.breeding.partnerId).toBe(b.id)
+
+    const loaded = decodeSave(JSON.stringify(sim.toSave(1_000)))
+    expect(loaded.kind).toBe('loaded')
+    if (loaded.kind !== 'loaded') return
+    const resumed = hydrate(loaded.document)
+    const [ra, rb] = livingFish(resumed)
+    expect(ra.breeding.partnerId).toBe(rb.id)
+    expect(rb.breeding.partnerId).toBe(ra.id)
+
+    // A save pointing at a departed partner loads with the bond let go.
+    const tampered = sim.toSave(1_000)
+    const wireFish = tampered.entities.find((entity) => entity.fish)!
+    wireFish.fish!.partnerId = 9_999
+    const renormalised = decodeSave(JSON.stringify(tampered))
+    expect(renormalised.kind).toBe('loaded')
+    if (renormalised.kind !== 'loaded') return
+    const healed = hydrate(renormalised.document)
+    expect(livingFish(healed)[0].breeding.partnerId).toBeUndefined()
   })
 })

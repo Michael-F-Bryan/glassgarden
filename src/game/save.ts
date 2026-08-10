@@ -75,6 +75,7 @@ function toWire(entity: Entity): WireEntity {
         hatchedInMurkyWater: entity.resident.hatchedInMurkyWater,
         digesting: entity.physiology.digesting,
         breedingCooldownUntil: entity.breeding.cooldownUntil,
+        partnerId: entity.breeding.partnerId,
         activity: structuredClone(entity.behaviour.activity),
         criticalSince: entity.physiology.criticalSince,
         lastWarningAt: entity.physiology.lastWarningAt,
@@ -143,7 +144,7 @@ function fromWire(wire: WireEntity): Entity {
         lastWarningAt: fish.lastWarningAt,
       },
       behaviour: { activity: structuredClone(fish.activity), facing: fish.facing },
-      breeding: { cooldownUntil: fish.breedingCooldownUntil },
+      breeding: { cooldownUntil: fish.breedingCooldownUntil, partnerId: fish.partnerId },
     }
   }
   if (wire.remains) {

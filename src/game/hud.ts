@@ -49,6 +49,8 @@ export type HudSnapshot = {
     age: string
     origin: 'arrived' | 'hatched'
     parents?: [string, string]
+    /** The durable mate's name, once this fish has one. */
+    partner?: string
     hatchedInMurkyWater: boolean
   }
 }
@@ -273,6 +275,10 @@ export function buildHudSnapshot(
             age: formatAge(selected.physiology.ageSeconds),
             origin: selected.resident.parents ? 'hatched' : 'arrived',
             parents: selected.resident.parents,
+            partner:
+              selected.breeding?.partnerId !== undefined
+                ? state.byId.get(selected.breeding.partnerId)?.resident?.name
+                : undefined,
             hatchedInMurkyWater: selected.resident.hatchedInMurkyWater,
           }
         : undefined,

@@ -53,6 +53,9 @@ const FishSchema = z.object({
   hatchedInMurkyWater: z.boolean(),
   digesting: finite().min(0),
   breedingCooldownUntil: finite(),
+  /** Durable mate's entity id. Optional on every version: bonds only exist
+   * once a pair has left an egg together. */
+  partnerId: z.number().int().positive().optional(),
   activity: FishActivitySchema,
   criticalSince: finite().optional(),
   lastWarningAt: finite().optional(),
@@ -260,12 +263,17 @@ export function normalizeSemantics<T extends EntityBearingSave>(save: T): T {
     const staleReference =
       (activity.kind === 'seekFood' && !foodIds.has(activity.foodId)) ||
       (activity.kind === 'court' && !fishIds.has(activity.partnerId))
-    if (!staleReference) return entity
+    const stalePartner =
+      entity.fish.partnerId !== undefined && !fishIds.has(entity.fish.partnerId)
+    if (!staleReference && !stalePartner) return entity
     return {
       ...entity,
       fish: {
         ...entity.fish,
-        activity: { kind: 'wander' as const, target: { ...entity.position }, idleUntil: 0 },
+        partnerId: stalePartner ? undefined : entity.fish.partnerId,
+        activity: staleReference
+          ? { kind: 'wander' as const, target: { ...entity.position }, idleUntil: 0 }
+          : entity.fish.activity,
       },
     }
   })
