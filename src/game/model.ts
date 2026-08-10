@@ -344,8 +344,11 @@ export const TUNING = {
    * dance must be short enough that romance never starves a resident. */
   courtshipSeconds: 10,
   eggHatchSeconds: 60,
-  /** Eggs incubating above this pollution hatch stunted, less resilient fry. */
-  murkyEggPollution: 0.4,
+  /** Eggs incubating above this pollution hatch stunted, less resilient fry.
+   * Set above the transient greening any egg picks up lying on working sand
+   * — with droppings leaching harder per unit, 0.4 stunted most broods in a
+   * well-kept automated tank. Only genuinely foul ground does it now. */
+  murkyEggPollution: 0.75,
 
   /** Hidden development thresholds. */
   growthNoticedAtMultiple: 2, // starter weight vs its hatch weight

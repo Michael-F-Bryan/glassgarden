@@ -510,6 +510,19 @@ function breedingSystem(state: GameState): void {
       behaviour.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
       continue
     }
+    // The habitat may have filled while the pair danced — several couples
+    // court at once. A finished courtship without room ends quietly: no egg,
+    // and the cooldown below keeps the tank from thrashing at the ceiling.
+    const roomLeft =
+      residentCount(state) + state.world.with('egg').entities.length <
+      capacityFor(state.equipment.habitat)
+    if (!roomLeft) {
+      entity.breeding.cooldownUntil = state.time + TUNING.breedingCooldownSeconds
+      partner.breeding.cooldownUntil = state.time + TUNING.breedingCooldownSeconds
+      behaviour.activity = { kind: 'wander', target: { ...entity.position }, idleUntil: 0 }
+      partner.behaviour.activity = { kind: 'wander', target: { ...partner.position }, idleUntil: 0 }
+      continue
+    }
     const midpoint = {
       x: (entity.position.x + partner.position.x) / 2,
       y: (entity.position.y + partner.position.y) / 2,
@@ -573,8 +586,14 @@ function breedingSystem(state: GameState): void {
     }
   }
 
-  // Pair up newly eligible couples — only while the habitat has room.
-  const population = residentCount(state) + state.world.with('egg').entities.length
+  // Pair up newly eligible couples — only while the habitat has room for
+  // what is already on the way. Courting pairs count against capacity, or a
+  // dozen simultaneous dances would overshoot the ceiling together.
+  const courting = livingFish(state).filter(
+    (entity) => entity.behaviour.activity.kind === 'court',
+  ).length
+  const population =
+    residentCount(state) + state.world.with('egg').entities.length + Math.ceil(courting / 2)
   if (population >= capacityFor(state.equipment.habitat)) return
   const eligible = livingFish(state).filter(
     (entity) =>

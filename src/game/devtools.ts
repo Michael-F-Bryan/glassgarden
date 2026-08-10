@@ -33,6 +33,7 @@ export type DevFishSnapshot = {
   parents?: [string, string]
   /** Durable mate's name, once bonded. */
   partner?: string
+  hatchedInMurkyWater: boolean
   activity: string
 }
 
@@ -139,6 +140,7 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
           entity.breeding?.partnerId !== undefined
             ? state.byId.get(entity.breeding.partnerId)?.resident?.name
             : undefined,
+        hatchedInMurkyWater: entity.resident.hatchedInMurkyWater,
         activity: entity.behaviour.activity.kind,
       })),
     food: [...state.world.with('food')]

@@ -110,6 +110,85 @@ test('a stable full tank reveals the habitat expansion; buying it visibly enlarg
   expect(Math.abs(newest.x - 1500)).toBeLessThan(40)
 })
 
+test('an expanded habitat stays readable and interactive near twenty residents', async ({
+  page,
+}) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(String(error)))
+  const consoleErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+
+  await startScenario(page, 'thriving-full-tank', 4245)
+
+  // Earn and buy the expansion through its real conditions.
+  for (let i = 0; i < 12; i += 1) {
+    await advance(page, 60)
+    if ((await snapshot(page)).developments.includes('habitatExpansionOffered')) break
+  }
+  for (let i = 0; i < 20; i += 1) {
+    if (
+      (await snapshot(page)).shop.some(
+        (offer) => offer.id === 'habitatExpansion' && offer.affordable,
+      )
+    )
+      break
+    await advance(page, 60)
+  }
+  await page.getByTestId('buy-habitatExpansion').click()
+
+  // Let the community breed toward the new capacity.
+  for (let i = 0; i < 40; i += 1) {
+    await advance(page, 60)
+    if ((await snapshot(page)).fish.length >= 19) break
+  }
+  const grown = await snapshot(page)
+  expect(grown.fish.length).toBeGreaterThanOrEqual(17)
+
+  // Capacity is a hard valve: simultaneous courtships must not overshoot it.
+  expect(grown.fish.length + grown.eggs.length).toBeLessThanOrEqual(20)
+
+  // The tank stays legible under automation alone: debris bounded, water
+  // out of the foul band, every resident findable.
+  expect(grown.waste.length).toBeLessThanOrEqual(110)
+  expect(grown.water.meanPollution).toBeLessThan(0.3)
+  expect(Math.max(...grown.fish.map((fish) => fish.sickness))).toBeLessThan(0.5)
+
+  // Healthy broods are the norm in a cared-for tank; stunted fry mean the
+  // ground under the eggs was genuinely foul, not merely lived-on.
+  const hatched = grown.fish.filter((fish) => fish.generation >= 2)
+  const murky = hatched.filter((fish) => fish.hatchedInMurkyWater)
+  expect(murky.length).toBeLessThan(hatched.length / 2)
+
+  // Lineage is visible on a hatched resident through the real inspector.
+  const descendant = grown.fish.find((fish) => fish.generation >= 2 && fish.parents)
+  expect(descendant).toBeDefined()
+  await page.getByTestId(`resident-${descendant!.id}`).click()
+  await expect(page.getByTestId('fish-inspector')).toContainText(
+    `child of ${descendant!.parents![0]}`,
+  )
+  await page.keyboard.press('Escape')
+
+  // Keyboard play still works in the larger coordinate space.
+  await page.getByTestId('tank-canvas').focus()
+  await page.keyboard.press('n')
+  await page.keyboard.press('i')
+  await expect(page.getByTestId('fish-inspector')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // Eight real seconds at normal speed: the tank keeps simulating and stays
+  // quiet in the console while twenty residents swim.
+  await page.evaluate(() => window.__glassgardenDev!.setSpeed(1))
+  const before = (await snapshot(page)).time
+  await page.waitForTimeout(8_000)
+  const after = (await snapshot(page)).time
+  expect(after - before).toBeGreaterThan(5)
+
+  expect(pageErrors).toEqual([])
+  expect(consoleErrors).toEqual([])
+})
+
 test('a first shared egg forms a visible partnership that survives reload', async ({ page }) => {
   await startScenario(page, 'growing-tank', 4244)
 

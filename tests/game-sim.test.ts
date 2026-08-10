@@ -265,8 +265,9 @@ describe('breeding', () => {
     const sim = new GameSim(state)
     runFor(sim, 25)
     expect([...state.world.with('egg')]).toHaveLength(1)
+    // Genuinely foul ground, not the everyday greening under a working tank.
     for (let t = 0; t < 80; t += TEST_STEP) {
-      state.water.cells.fill(0.6)
+      state.water.cells.fill(TUNING.murkyEggPollution + 0.1)
       sim.advanceElapsed(TEST_STEP, 'visible')
     }
     const baby = [...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')].find((f) => f.resident.generation === 2)!
