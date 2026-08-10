@@ -278,7 +278,10 @@ describe('filtration', () => {
       addEntity(state, {
         position: { x: 150 + i * 100, y: TANK.sandTop - 6 },
         velocity: { x: 0, y: 0 },
-        waste: { size: 3, restingOnSand: true },
+        // Piles big enough to outlive the whole murky stretch: debris now
+        // breaks down in minutes, and this scenario is about a standing
+        // source the player never lifts out.
+        waste: { size: 8, restingOnSand: true },
       })
     }
 

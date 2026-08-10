@@ -135,7 +135,10 @@ describe('feeding and growth', () => {
 
   test('digestion turns meals into waste droppings', () => {
     const sim = GameSim.fresh(13)
-    for (let round = 0; round < 6; round += 1) {
+    // A dropping represents several pellets' worth of digestion, so keep the
+    // fish hungry enough to actually eat every pellet dropped for it.
+    for (let round = 0; round < 8; round += 1) {
+      onlyFish(sim).physiology.hunger = 0.6
       sim.dropFood(onlyFish(sim).position.x)
       runFor(sim, 10)
     }
@@ -505,8 +508,8 @@ describe('persistence', () => {
     const state = pairedState(801)
     const sim = new GameSim(state)
     state.coins = 200
-    for (let round = 0; round < 6; round += 1) {
-      sim.dropFood(200 + round * 120)
+    for (let round = 0; round < 12; round += 1) {
+      sim.dropFood(200 + (round % 6) * 120)
       runFor(sim, 12)
     }
     expect([...state.world.entities].length).toBeGreaterThan(3)

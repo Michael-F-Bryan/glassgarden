@@ -7,7 +7,12 @@ import { addEntity, createFreshGame, spawnFish, takenNames } from './state'
 export const DEV_TOOLS_VERSION = 1 as const
 export const DEFAULT_DEV_SEED = 42
 
-export type DevScenario = 'fresh' | 'dirty-tank' | 'starving-rescuable' | 'growing-tank'
+export type DevScenario =
+  | 'fresh'
+  | 'dirty-tank'
+  | 'starving-rescuable'
+  | 'growing-tank'
+  | 'thriving-full-tank'
 
 export type DevFishSnapshot = {
   id: number
@@ -168,6 +173,43 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
         weight: state.rng.range(16, 24),
         generation: 1,
         hunger: state.rng.range(0.2, 0.45),
+      })
+    }
+    return new GameSim(state)
+  }
+
+  if (name === 'thriving-full-tank') {
+    // A starter habitat at capacity and in good health: every earlier
+    // development earned, top-tier equipment installed, water clean. This is
+    // the boundary just before the habitat-expansion arc — advance it a few
+    // stable minutes and the expansion should reveal itself.
+    state.coins = 1_500
+    state.equipment.siphon = true
+    state.equipment.feeder = 'rotary'
+    state.equipment.filter = 'sponge'
+    for (const id of [
+      'fedOnce',
+      'growthNoticed',
+      'pollutionNoticed',
+      'siphonOffered',
+      'fishOffered',
+      'eggSeen',
+      'dripFeederOffered',
+      'twinHopperOffered',
+      'rotaryFeederOffered',
+      'spongeFilterOffered',
+    ] as const) {
+      state.developments.add(id)
+    }
+    const starter = [...state.world.with('physiology')][0]
+    starter.physiology.weight = 24
+    for (let i = 0; i < 11; i += 1) {
+      spawnFish(state, {
+        genome: randomGenome(state.rng, state.rng.range(22, 30)),
+        name: generateName(state.rng, takenNames(state)),
+        weight: state.rng.range(16, 26),
+        generation: i < 6 ? 1 : 2,
+        hunger: state.rng.range(0.2, 0.4),
       })
     }
     return new GameSim(state)

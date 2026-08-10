@@ -39,6 +39,13 @@ describe('development scenarios', () => {
     expect(growing.equipment).toMatchObject({ siphon: true, feeder: 'drip' })
     expect(growing.developments).toContain('dripFeederOffered')
 
+    const thriving = createDevSnapshot(createDevScenario('thriving-full-tank', 91))
+    expect(thriving.fish).toHaveLength(12)
+    expect(thriving.equipment).toMatchObject({ siphon: true, feeder: 'rotary', filter: 'sponge' })
+    expect(thriving.developments).toContain('spongeFilterOffered')
+    expect(thriving.water.worstPollution).toBe(0)
+    expect(Math.max(...thriving.fish.map((fish) => fish.hunger))).toBeLessThan(0.5)
+
     const starving = createDevSnapshot(createDevScenario('starving-rescuable', 91))
     expect(starving.fish).toHaveLength(1)
     expect(starving.fish[0]).toMatchObject({ hunger: 1, health: 0.4 })

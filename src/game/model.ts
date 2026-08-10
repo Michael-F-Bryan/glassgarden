@@ -270,18 +270,30 @@ export const TUNING = {
   satiationFactor: 0.45,
   hungerRelievedPerNutrition: 0.38,
   seekFoodAbove: 0.25,
-  /** digesting >= this spawns a dropping. */
-  digestionPerDropping: 2,
+  /**
+   * digesting >= this spawns a dropping. Measured before tuning (see
+   * tests/e2e/debugging.spec.ts "mature full tank"): at one dropping per two
+   * pellets and a ~15-minute breakdown, a fed twelve-resident tank settled at
+   * ~200 standing droppings — an unreadable carpet that clogged the sponge
+   * filter to ~18% of its rated clearance and made siphoning futile. Each
+   * dropping now stands for four pellets' worth of digestion and leaches
+   * proportionally harder (wastePollutionPerSecond below), so the ecological
+   * pressure survives while the standing count stays legible.
+   */
+  digestionPerDropping: 4,
 
-  wastePollutionPerSecond: 0.016, // per unit of waste size
+  wastePollutionPerSecond: 0.03, // per unit of waste size
   spoiledFoodPollutionPerSecond: 0.008,
   pollutionDecayPerSecond: 0.0018,
   pollutionDiffusionPerSecond: 0.04,
   sicknessAbovePollution: 0.3,
   sicknessPerSecondAtFullPollution: 1 / 45,
   sicknessRecoveryPerSecond: 1 / 90,
-  /** Debris self-degrades (after leaching pollution) so entities stay bounded. */
-  wasteBreakdownPerSecond: 0.002,
+  /** Debris self-degrades (after leaching pollution) so entities stay bounded.
+   * Paired with digestionPerDropping above: ~6-minute breakdown keeps a fed
+   * twelve-resident tank near ~40 standing droppings — visibly worth
+   * siphoning, never a carpet. */
+  wasteBreakdownPerSecond: 0.0045,
   spoiledFoodLingerSeconds: 180,
   siphonRadius: 70,
   siphonPollutionClear: 0.35, // fraction of local cell pollution removed per use

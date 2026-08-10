@@ -53,6 +53,26 @@ test('loads deterministic scenarios and cleans a dirty tank through the UI', asy
   await expect.poll(async () => (await snapshot(page)).waste.length).toBeLessThan(3)
 })
 
+test('a mature full tank stays readable: debris bounded, water recoverable', async ({ page }) => {
+  test.setTimeout(120_000)
+  // The roadmap's item-3 measurement: a fed twelve-resident tank used to
+  // settle at ~200 standing droppings with the worst water cell pinned at
+  // 1.00 and the sponge filter clogged to ~18% efficiency. A mature tank must
+  // stay legible: bounded debris, a filter that still works, and murk that
+  // stays out of the "foul" band while the tank is otherwise cared for.
+  await loadScenario(page, 'thriving-full-tank', 42)
+  for (let i = 0; i < 2; i += 1) {
+    await page.evaluate(() => (window as DevWindow).__glassgardenDev!.advance(15 * 60))
+  }
+
+  const mature = await snapshot(page)
+  expect(mature.fish).toHaveLength(12)
+  expect(mature.waste.length).toBeLessThanOrEqual(90)
+  expect(mature.water.meanPollution).toBeLessThan(0.25)
+  // Debris still exists in numbers worth sweeping — the siphon keeps its job.
+  expect(mature.waste.length).toBeGreaterThanOrEqual(15)
+})
+
 test('simulates three hours away and rescues the fish through the UI', async ({ page }) => {
   await loadScenario(page, 'starving-rescuable', 17)
   const summary = await page.evaluate(() =>
