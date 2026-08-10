@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest'
 
 import { generateName, randomGenome } from '@/game/genome'
-import { TUNING, type StepReport, type UiNotification } from '@/game/model'
+import { capacityFor } from '@/game/equipment'
+import { TANK, TUNING, type StepReport, type UiNotification } from '@/game/model'
 import { decodeSave, deserialize, hydrate, parseSave } from '@/game/save'
 import { GameSim } from '@/game/sim'
 import {
@@ -194,10 +195,10 @@ describe('pollution and sickness', () => {
       waste: { size: 3, restingOnSand: true },
     })
     state.water.cells.fill(0.4)
-    const pollutionBefore = pollutionAt(state.water, { x: 600, y: 609 })
+    const pollutionBefore = pollutionAt(state.water, { x: 600, y: 609 }, TANK)
     expect(sim.siphonAt(600, 609)).toMatchObject({ ok: true, value: 1 })
     expect([...state.world.with('waste')]).toHaveLength(0)
-    expect(pollutionAt(state.water, { x: 600, y: 609 })).toBeLessThan(pollutionBefore)
+    expect(pollutionAt(state.water, { x: 600, y: 609 }, TANK)).toBeLessThan(pollutionBefore)
   })
 })
 
@@ -388,7 +389,7 @@ describe('critique regressions', () => {
     const sim = new GameSim(state)
     state.developments.add('fishOffered')
     state.coins = 100_000
-    for (let i = 0; i < TUNING.maxPopulation - 1; i += 1) {
+    for (let i = 0; i < capacityFor('starter') - 1; i += 1) {
       spawnFish(state, {
         genome: randomGenome(state.rng, 20),
         name: `Filler${i}`,
@@ -400,7 +401,7 @@ describe('critique regressions', () => {
     expect(item?.affordable).toBe(false)
     // Scenario is specifically "at the population cap", so pin the failure reason.
     expect(sim.buy('fish')).toMatchObject({ ok: false, reason: 'atCapacity' })
-    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(TUNING.maxPopulation)
+    expect([...state.world.with('resident', 'genome', 'physiology', 'behaviour', 'breeding')]).toHaveLength(capacityFor('starter'))
   })
 })
 
@@ -548,7 +549,7 @@ describe('persistence', () => {
     expect(parseSave('{"version":99}')).toBeUndefined()
     const sim = GameSim.fresh(503)
     const roundTripped = parseSave(JSON.stringify(sim.toSave(5)))
-    expect(roundTripped?.version).toBe(2)
+    expect(roundTripped?.version).toBe(3)
   })
 })
 

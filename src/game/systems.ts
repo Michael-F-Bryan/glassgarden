@@ -1,14 +1,15 @@
 import {
+  capacityFor,
   feederDropX,
   feederProfile,
   filterProfile,
   nextFeederStage,
   nextFilterStage,
+  nextHabitatStage,
 } from './equipment'
 import { generateName, inheritGenome } from './genome'
 import {
   fishLength,
-  TANK,
   TUNING,
   type Entity,
   type Vec2,
@@ -25,10 +26,12 @@ import {
   spawnFish,
   spawnPellet,
   takenNames,
+  tankBounds,
   type GameState,
 } from './state'
 import {
   addPollution,
+  averagePollution,
   clearPollutionEverywhere,
   maxPollution,
   pollutionAt,
@@ -170,21 +173,22 @@ function reclaim(claims: FoodClaims, fishId: number, foodId: number | undefined)
 }
 
 function movementSystem(state: GameState, dt: number): void {
+  const bounds = tankBounds(state)
   const claims = collectFoodClaims(state)
   for (const entity of sortedById(state.world.with('behaviour', 'physiology', 'genome'))) {
     steerFish(state, entity, dt, claims)
   }
   for (const entity of state.world.with('food')) {
-    sinkToSand(entity, dt, 26, TANK.sandTop + 6, () => (entity.food.restingOnSand = true))
+    sinkToSand(entity, dt, 26, bounds.sandTop + 6, () => (entity.food.restingOnSand = true))
   }
   for (const entity of state.world.with('waste')) {
-    sinkToSand(entity, dt, 34, TANK.sandTop + 14, () => (entity.waste.restingOnSand = true))
+    sinkToSand(entity, dt, 34, bounds.sandTop + 14, () => (entity.waste.restingOnSand = true))
   }
   for (const entity of state.world.with('egg')) {
-    sinkToSand(entity, dt, 20, TANK.sandTop - 4, () => undefined)
+    sinkToSand(entity, dt, 20, bounds.sandTop - 4, () => undefined)
   }
   for (const entity of state.world.with('remains')) {
-    entity.position.y = Math.max(TANK.waterTop + 14, entity.position.y - 18 * dt)
+    entity.position.y = Math.max(bounds.waterTop + 14, entity.position.y - 18 * dt)
   }
 }
 
@@ -272,9 +276,10 @@ function steerFish(
       desired = toward(entity.position, orbit, cruise * 0.7)
     }
   } else if (activity.kind === 'distress') {
+    const bounds = tankBounds(state)
     const target = starving
-      ? { x: entity.position.x, y: TANK.waterTop + 30 }
-      : { x: entity.position.x, y: TANK.sandTop - 40 }
+      ? { x: entity.position.x, y: bounds.waterTop + 30 }
+      : { x: entity.position.x, y: bounds.sandTop - 40 }
     desired = toward(entity.position, target, cruise * 0.3)
   }
 
@@ -284,16 +289,17 @@ function steerFish(
   entity.position.x += entity.velocity.x * dt
   entity.position.y += entity.velocity.y * dt
 
+  const bounds = tankBounds(state)
   const halfLength = fishLength(body.weight) / 2
-  entity.position.x = clamp(entity.position.x, halfLength, TANK.width - halfLength)
-  entity.position.y = clamp(entity.position.y, TANK.waterTop + 20, TANK.sandTop - 10)
+  entity.position.x = clamp(entity.position.x, halfLength, bounds.width - halfLength)
+  entity.position.y = clamp(entity.position.y, bounds.waterTop + 20, bounds.sandTop - 10)
   if (Math.abs(entity.velocity.x) > 3) behaviour.facing = entity.velocity.x > 0 ? 1 : -1
 }
 
 function wanderActivity(state: GameState) {
   return {
     kind: 'wander' as const,
-    target: randomWaterPoint(state.rng),
+    target: randomWaterPoint(state.rng, tankBounds(state)),
     idleUntil: state.time + state.rng.range(1.5, 5),
   }
 }
@@ -345,23 +351,35 @@ function digestionSystem(state: GameState): void {
 }
 
 function waterSystem(state: GameState, dt: number): void {
+  const bounds = tankBounds(state)
   for (const entity of sortedById(state.world.with('waste'))) {
-    addPollution(state.water, entity.position, entity.waste.size * TUNING.wastePollutionPerSecond * dt)
+    addPollution(
+      state.water,
+      entity.position,
+      entity.waste.size * TUNING.wastePollutionPerSecond * dt,
+      bounds,
+    )
   }
   for (const entity of sortedById(state.world.with('food'))) {
     const food = entity.food!
     if (!food.spoiled && state.time >= food.spoilsAt) food.spoiled = true
     if (food.spoiled) {
-      addPollution(state.water, entity.position, food.nutrition * TUNING.spoiledFoodPollutionPerSecond * dt)
+      addPollution(
+        state.water,
+        entity.position,
+        food.nutrition * TUNING.spoiledFoodPollutionPerSecond * dt,
+        bounds,
+      )
     }
   }
   stepWater(state.water, dt, TUNING.pollutionDiffusionPerSecond, TUNING.pollutionDecayPerSecond)
 }
 
 function sicknessSystem(state: GameState, dt: number, mode: SimulationMode): void {
+  const bounds = tankBounds(state)
   for (const entity of sortedById(state.world.with('physiology', 'genome'))) {
     const body = entity.physiology
-    const pollution = pollutionAt(state.water, entity.position)
+    const pollution = pollutionAt(state.water, entity.position, bounds)
     if (pollution > TUNING.sicknessAbovePollution) {
       const exposure = (pollution - TUNING.sicknessAbovePollution) / (1 - TUNING.sicknessAbovePollution)
       const susceptibility = 1 - 0.7 * entity.genome.resilience
@@ -439,10 +457,11 @@ function dieOf(state: GameState, entity: DyingEntity): void {
 }
 
 function breedingSystem(state: GameState): void {
+  const bounds = tankBounds(state)
   // Hatch or advance incubating eggs.
   for (const entity of sortedById(state.world.with('egg'))) {
     const egg = entity.egg!
-    egg.peakPollution = Math.max(egg.peakPollution, pollutionAt(state.water, entity.position))
+    egg.peakPollution = Math.max(egg.peakPollution, pollutionAt(state.water, entity.position, bounds))
     if (state.time < egg.hatchAt) continue
     removeEntity(state, entity)
     const murky = egg.peakPollution > TUNING.murkyEggPollution
@@ -503,7 +522,7 @@ function breedingSystem(state: GameState): void {
         genome: inheritGenome(state.rng, entity.genome, partner.genome),
         parents: [entity.resident.name, partner.resident.name],
         generation,
-        peakPollution: pollutionAt(state.water, midpoint),
+        peakPollution: pollutionAt(state.water, midpoint, bounds),
       },
     })
     entity.breeding.cooldownUntil = state.time + TUNING.breedingCooldownSeconds
@@ -526,9 +545,9 @@ function breedingSystem(state: GameState): void {
     )
   }
 
-  // Pair up newly eligible couples.
+  // Pair up newly eligible couples — only while the habitat has room.
   const population = residentCount(state) + state.world.with('egg').entities.length
-  if (population >= TUNING.maxPopulation) return
+  if (population >= capacityFor(state.equipment.habitat)) return
   const eligible = livingFish(state).filter(
     (entity) =>
       entity.behaviour.activity.kind !== 'court' &&
@@ -536,7 +555,7 @@ function breedingSystem(state: GameState): void {
       entity.physiology.hunger < TUNING.breedingMaxHunger &&
       entity.physiology.sickness < TUNING.breedingMaxSickness &&
       state.time >= entity.breeding.cooldownUntil &&
-      pollutionAt(state.water, entity.position) < TUNING.breedingMaxPollution,
+      pollutionAt(state.water, entity.position, bounds) < TUNING.breedingMaxPollution,
   )
   if (eligible.length < 2) return
   const [a, b] = eligible
@@ -579,7 +598,7 @@ function feederSystem(state: GameState, dt: number): void {
   const neediest = waiting.reduce((worst, entity) =>
     entity.physiology.hunger > worst.physiology.hunger ? entity : worst,
   )
-  spawnPellet(state, feederDropX(profile, neediest.position.x, TANK.width))
+  spawnPellet(state, feederDropX(profile, neediest.position.x, tankBounds(state).width))
   state.feederDropCount += 1
 }
 
@@ -707,6 +726,35 @@ function developmentSystem(state: GameState, dt: number): void {
           : 'The green never quite leaves the water now. A sponge filter would work at it continuously.',
       })
       recordJournal(state, 'development', 'The shop began offering a sponge filter.')
+    }
+  }
+
+  // A habitat at capacity that stays comfortable — every resident fed and
+  // well, the water clean — is a keeper who has outgrown the glass. The
+  // streak is continuous: any distress or murk starts it over, so the reveal
+  // always follows a genuinely stable stretch rather than a lucky moment.
+  if (!hasDiscovered(state, 'habitatExpansionOffered') && nextHabitatStage(state.equipment.habitat)) {
+    const population = residentCount(state) + state.world.with('egg').entities.length
+    const residents = livingFish(state)
+    const everyoneComfortable = residents.every(
+      (entity) =>
+        entity.physiology.hunger <= TUNING.distressHungerAbove &&
+        entity.physiology.sickness <= TUNING.distressSicknessAbove,
+    )
+    const stable =
+      population >= capacityFor(state.equipment.habitat) &&
+      everyoneComfortable &&
+      averagePollution(state.water) < TUNING.expansionMaxMurk
+    state.care.stableFullSeconds = stable ? state.care.stableFullSeconds + dt : 0
+    if (state.care.stableFullSeconds >= TUNING.expansionStableSeconds) {
+      discover(state, 'habitatExpansionOffered')
+      emit(state, {
+        type: 'toast',
+        tone: 'development',
+        message:
+          'Every fish fed, the water clear, and not a fin’s width of open glass left. Word of a tank this well kept travels: the shop can arrange a full habitat expansion.',
+      })
+      recordJournal(state, 'development', 'The shop offered to expand the habitat.')
     }
   }
 

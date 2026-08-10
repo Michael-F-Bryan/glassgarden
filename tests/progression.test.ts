@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'vitest'
 
 import {
+  capacityFor,
   FEEDER_PROFILES,
   FILTER_PROFILES,
+  HABITAT_PROFILES,
+  tankBoundsFor,
   type FeederStage,
 } from '@/game/equipment'
+import { createDevScenario } from '@/game/devtools'
 import { randomGenome } from '@/game/genome'
 import { TANK, TUNING } from '@/game/model'
 import { decodeSave, hydrate } from '@/game/save'
@@ -398,8 +402,83 @@ describe('developments are durable across a reload', () => {
     if (result.kind !== 'loaded') return
     const resumed = new GameSim(hydrate(result.document))
 
-    expect(resumed.read.equipment).toEqual({ siphon: true, feeder: 'twin', filter: 'sponge' })
+    expect(resumed.read.equipment).toEqual({
+      siphon: true,
+      feeder: 'twin',
+      filter: 'sponge',
+      habitat: 'starter',
+    })
     expect(resumed.read.care.siphonUses).toBe(state.care.siphonUses)
     expect(resumed.toSave(1_000)).toEqual(saved)
+  })
+})
+
+describe('habitat expansion', () => {
+  test('a stable, healthy tank at capacity reveals the expansion once', () => {
+    const sim = createDevScenario('thriving-full-tank', 820)
+    const state = sim.read
+
+    const result = sim.advanceElapsed(TUNING.expansionStableSeconds + 30, 'visible')
+    expect(state.developments.has('habitatExpansionOffered')).toBe(true)
+    expect(
+      result.notifications.some(
+        (n) => n.tone === 'development' && /habitat expansion/i.test(n.message),
+      ),
+    ).toBe(true)
+    expect(sim.shopOffers().map((offer) => offer.id)).toContain('habitatExpansion')
+
+    // One-shot: it never re-announces.
+    const again = sim.advanceElapsed(30, 'visible')
+    expect(
+      again.notifications.some((n) => /habitat expansion/i.test(n.message)),
+    ).toBe(false)
+  })
+
+  test('the stability streak restarts when the water fouls', () => {
+    const sim = createDevScenario('thriving-full-tank', 821)
+    const state = sim.read as unknown as GameState
+
+    sim.advanceElapsed(TUNING.expansionStableSeconds / 2, 'visible')
+    expect(state.care.stableFullSeconds).toBeGreaterThan(0)
+
+    state.water.cells.fill(TUNING.expansionMaxMurk + 0.2)
+    sim.advanceElapsed(1, 'visible')
+    expect(state.care.stableFullSeconds).toBe(0)
+    expect(state.developments.has('habitatExpansionOffered')).toBe(false)
+  })
+
+  test('a tank below capacity never reveals the expansion', () => {
+    const { state, sim } = stockedTank({ seed: 822, residents: 6, feeder: 'rotary' })
+    sim.advanceElapsed(TUNING.expansionStableSeconds * 2, 'visible')
+    expect(state.developments.has('habitatExpansionOffered')).toBe(false)
+  })
+
+  test('buying the expansion enlarges the tank, raises capacity, and reopens breeding', () => {
+    const sim = createDevScenario('thriving-full-tank', 823)
+    const state = sim.read as unknown as GameState
+    state.coins = HABITAT_PROFILES.expanded.cost + 500
+    state.developments.add('habitatExpansionOffered')
+
+    expect(sim.buy('habitatExpansion').ok).toBe(true)
+    expect(state.equipment.habitat).toBe('expanded')
+    expect(tankBoundsFor(state.equipment.habitat).width).toBeGreaterThan(TANK.width)
+
+    // The fish shop no longer refuses at twelve.
+    const fishOffer = sim.shopOffers().find((offer) => offer.id === 'fish')
+    expect(fishOffer?.atCapacity).toBe(false)
+
+    // Breeding reopens: a healthy full tank courts and lays within minutes.
+    sim.advanceElapsed(120, 'visible')
+    const population =
+      [...state.world.with('resident')].length + [...state.world.with('egg')].length
+    expect(population).toBeGreaterThan(capacityFor('starter'))
+
+    // And the whole expanded state survives a save/load round-trip.
+    const result = decodeSave(JSON.stringify(sim.toSave(1_000)))
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+    const resumed = new GameSim(hydrate(result.document))
+    expect(resumed.read.equipment.habitat).toBe('expanded')
+    expect(resumed.toSave(1_000)).toEqual(sim.toSave(1_000))
   })
 })

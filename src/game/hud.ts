@@ -1,3 +1,4 @@
+import { capacityFor, tankBoundsFor } from './equipment'
 import { TUNING, type Behaviour, type Genome, type JournalKind, type Physiology } from './model'
 import type { GameSim, ShopOfferId } from './sim'
 import { pollutionAt } from './water'
@@ -11,6 +12,10 @@ export type HudSnapshot = {
   coins: number
   incomePerSecond: number
   fishCount: number
+  /** Residents the owned habitat responsibly holds — the roster's "of". */
+  capacity: number
+  /** Live logical tank size, for pointer-to-tank coordinate conversion. */
+  tank: { width: number; height: number }
   distressedCount: number
   criticalNames: string[]
   ownsSiphon: boolean
@@ -80,6 +85,11 @@ const SHOP_COPY: Record<ShopOfferId, { label: string; description: string }> = {
     description:
       'Works the dispersed green out of the water between your visits. Clogs as debris builds up on the sand.',
   },
+  habitatExpansion: {
+    label: 'Habitat expansion',
+    description:
+      'Rebuild the aquarium into a far larger habitat — new ground, fresh planting, and room for about twenty residents.',
+  },
   fish: {
     label: 'Young glimmerfin',
     description: 'A new resident for the tank. Each one is harder to source than the last.',
@@ -97,6 +107,8 @@ export const EMPTY_HUD: HudSnapshot = {
   coins: 0,
   incomePerSecond: 0,
   fishCount: 0,
+  capacity: capacityFor('starter'),
+  tank: { width: tankBoundsFor('starter').width, height: tankBoundsFor('starter').height },
   distressedCount: 0,
   criticalNames: [],
   ownsSiphon: false,
@@ -195,6 +207,7 @@ export function buildHudSnapshot(
   previousWater: WaterTier,
 ): HudSnapshot {
   const state = sim.read
+  const bounds = tankBoundsFor(state.equipment.habitat)
   const fishEntities = [...state.world.with('resident', 'genome', 'physiology', 'behaviour')].sort(
     (a, b) => a.id - b.id,
   )
@@ -203,6 +216,8 @@ export function buildHudSnapshot(
     coins: Math.floor(state.coins),
     incomePerSecond: sim.incomePerSecond(),
     fishCount: fishEntities.length,
+    capacity: capacityFor(state.equipment.habitat),
+    tank: { width: bounds.width, height: bounds.height },
     distressedCount: fishEntities.filter(
       (entity) =>
         entity.physiology.hunger > TUNING.distressHungerAbove ||
@@ -231,7 +246,7 @@ export function buildHudSnapshot(
       affordable: offer.affordable,
     })),
     residents: fishEntities.map((entity) => {
-      const pollution = pollutionAt(state.water, entity.position)
+      const pollution = pollutionAt(state.water, entity.position, bounds)
       return {
         id: entity.id,
         name: entity.resident.name,
@@ -252,7 +267,7 @@ export function buildHudSnapshot(
             mood: describeMood(
               selected.physiology,
               selected.behaviour,
-              pollutionAt(state.water, selected.position),
+              pollutionAt(state.water, selected.position, bounds),
             ).label,
             weightGrams: selected.physiology.weight,
             age: formatAge(selected.physiology.ageSeconds),

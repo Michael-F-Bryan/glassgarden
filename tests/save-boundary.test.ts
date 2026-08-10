@@ -138,8 +138,8 @@ describe('decodeSave: structural and semantic validation', () => {
     expect(decodeSave('null').kind).toBe('invalid')
     expect(decodeSave('42').kind).toBe('invalid')
 
-    const unsupported = decodeSave(JSON.stringify({ version: 3 }))
-    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 3 })
+    const unsupported = decodeSave(JSON.stringify({ version: 4 }))
+    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 4 })
   })
 
   test('duplicate entity ids are rejected', () => {
@@ -216,7 +216,7 @@ describe('the wire format is independent of runtime components', () => {
     expect(wireFish.fish!.genome.hue).toEqual(expect.any(Number))
     expect(wireFish).not.toHaveProperty('resident')
     expect(wireFish).not.toHaveProperty('physiology')
-    expect(document.version).toBe(2)
+    expect(document.version).toBe(3)
   })
 
   test('a V1 save written before the component split still loads and runs', () => {
@@ -253,8 +253,13 @@ describe('a save written by the previous build', () => {
     if (result.kind !== 'loaded') return
     const document = result.document
 
-    expect(document.version).toBe(2)
-    expect(document.equipment).toEqual({ siphon: true, feeder: 'drip', filter: 'none' })
+    expect(document.version).toBe(3)
+    expect(document.equipment).toEqual({
+      siphon: true,
+      feeder: 'drip',
+      filter: 'none',
+      habitat: 'starter',
+    })
     expect(document.developments).toEqual([
       'fedOnce',
       'growthNoticed',
@@ -283,7 +288,7 @@ describe('a save written by the previous build', () => {
     expect([...sim.read.world.with('resident')].length).toBeGreaterThanOrEqual(before)
     expect(sim.read.equipment.feeder).toBe('drip')
     // And it re-saves in the current format.
-    expect(sim.toSave(2_000).version).toBe(2)
+    expect(sim.toSave(2_000).version).toBe(3)
   })
 
   test('migration is deterministic', () => {
@@ -334,11 +339,16 @@ describe('round-trip and migration determinism', () => {
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
 
-    expect(result.document.version).toBe(2)
+    expect(result.document.version).toBe(3)
     expect(result.document.journal).toEqual([])
     expect(result.document.retiredNames).toEqual([])
     expect(result.document.feederLastDropAt).toBe(0)
-    expect(result.document.equipment).toEqual({ siphon: false, feeder: 'none', filter: 'none' })
+    expect(result.document.equipment).toEqual({
+      siphon: false,
+      feeder: 'none',
+      filter: 'none',
+      habitat: 'starter',
+    })
     expect(result.document.developments).not.toContain('dripFeederOffered')
     // No noticedGrowth either in this fixture, so fedOnce infers false.
     expect(result.document.developments).not.toContain('fedOnce')
@@ -346,6 +356,7 @@ describe('round-trip and migration determinism', () => {
       feederShortfallSeconds: 0,
       siphonUses: 0,
       pollutedSeconds: 0,
+      stableFullSeconds: 0,
     })
 
     // Re-migrating the same fixture reaches the identical document.
@@ -387,8 +398,13 @@ describe('round-trip and migration determinism', () => {
     if (result.kind !== 'loaded') return
     const document = result.document
 
-    // Equipment carries over as typed stages; a V1 feeder is the drip stage.
-    expect(document.equipment).toEqual({ siphon: true, feeder: 'drip', filter: 'none' })
+    // Equipment carries over as typed stages; a V1 tank is a starter habitat stage.
+    expect(document.equipment).toEqual({
+      siphon: true,
+      feeder: 'drip',
+      filter: 'none',
+      habitat: 'starter',
+    })
     expect(document.developments).toEqual([
       'fedOnce',
       'growthNoticed',
@@ -407,7 +423,7 @@ describe('round-trip and migration determinism', () => {
     // The migrated tank is playable and re-saves in the current format.
     const sim = new GameSim(hydrate(document))
     sim.advanceElapsed(1, 'visible')
-    expect(sim.toSave(2_000).version).toBe(2)
+    expect(sim.toSave(2_000).version).toBe(3)
     expect(sim.read.equipment.feeder).toBe('drip')
 
     // Migration is deterministic: the same V1 bytes always land identically.

@@ -1,9 +1,11 @@
-import { TANK, type Vec2 } from './model'
 import type { Rng } from './rng'
+import type { TankBounds, Vec2 } from './model'
 
 /**
  * Spatial water quality. Pollution is a coarse grid of [0, 1] values so the
  * water visibly greens where waste sits, keeping cause and effect legible.
+ * The grid's resolution is fixed; its cells stretch over whatever bounds the
+ * owned habitat gives the tank, so a save's cells survive an expansion.
  */
 export const WATER_COLS = 12
 export const WATER_ROWS = 7
@@ -25,26 +27,36 @@ function clampIndex(value: number, count: number): number {
   return Math.min(count - 1, Math.max(0, value))
 }
 
-export function cellIndexAt(position: Vec2): number {
-  const col = clampIndex(Math.floor((position.x / TANK.width) * WATER_COLS), WATER_COLS)
+export function cellIndexAt(position: Vec2, bounds: TankBounds): number {
+  const col = clampIndex(Math.floor((position.x / bounds.width) * WATER_COLS), WATER_COLS)
   const row = clampIndex(
-    Math.floor(((position.y - TANK.waterTop) / (TANK.sandTop - TANK.waterTop)) * WATER_ROWS),
+    Math.floor(((position.y - bounds.waterTop) / (bounds.sandTop - bounds.waterTop)) * WATER_ROWS),
     WATER_ROWS,
   )
   return row * WATER_COLS + col
 }
 
-export function pollutionAt(grid: WaterGridView, position: Vec2): number {
-  return grid.cells[cellIndexAt(position)]
+export function pollutionAt(grid: WaterGridView, position: Vec2, bounds: TankBounds): number {
+  return grid.cells[cellIndexAt(position, bounds)]
 }
 
-export function addPollution(grid: WaterGrid, position: Vec2, amount: number): void {
-  const index = cellIndexAt(position)
+export function addPollution(
+  grid: WaterGrid,
+  position: Vec2,
+  amount: number,
+  bounds: TankBounds,
+): void {
+  const index = cellIndexAt(position, bounds)
   grid.cells[index] = Math.min(1, grid.cells[index] + amount)
 }
 
-export function clearPollutionNear(grid: WaterGrid, position: Vec2, fraction: number): void {
-  const index = cellIndexAt(position)
+export function clearPollutionNear(
+  grid: WaterGrid,
+  position: Vec2,
+  fraction: number,
+  bounds: TankBounds,
+): void {
+  const index = cellIndexAt(position, bounds)
   grid.cells[index] *= 1 - fraction
 }
 
@@ -83,9 +95,9 @@ export function stepWater(grid: WaterGrid, dt: number, diffusion: number, decay:
 }
 
 /** A random point inside the swimmable water volume. */
-export function randomWaterPoint(rng: Rng, margin = 60): Vec2 {
+export function randomWaterPoint(rng: Rng, bounds: TankBounds, margin = 60): Vec2 {
   return {
-    x: rng.range(margin, TANK.width - margin),
-    y: rng.range(TANK.waterTop + margin, TANK.sandTop - margin / 2),
+    x: rng.range(margin, bounds.width - margin),
+    y: rng.range(bounds.waterTop + margin, bounds.sandTop - margin / 2),
   }
 }

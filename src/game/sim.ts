@@ -1,8 +1,11 @@
 import {
+  capacityFor,
   FEEDER_PROFILES,
   FILTER_PROFILES,
+  HABITAT_PROFILES,
   nextFeederStage,
   nextFilterStage,
+  nextHabitatStage,
   type FeederStage,
 } from './equipment'
 import { generateName, randomGenome } from './genome'
@@ -28,6 +31,7 @@ import {
   spawnFish,
   spawnPellet,
   takenNames,
+  tankBounds,
   type GameReadModel,
   type GameState,
 } from './state'
@@ -96,6 +100,7 @@ export type ShopOffer = {
     | 'twinHopper'
     | 'rotaryFeeder'
     | 'spongeFilter'
+    | 'habitatExpansion'
     | 'fish'
     | 'starterFish'
   cost: number
@@ -291,7 +296,7 @@ export class GameSim {
         removed += 1
       }
     }
-    clearPollutionNear(this.state.water, { x, y }, TUNING.siphonPollutionClear)
+    clearPollutionNear(this.state.water, { x, y }, TUNING.siphonPollutionClear, tankBounds(this.state))
     return { ok: true, value: removed, notifications: [] }
   }
 
@@ -326,10 +331,19 @@ export class GameSim {
         affordable: coins >= profile.cost,
       })
     }
+    const habitatUpgrade = nextHabitatStage(equipment.habitat)
+    if (habitatUpgrade && hasDiscovered(this.state, 'habitatExpansionOffered')) {
+      const profile = HABITAT_PROFILES[habitatUpgrade]
+      offers.push({
+        id: 'habitatExpansion',
+        cost: profile.cost,
+        affordable: coins >= profile.cost,
+      })
+    }
     if (hasDiscovered(this.state, 'fishOffered') && !this.state.gameOver) {
       const cost = fishPrice(this.state.fishPurchased)
       const population = residentCount(this.state) + this.state.world.with('egg').entities.length
-      const atCapacity = population >= TUNING.maxPopulation
+      const atCapacity = population >= capacityFor(equipment.habitat)
       offers.push({
         id: 'fish',
         cost,
@@ -373,6 +387,18 @@ export class GameSim {
         this.state,
         'purchase',
         `Installed ${FEEDER_LABELS[stage].toLowerCase()} for ◉${offer.cost}.`,
+      )
+    } else if (offer.id === 'habitatExpansion') {
+      this.state.equipment.habitat = 'expanded'
+      notifications.push({
+        tone: 'development',
+        message:
+          'The fitters have been and gone: your aquarium opens into a far larger habitat — new ground to the east, fresh kelp taking root, and room for a real community.',
+      })
+      recordJournal(
+        this.state,
+        'purchase',
+        `The habitat was expanded for ◉${offer.cost} — room for ${capacityFor('expanded')} residents.`,
       )
     } else if (offer.id === 'spongeFilter') {
       this.state.equipment.filter = 'sponge'

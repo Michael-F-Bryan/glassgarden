@@ -1,5 +1,5 @@
-import type { FeederStage } from './equipment'
-import { fishLength, TANK, type Entity } from './model'
+import { tankBoundsFor, type FeederStage, type HabitatStage } from './equipment'
+import { fishLength, TANK, type Entity, type TankBounds } from './model'
 import type { GameReadModel } from './state'
 import { averagePollution, WATER_COLS, WATER_ROWS } from './water'
 
@@ -35,6 +35,18 @@ const KELP = [
   { x: 1120, height: 220, fronds: 3 },
 ]
 
+/** Fresh planting that arrives with the habitat expansion, rooted in the new
+ * ground east of the original glass line so the growth reads as new space. */
+const EXPANDED_KELP = [
+  { x: 1268, height: 380, fronds: 4 },
+  { x: 1420, height: 240, fronds: 3 },
+  { x: 1548, height: 320, fronds: 3 },
+]
+
+function kelpFor(habitat: HabitatStage) {
+  return habitat === 'expanded' ? [...KELP, ...EXPANDED_KELP] : KELP
+}
+
 /** What the renderer needs from a living resident. */
 type DrawableResident = Entity &
   Required<Pick<Entity, 'resident' | 'genome' | 'physiology' | 'behaviour'>>
@@ -50,13 +62,13 @@ type CoinFloat = { x: number; y: number; at: number }
 export function createCanvasPresenter(canvas: HTMLCanvasElement) {
   const renderer = new TankRenderer()
   const dpr = Math.min(2, window.devicePixelRatio || 1)
-  let renderScale = dpr
   const resize = () => {
     const rect = canvas.getBoundingClientRect()
     const width = Math.max(1, Math.round(rect.width * dpr))
     canvas.width = width
-    canvas.height = Math.round((width * TANK.height) / TANK.width)
-    renderScale = width / TANK.width
+    // Every habitat stage is 16:9, so the buffer's aspect never changes —
+    // an expansion changes the logical scale below, not the canvas shape.
+    canvas.height = Math.round((width * 9) / 16)
   }
   resize()
   window.addEventListener('resize', resize)
@@ -64,6 +76,9 @@ export function createCanvasPresenter(canvas: HTMLCanvasElement) {
 
   return {
     draw(state: GameReadModel, options: DrawOptions): void {
+      // Scale from the owned habitat's bounds each frame: buying the
+      // expansion pulls the camera back to take in the larger tank.
+      const renderScale = canvas.width / tankBoundsFor(state.equipment.habitat).width
       ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
       renderer.draw(ctx, state, options)
     },
@@ -80,6 +95,10 @@ export class TankRenderer {
   private lastBubbleTime: number | undefined
   private puffs: SiphonPuff[] = []
   private coinFloats: CoinFloat[] = []
+  /** The owned habitat's bounds, refreshed at the top of every draw so all
+   * cosmetic state (bubbles, floats) follows an expansion. */
+  private bounds: TankBounds = TANK
+  private habitat: HabitatStage = 'starter'
 
   /** Cosmetic confirmation that a siphon click landed. */
   notifySiphon(x: number, y: number): void {
@@ -89,7 +108,7 @@ export class TankRenderer {
 
   /** Cosmetic "−◉1" drifting up from where a pellet was paid for. */
   notifyFeed(x: number): void {
-    this.coinFloats.push({ x, y: TANK.waterTop + 14, at: performance.now() / 1000 })
+    this.coinFloats.push({ x, y: this.bounds.waterTop + 14, at: performance.now() / 1000 })
     if (this.coinFloats.length > 10) this.coinFloats.shift()
   }
 
@@ -112,8 +131,8 @@ export class TankRenderer {
 
   private newBubble(anywhere: boolean): Bubble {
     return {
-      x: Math.random() * TANK.width,
-      y: anywhere ? TANK.waterTop + Math.random() * (TANK.sandTop - TANK.waterTop) : TANK.sandTop - 10,
+      x: Math.random() * this.bounds.width,
+      y: anywhere ? this.bounds.waterTop + Math.random() * (this.bounds.sandTop - this.bounds.waterTop) : this.bounds.sandTop - 10,
       radius: 1.5 + Math.random() * 3,
       speed: 14 + Math.random() * 22,
       wobble: Math.random() * Math.PI * 2,
@@ -122,10 +141,12 @@ export class TankRenderer {
 
   draw(ctx: CanvasRenderingContext2D, state: GameReadModel, options: DrawOptions): void {
     const { realTime } = options
+    this.habitat = state.equipment.habitat
+    this.bounds = tankBoundsFor(this.habitat)
     // Overall murk drives every water-quality cue at once: green tint, dying
     // light, drifting particulate. The tank itself must tell the truth.
     const murk = Math.min(1, averagePollution(state.water) * 1.6)
-    ctx.clearRect(0, 0, TANK.width, TANK.height)
+    ctx.clearRect(0, 0, this.bounds.width, this.bounds.height)
     this.drawWater(ctx)
     this.drawPollution(ctx, state, murk)
     this.drawLightShafts(ctx, realTime, murk)
@@ -199,7 +220,7 @@ export class TankRenderer {
     const chambers = stage === 'rotary' ? 3 : stage === 'twin' ? 2 : 1
     const halfWidth = 18 + chambers * 8
     ctx.save()
-    ctx.translate(TANK.width - 80, TANK.waterTop - 12)
+    ctx.translate(this.bounds.width - 80, this.bounds.waterTop - 12)
     ctx.fillStyle = '#31404d'
     ctx.beginPath()
     ctx.roundRect(-halfWidth, -14, halfWidth * 2, 26, 6)
@@ -223,7 +244,7 @@ export class TankRenderer {
    * bubble column, so filtration is visibly present in the tank. */
   private drawFilter(ctx: CanvasRenderingContext2D, realTime: number): void {
     ctx.save()
-    ctx.translate(56, TANK.sandTop - 46)
+    ctx.translate(56, this.bounds.sandTop - 46)
     ctx.fillStyle = '#5b6f63'
     ctx.beginPath()
     ctx.roundRect(-16, 0, 32, 46, 7)
@@ -291,13 +312,13 @@ export class TankRenderer {
   }
 
   private drawWater(ctx: CanvasRenderingContext2D): void {
-    const gradient = ctx.createLinearGradient(0, 0, 0, TANK.height)
+    const gradient = ctx.createLinearGradient(0, 0, 0, this.bounds.height)
     gradient.addColorStop(0, '#7ec9d8')
     gradient.addColorStop(0.25, '#3f97b4')
     gradient.addColorStop(0.7, '#20647f')
     gradient.addColorStop(1, '#173f52')
     ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, TANK.width, TANK.height)
+    ctx.fillRect(0, 0, this.bounds.width, this.bounds.height)
   }
 
   // Drawn over the murk layer so failing light doubles as a water-quality cue:
@@ -307,18 +328,19 @@ export class TankRenderer {
     if (strength <= 0.005) return
     ctx.save()
     ctx.globalCompositeOperation = 'overlay'
-    for (let i = 0; i < 3; i += 1) {
+    const shafts = this.bounds.width > 1400 ? 4 : 3
+    for (let i = 0; i < shafts; i += 1) {
       const drift = Math.sin(realTime * 0.07 + i * 2.1) * 90
       const x = 220 + i * 360 + drift
-      const shaft = ctx.createLinearGradient(x, 0, x - 140, TANK.height)
+      const shaft = ctx.createLinearGradient(x, 0, x - 140, this.bounds.height)
       shaft.addColorStop(0, `rgba(255,255,255,${strength.toFixed(3)})`)
       shaft.addColorStop(1, 'rgba(255,255,255,0)')
       ctx.fillStyle = shaft
       ctx.beginPath()
       ctx.moveTo(x - 40, 0)
       ctx.lineTo(x + 46, 0)
-      ctx.lineTo(x - 110, TANK.height)
-      ctx.lineTo(x - 210, TANK.height)
+      ctx.lineTo(x - 110, this.bounds.height)
+      ctx.lineTo(x - 210, this.bounds.height)
       ctx.closePath()
       ctx.fill()
     }
@@ -344,9 +366,9 @@ export class TankRenderer {
     ctx.drawImage(
       this.pollutionLayer,
       0,
-      TANK.waterTop,
-      TANK.width,
-      TANK.sandTop - TANK.waterTop + 18,
+      this.bounds.waterTop,
+      this.bounds.width,
+      this.bounds.sandTop - this.bounds.waterTop + 18,
     )
     ctx.restore()
     // A whole-tank cast on top of the per-cell layer, so even diffuse
@@ -354,7 +376,7 @@ export class TankRenderer {
     if (murk > 0.02) {
       ctx.save()
       ctx.fillStyle = `rgba(70, 108, 52, ${(murk * 0.32).toFixed(3)})`
-      ctx.fillRect(0, TANK.waterTop, TANK.width, TANK.height - TANK.waterTop)
+      ctx.fillRect(0, this.bounds.waterTop, this.bounds.width, this.bounds.height - this.bounds.waterTop)
       ctx.restore()
     }
   }
@@ -365,12 +387,12 @@ export class TankRenderer {
     ctx.save()
     ctx.fillStyle = `rgba(150, 170, 110, ${(0.14 + murk * 0.3).toFixed(3)})`
     const count = Math.round(60 * murk)
-    const span = TANK.sandTop - TANK.waterTop - 40
+    const span = this.bounds.sandTop - this.bounds.waterTop - 40
     for (let i = 0; i < count; i += 1) {
       const drift = realTime * (2 + hash01(i * 7) * 6)
-      const x = (hash01(i * 13) * TANK.width + drift) % TANK.width
+      const x = (hash01(i * 13) * this.bounds.width + drift) % this.bounds.width
       const bob = Math.sin(realTime * 0.4 + i) * 14
-      const y = TANK.waterTop + 20 + ((hash01(i * 29) * span + bob + span) % span)
+      const y = this.bounds.waterTop + 20 + ((hash01(i * 29) * span + bob + span) % span)
       const radius = 0.8 + hash01(i * 41) * 1.6
       ctx.beginPath()
       ctx.arc(x, y, radius, 0, Math.PI * 2)
@@ -380,24 +402,25 @@ export class TankRenderer {
   }
 
   private drawSand(ctx: CanvasRenderingContext2D): void {
-    const gradient = ctx.createLinearGradient(0, TANK.sandTop - 10, 0, TANK.height)
+    const gradient = ctx.createLinearGradient(0, this.bounds.sandTop - 10, 0, this.bounds.height)
     gradient.addColorStop(0, '#d9bd8f')
     gradient.addColorStop(0.4, '#c2a172')
     gradient.addColorStop(1, '#9a7c53')
     ctx.fillStyle = gradient
     ctx.beginPath()
-    ctx.moveTo(0, TANK.sandTop + 6)
-    for (let x = 0; x <= TANK.width; x += 60) {
-      ctx.quadraticCurveTo(x + 30, TANK.sandTop - 8 + hash01(x) * 14, x + 60, TANK.sandTop + 6 + hash01(x + 7) * 6)
+    ctx.moveTo(0, this.bounds.sandTop + 6)
+    for (let x = 0; x <= this.bounds.width; x += 60) {
+      ctx.quadraticCurveTo(x + 30, this.bounds.sandTop - 8 + hash01(x) * 14, x + 60, this.bounds.sandTop + 6 + hash01(x + 7) * 6)
     }
-    ctx.lineTo(TANK.width, TANK.height)
-    ctx.lineTo(0, TANK.height)
+    ctx.lineTo(this.bounds.width, this.bounds.height)
+    ctx.lineTo(0, this.bounds.height)
     ctx.closePath()
     ctx.fill()
     // Pebbles: kept low-contrast so droppings stand out against them.
-    for (let i = 0; i < 26; i += 1) {
-      const px = hash01(i * 31) * TANK.width
-      const py = TANK.sandTop + 14 + hash01(i * 57) * 36
+    const pebbles = Math.round((26 * this.bounds.width) / 1200)
+    for (let i = 0; i < pebbles; i += 1) {
+      const px = hash01(i * 31) * this.bounds.width
+      const py = this.bounds.sandTop + 14 + hash01(i * 57) * 36
       const radius = 2 + hash01(i * 91) * 4
       ctx.fillStyle = `rgba(96, 82, 60, ${0.16 + hash01(i * 13) * 0.18})`
       ctx.beginPath()
@@ -407,10 +430,11 @@ export class TankRenderer {
   }
 
   private drawKelp(ctx: CanvasRenderingContext2D, realTime: number, background: boolean): void {
+    const beds = kelpFor(this.habitat)
     ctx.save()
-    for (let k = 0; k < KELP.length; k += 1) {
+    for (let k = 0; k < beds.length; k += 1) {
       if (background !== (k % 2 === 0)) continue
-      const kelp = KELP[k]
+      const kelp = beds[k]
       const fill = background ? 'rgba(16, 74, 60, 0.8)' : 'rgba(42, 122, 82, 0.92)'
       const leafFill = background ? 'rgba(20, 86, 68, 0.7)' : 'rgba(56, 138, 92, 0.85)'
       for (let frond = 0; frond < kelp.fronds; frond += 1) {
@@ -425,7 +449,7 @@ export class TankRenderer {
           const bend = Math.sin(t * 2.2) * sway
           spine.push({
             x: baseX + bend * 26 * t + sway * 8 * t * t,
-            y: TANK.sandTop + 8 - height * t,
+            y: this.bounds.sandTop + 8 - height * t,
           })
         }
         ctx.fillStyle = fill
@@ -465,19 +489,51 @@ export class TankRenderer {
   // A couple of quiet rock piles so the mid-water isn't a bare field.
   private drawRocks(ctx: CanvasRenderingContext2D): void {
     ctx.save()
-    for (const pile of [
-      { x: 520, scale: 1 },
-      { x: 780, scale: 0.6 },
-    ]) {
+    const piles =
+      this.habitat === 'expanded'
+        ? [
+            { x: 520, scale: 1 },
+            { x: 780, scale: 0.6 },
+            { x: 1180, scale: 0.8 },
+          ]
+        : [
+            { x: 520, scale: 1 },
+            { x: 780, scale: 0.6 },
+          ]
+    for (const pile of piles) {
       for (let i = 0; i < 3; i += 1) {
         const radius = (26 - i * 7) * pile.scale
         const px = pile.x + (hash01(pile.x + i * 31) - 0.5) * 60 * pile.scale
         ctx.fillStyle = `rgba(30, 52, 64, ${0.55 + i * 0.1})`
         ctx.beginPath()
-        ctx.ellipse(px, TANK.sandTop + 6 - radius * 0.35, radius * 1.5, radius, 0, 0, Math.PI * 2)
+        ctx.ellipse(px, this.bounds.sandTop + 6 - radius * 0.35, radius * 1.5, radius, 0, 0, Math.PI * 2)
         ctx.fill()
       }
     }
+    if (this.habitat === 'expanded') this.drawCave(ctx)
+    ctx.restore()
+  }
+
+  /** The expansion's landmark: a rock cave in the new eastern ground, with a
+   * genuinely dark mouth — a place for the larger community to gather. */
+  private drawCave(ctx: CanvasRenderingContext2D): void {
+    const x = 1372
+    const baseY = this.bounds.sandTop + 8
+    ctx.save()
+    for (const stone of [
+      { dx: -58, dy: -18, rx: 46, ry: 34, alpha: 0.72 },
+      { dx: 56, dy: -16, rx: 44, ry: 32, alpha: 0.7 },
+      { dx: 0, dy: -52, rx: 74, ry: 34, alpha: 0.78 },
+    ]) {
+      ctx.fillStyle = `rgba(36, 58, 70, ${stone.alpha})`
+      ctx.beginPath()
+      ctx.ellipse(x + stone.dx, baseY + stone.dy, stone.rx, stone.ry, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.fillStyle = 'rgba(8, 16, 22, 0.92)'
+    ctx.beginPath()
+    ctx.ellipse(x, baseY - 6, 34, 26, 0, Math.PI, 0)
+    ctx.fill()
     ctx.restore()
   }
 
@@ -763,7 +819,7 @@ export class TankRenderer {
     for (const bubble of this.bubbles) {
       bubble.y -= bubble.speed * dt
       bubble.x += Math.sin(realTime * 2 + bubble.wobble) * 18 * dt
-      if (bubble.y < TANK.waterTop + 6) {
+      if (bubble.y < this.bounds.waterTop + 6) {
         Object.assign(bubble, this.newBubble(false))
       }
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
@@ -782,17 +838,17 @@ export class TankRenderer {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
     ctx.lineWidth = 2
     ctx.beginPath()
-    for (let x = 0; x <= TANK.width; x += 24) {
-      const y = TANK.waterTop + Math.sin(realTime * 1.4 + x / 90) * 2.5
+    for (let x = 0; x <= this.bounds.width; x += 24) {
+      const y = this.bounds.waterTop + Math.sin(realTime * 1.4 + x / 90) * 2.5
       if (x === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     }
     ctx.stroke()
-    const sheen = ctx.createLinearGradient(0, 0, 0, TANK.waterTop)
+    const sheen = ctx.createLinearGradient(0, 0, 0, this.bounds.waterTop)
     sheen.addColorStop(0, 'rgba(233, 250, 255, 0.85)')
     sheen.addColorStop(1, 'rgba(210, 240, 250, 0.25)')
     ctx.fillStyle = sheen
-    ctx.fillRect(0, 0, TANK.width, TANK.waterTop)
+    ctx.fillRect(0, 0, this.bounds.width, this.bounds.waterTop)
     ctx.restore()
   }
 }

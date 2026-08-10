@@ -126,16 +126,25 @@ const JournalEntrySchema = z.object({
   message: z.string(),
 })
 
-const EquipmentSchema = z.object({
+const EquipmentV2Schema = z.object({
   siphon: z.boolean(),
   feeder: z.enum(['none', 'drip', 'twin', 'rotary']),
   filter: z.enum(['none', 'sponge']),
 })
 
-const CareHistorySchema = z.object({
+const CareHistoryV2Schema = z.object({
   feederShortfallSeconds: finite().min(0),
   siphonUses: z.number().int().min(0),
   pollutedSeconds: finite().min(0),
+})
+
+/** V3 added the habitat stage and the stable-full-tank streak it consults. */
+const EquipmentV3Schema = EquipmentV2Schema.extend({
+  habitat: z.enum(['starter', 'expanded']),
+})
+
+const CareHistoryV3Schema = CareHistoryV2Schema.extend({
+  stableFullSeconds: finite().min(0),
 })
 
 export const SaveV1Schema = z.object({
@@ -179,13 +188,30 @@ export const SaveV2Schema = SaveV1Schema.omit({
   pendingEvents: true,
 }).extend({
   version: z.literal(2),
-  equipment: EquipmentSchema,
+  equipment: EquipmentV2Schema,
   feederDropCount: z.number().int().min(0).optional(),
   developments: z.array(z.enum(DEVELOPMENT_IDS as unknown as [DevelopmentId, ...DevelopmentId[]])),
-  care: CareHistorySchema,
+  care: CareHistoryV2Schema,
 })
 
 export type SaveFileV2 = z.infer<typeof SaveV2Schema>
+
+/**
+ * V3 added the habitat as a typed equipment stage (the 12 → ~20 capacity
+ * valve) and the care streak that reveals its expansion. Everything else —
+ * entities, water, journal, developments — is unchanged from V2.
+ */
+export const SaveV3Schema = SaveV2Schema.omit({
+  version: true,
+  equipment: true,
+  care: true,
+}).extend({
+  version: z.literal(3),
+  equipment: EquipmentV3Schema,
+  care: CareHistoryV3Schema,
+})
+
+export type SaveFileV3 = z.infer<typeof SaveV3Schema>
 
 /**
  * One entity as it appears on the wire. Deliberately NOT the runtime
@@ -279,6 +305,7 @@ export function migrateV1ToV2(save: SaveFileV1): SaveFileV2 {
     },
     developments: sortDevelopments(developments),
     care: { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0 },
+    // (V2 shape; migrateV2ToV3 adds the habitat and the stability streak.)
     feederLastDropAt: save.feederLastDropAt ?? 0,
     feederDropCount: 0,
     fishPurchased: save.fishPurchased,
@@ -298,8 +325,22 @@ export function sortDevelopments(ids: readonly DevelopmentId[]): DevelopmentId[]
   return unique.sort((a, b) => DEVELOPMENT_IDS.indexOf(a) - DEVELOPMENT_IDS.indexOf(b))
 }
 
-/** Fill V2's own legacy-optional fields (none yet) and normalise ordering. */
-export function migrateV2ToCurrent(save: SaveFileV2): SaveFile {
+/**
+ * V2 → V3. Every V2 tank was a starter habitat, and the stability streak
+ * starts at zero: a returning keeper earns the expansion reveal from play
+ * after the upgrade, exactly like every other hidden development.
+ */
+export function migrateV2ToV3(save: SaveFileV2): SaveFileV3 {
+  return {
+    ...save,
+    version: 3,
+    equipment: { ...save.equipment, habitat: 'starter' },
+    care: { ...save.care, stableFullSeconds: 0 },
+  }
+}
+
+/** Fill V3's own legacy-optional fields (none yet) and normalise ordering. */
+export function migrateV3ToCurrent(save: SaveFileV3): SaveFile {
   return {
     ...save,
     developments: sortDevelopments(save.developments),

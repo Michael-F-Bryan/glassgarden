@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { formatAway } from '@/game/hud'
-import { TANK, TUNING, type JournalKind } from '@/game/model'
+import { TUNING, type JournalKind } from '@/game/model'
 import {
   browserRuntimeDeps,
   createGameRuntime,
@@ -100,9 +100,11 @@ export default function GameRoot() {
 
   const toLogical = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
+    // The live habitat decides the logical size — an expanded tank maps the
+    // same on-screen pixels onto a larger space.
     return {
-      x: ((event.clientX - rect.left) / rect.width) * TANK.width,
-      y: ((event.clientY - rect.top) / rect.height) * TANK.height,
+      x: ((event.clientX - rect.left) / rect.width) * hud.tank.width,
+      y: ((event.clientY - rect.top) / rect.height) * hud.tank.height,
     }
   }
 
@@ -863,7 +865,7 @@ export default function GameRoot() {
           <div className="mb-2 flex items-baseline justify-between">
             <h3 className="text-xs font-semibold tracking-wide text-cyan-100 uppercase">Residents</h3>
             <span className="text-[0.65rem] text-slate-500 tabular-nums">
-              {hud.residents.length}/{TUNING.maxPopulation}
+              {hud.residents.length}/{hud.capacity}
             </span>
           </div>
           {hud.residents.length === 0 ? (

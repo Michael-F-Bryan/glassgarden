@@ -1,12 +1,12 @@
 import { World } from 'miniplex'
 
 import { generateName, randomGenome } from './genome'
-import { createEquipment, type Equipment } from './equipment'
+import { createEquipment, tankBoundsFor, type Equipment } from './equipment'
 import {
   createCareHistory,
   RESIDENT_COMPONENTS,
-  TANK,
   TUNING,
+  type TankBounds,
   type CareHistory,
   type DevelopmentId,
   type Entity,
@@ -196,6 +196,11 @@ export function hasDiscovered(state: GameState, id: DevelopmentId): boolean {
   return state.developments.has(id)
 }
 
+/** The live playable bounds — the owned habitat decides how big the tank is. */
+export function tankBounds(state: { equipment: Readonly<Pick<Equipment, 'habitat'>> }): TankBounds {
+  return tankBoundsFor(state.equipment.habitat)
+}
+
 /** Every living resident in id order, so callers iterate identically before
  * and after a save/load. Queries all resident components, so the result is
  * usable by any fish system without further narrowing. */
@@ -215,10 +220,11 @@ export function takenNames(state: GameState): Set<string> {
 
 /** Drop a pellet into the water near x — shared by the player and the feeder. */
 export function spawnPellet(state: GameState, x: number): Entity {
+  const bounds = tankBounds(state)
   return addEntity(state, {
     position: {
-      x: Math.min(TANK.width - 20, Math.max(20, x + state.rng.range(-10, 10))),
-      y: TANK.waterTop + 6,
+      x: Math.min(bounds.width - 20, Math.max(20, x + state.rng.range(-10, 10))),
+      y: bounds.waterTop + 6,
     },
     velocity: { x: state.rng.range(-8, 8), y: 0 },
     food: {
@@ -242,9 +248,10 @@ export type SpawnFishOptions = {
 }
 
 export function spawnFish(state: GameState, options: SpawnFishOptions): ResidentEntity {
+  const bounds = tankBounds(state)
   const position = options.position ?? {
-    x: state.rng.range(TANK.width * 0.3, TANK.width * 0.7),
-    y: state.rng.range(TANK.waterTop + 100, TANK.sandTop - 120),
+    x: state.rng.range(bounds.width * 0.3, bounds.width * 0.7),
+    y: state.rng.range(bounds.waterTop + 100, bounds.sandTop - 120),
   }
   return addEntity(state, {
     position,

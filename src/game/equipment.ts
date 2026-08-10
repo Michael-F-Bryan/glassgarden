@@ -8,17 +8,58 @@
  * every module.
  */
 
+import { TANK, type TankBounds } from './model'
+
 export type FeederStage = 'none' | 'drip' | 'twin' | 'rotary'
 export type FilterStage = 'none' | 'sponge'
+export type HabitatStage = 'starter' | 'expanded'
 
 export type Equipment = {
   siphon: boolean
   feeder: FeederStage
   filter: FilterStage
+  habitat: HabitatStage
 }
 
 export function createEquipment(): Equipment {
-  return { siphon: false, feeder: 'none', filter: 'none' }
+  return { siphon: false, feeder: 'none', filter: 'none', habitat: 'starter' }
+}
+
+export type HabitatProfile = {
+  cost: number
+  /** Residents (plus incubating eggs) the habitat responsibly holds; the
+   * breeding valve and the fish shop both stop at this number. */
+  capacity: number
+  bounds: TankBounds
+}
+
+/**
+ * The habitat is the capacity valve: expanding it opens space, population,
+ * and the ecological load that comes with both. Both stages are 16:9 so the
+ * canvas keeps its aspect and an expansion reads as the view pulling back
+ * from a genuinely larger tank. Proportions (waterline, sand band) match the
+ * starter tank, so nothing already resting on the sand ends up mid-water by
+ * more than a short re-settle.
+ */
+export const HABITAT_PROFILES: Record<HabitatStage, HabitatProfile> = {
+  starter: { cost: 0, capacity: 12, bounds: TANK },
+  expanded: {
+    cost: 6_000,
+    capacity: 20,
+    bounds: { width: 1600, height: 900, waterTop: 64, sandTop: 820 },
+  },
+}
+
+export function tankBoundsFor(stage: HabitatStage): TankBounds {
+  return HABITAT_PROFILES[stage].bounds
+}
+
+export function capacityFor(stage: HabitatStage): number {
+  return HABITAT_PROFILES[stage].capacity
+}
+
+export function nextHabitatStage(stage: HabitatStage): Exclude<HabitatStage, 'starter'> | undefined {
+  return stage === 'starter' ? 'expanded' : undefined
 }
 
 export type FeederProfile = {

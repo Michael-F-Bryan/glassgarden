@@ -6,10 +6,12 @@ import { createRng } from './rng'
 import {
   checkSemantics,
   migrateV1ToV2,
-  migrateV2ToCurrent,
+  migrateV2ToV3,
+  migrateV3ToCurrent,
   normalizeSemantics,
   SaveV1Schema,
   SaveV2Schema,
+  SaveV3Schema,
   sortDevelopments,
   type WireEntity,
   type WireFish,
@@ -22,7 +24,7 @@ export const SAVE_KEY = 'glassgarden-save'
  * this into a GameState — reaching hydrate always goes through decodeSave's
  * validation first, whether directly or via the deprecated deserialize(). */
 export type SaveFile = {
-  version: 2
+  version: 3
   savedAtMs: number
   time: number
   coins: number
@@ -163,7 +165,7 @@ function fromWire(wire: WireEntity): Entity {
 
 export function serialize(state: GameState, savedAtMs: number): SaveFile {
   return {
-    version: 2,
+    version: 3,
     savedAtMs,
     time: state.time,
     coins: state.coins,
@@ -228,13 +230,17 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
     return { kind: 'invalid', raw, issues: ['save is not a JSON object'] }
   }
   const version = (parsed as { version?: unknown }).version
-  if (version !== 1 && version !== 2) {
+  if (version !== 1 && version !== 2 && version !== 3) {
     return { kind: 'unsupported', raw, version }
   }
   // Each version validates against its own schema, then migrates forward
   // through the chain to the current document shape.
   const structural =
-    version === 1 ? SaveV1Schema.safeParse(parsed) : SaveV2Schema.safeParse(parsed)
+    version === 1
+      ? SaveV1Schema.safeParse(parsed)
+      : version === 2
+        ? SaveV2Schema.safeParse(parsed)
+        : SaveV3Schema.safeParse(parsed)
   if (!structural.success) {
     return { kind: 'invalid', raw, issues: structural.error.issues.map(formatIssue) }
   }
@@ -242,10 +248,14 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
   if (semanticIssues.length > 0) {
     return { kind: 'invalid', raw, issues: semanticIssues }
   }
-  const document =
-    structural.data.version === 1
-      ? migrateV2ToCurrent(migrateV1ToV2(normalizeSemantics(structural.data)))
-      : migrateV2ToCurrent(normalizeSemantics(structural.data))
+  const normalized = normalizeSemantics(structural.data)
+  const document = migrateV3ToCurrent(
+    normalized.version === 3
+      ? normalized
+      : normalized.version === 2
+        ? migrateV2ToV3(normalized)
+        : migrateV2ToV3(migrateV1ToV2(normalized)),
+  )
   return { kind: 'loaded', document }
 }
 

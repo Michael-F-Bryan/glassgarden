@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { advance, snapshot, startScenario } from './support'
+import { advance, snapshot, startScenario, tankPoint } from './support'
 
 
 /**
@@ -58,6 +58,56 @@ test('care, then pressure, reveals the siphon and then filtration', async ({ pag
   expect(state.care.siphonUses).toBeGreaterThanOrEqual(10)
   expect(state.developments).toContain('spongeFilterOffered')
   await expect(page.getByTestId('buy-spongeFilter')).toBeVisible()
+})
+
+test('a stable full tank reveals the habitat expansion; buying it visibly enlarges the aquarium', async ({
+  page,
+}) => {
+  await startScenario(page, 'thriving-full-tank', 4243)
+
+  // Hold the tank at capacity, healthy and clean, until the shop takes note.
+  for (let i = 0; i < 12; i += 1) {
+    await advance(page, 60)
+    if ((await snapshot(page)).developments.includes('habitatExpansionOffered')) break
+  }
+  let state = await snapshot(page)
+  expect(state.developments).toContain('habitatExpansionOffered')
+  expect(state.tank.width).toBe(1200)
+
+  // Income accrues until the expansion is affordable, then buy it for real.
+  for (let i = 0; i < 20; i += 1) {
+    if (
+      (await snapshot(page)).shop.some(
+        (offer) => offer.id === 'habitatExpansion' && offer.affordable,
+      )
+    )
+      break
+    await advance(page, 60)
+  }
+  await page.getByTestId('buy-habitatExpansion').click()
+
+  state = await snapshot(page)
+  expect(state.equipment.habitat).toBe('expanded')
+  expect(state.tank.width).toBeGreaterThan(1200)
+  await expect(page.getByTestId('fish-roster')).toContainText('/20')
+
+  // The capacity valve is open again: a healthy tank breeds past twelve.
+  for (let i = 0; i < 10; i += 1) {
+    await advance(page, 60)
+    const now = await snapshot(page)
+    if (now.fish.length + now.eggs.length > 12) break
+  }
+  state = await snapshot(page)
+  expect(state.fish.length + state.eggs.length).toBeGreaterThan(12)
+
+  // The pointer still lands where it aims in the larger coordinate space:
+  // feed far in the new east ground and the pellet appears there.
+  const before = (await snapshot(page)).food.length
+  const point = await tankPoint(page, 1500, state.tank.waterTop + 40)
+  await page.mouse.click(point.x, point.y)
+  await expect.poll(async () => (await snapshot(page)).food.length).toBeGreaterThan(before)
+  const newest = (await snapshot(page)).food.at(-1)!
+  expect(Math.abs(newest.x - 1500)).toBeLessThan(40)
 })
 
 test('a straining feeder reveals the next tier, and the upgrade relieves the tank', async ({

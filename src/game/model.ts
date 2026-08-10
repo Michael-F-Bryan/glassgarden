@@ -8,6 +8,19 @@
 
 export type Vec2 = { x: number; y: number }
 
+/** The playable volume: glass, waterline, and sand. Which bounds are live
+ * depends on the owned habitat stage — see HABITAT_PROFILES (equipment.ts)
+ * and tankBoundsFor(). */
+export type TankBounds = {
+  width: number
+  height: number
+  waterTop: number
+  sandTop: number
+}
+
+/** The starter habitat's bounds (16:9). Also the fallback when no simulation
+ * exists yet (empty HUD, presenter aspect). Live code should prefer
+ * tankBoundsFor(equipment.habitat). */
 export const TANK = {
   width: 1200,
   height: 675,
@@ -201,6 +214,7 @@ export type DevelopmentId =
   | 'twinHopperOffered'
   | 'rotaryFeederOffered'
   | 'spongeFilterOffered'
+  | 'habitatExpansionOffered'
 
 export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'fedOnce',
@@ -213,6 +227,7 @@ export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'twinHopperOffered',
   'rotaryFeederOffered',
   'spongeFilterOffered',
+  'habitatExpansionOffered',
 ]
 
 /**
@@ -229,10 +244,14 @@ export type CareHistory = {
   siphonUses: number
   /** Sim seconds the tank has spent above the pollution the player noticed. */
   pollutedSeconds: number
+  /** Continuous sim seconds the tank has been at capacity with every
+   * resident comfortable and the water clean — the evidence that reveals the
+   * habitat expansion. Resets whenever the streak breaks. */
+  stableFullSeconds: number
 }
 
 export function createCareHistory(): CareHistory {
-  return { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0 }
+  return { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0, stableFullSeconds: 0 }
 }
 
 export const TUNING = {
@@ -318,7 +337,6 @@ export const TUNING = {
   eggHatchSeconds: 60,
   /** Eggs incubating above this pollution hatch stunted, less resilient fry. */
   murkyEggPollution: 0.4,
-  maxPopulation: 12,
 
   /** Hidden development thresholds. */
   growthNoticedAtMultiple: 2, // starter weight vs its hatch weight
@@ -334,6 +352,12 @@ export const TUNING = {
    * stands for a tank that keeps greening up despite maintenance. */
   filterOfferedAfterSiphonUses: 10,
   filterOfferedAfterPollutedSeconds: 900,
+  /** The habitat expansion is revealed by a tank at capacity that stays
+   * comfortable this long without interruption: no distressed resident and
+   * the overall murk below expansionMaxMurk — a standard a full tank only
+   * meets with real feeding and filtration in place. */
+  expansionStableSeconds: 300,
+  expansionMaxMurk: 0.15,
 
   /** Oldest journal entries fall off past this, bounding the save file. */
   journalMaxEntries: 120,

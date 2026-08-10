@@ -1,5 +1,11 @@
-import type { Equipment } from './equipment'
-import { TANK, type CareHistory, type DevelopmentId, type OfflineSummary } from './model'
+import { tankBoundsFor, type Equipment } from './equipment'
+import {
+  TANK,
+  type CareHistory,
+  type DevelopmentId,
+  type OfflineSummary,
+  type TankBounds,
+} from './model'
 import { GameSim, type ShopOffer } from './sim'
 import { generateName, randomGenome } from './genome'
 import { addEntity, createFreshGame, spawnFish, takenNames } from './state'
@@ -41,7 +47,8 @@ export type DevFoodSnapshot = DevEntitySnapshot & {
 export type DevSnapshot = {
   version: typeof DEV_TOOLS_VERSION
   speed: number
-  tank: typeof TANK
+  /** The live habitat's bounds — tests convert logical coordinates with this. */
+  tank: TankBounds
   time: number
   coins: number
   incomePerSecond: number
@@ -107,7 +114,7 @@ export function createDevSnapshot(sim: GameSim, speed = 1): DevSnapshot {
   return {
     version: DEV_TOOLS_VERSION,
     speed,
-    tank: { ...TANK },
+    tank: { ...tankBoundsFor(state.equipment.habitat) },
     time: state.time,
     coins: state.coins,
     incomePerSecond: sim.incomePerSecond(),

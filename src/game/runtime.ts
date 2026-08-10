@@ -4,6 +4,7 @@ import {
   normaliseDevSpeed,
   type GlassgardenDevTools,
 } from './devtools'
+import { tankBoundsFor } from './equipment'
 import { buildHudSnapshot, EMPTY_HUD, type HudSnapshot, type WaterTier } from './hud'
 import { TANK, type OfflineSummary, type UiNotification, type Vec2 } from './model'
 import { createCanvasPresenter, type DrawOptions } from './render'
@@ -189,12 +190,21 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
 
   const listeners = new Set<(view: GameView) => void>()
 
+  /** The live habitat's bounds; the starter tank's before a session exists. */
+  const tankBounds = () => (sim ? tankBoundsFor(sim.read.equipment.habitat) : TANK)
+
   /** Keep the whole reticle on screen and out from under the floating tool
    * palette, so the keyboard target is always visible where it lands. */
-  const clampCaret = (point: Vec2): Vec2 => ({
-    x: Math.min(TANK.width - CARET_MARGIN, Math.max(CARET_MARGIN, point.x)),
-    y: Math.min(TANK.sandTop - CARET_MARGIN, Math.max(TANK.waterTop + CARET_TOP_MARGIN, point.y)),
-  })
+  const clampCaret = (point: Vec2): Vec2 => {
+    const bounds = tankBounds()
+    return {
+      x: Math.min(bounds.width - CARET_MARGIN, Math.max(CARET_MARGIN, point.x)),
+      y: Math.min(
+        bounds.sandTop - CARET_MARGIN,
+        Math.max(bounds.waterTop + CARET_TOP_MARGIN, point.y),
+      ),
+    }
+  }
 
   const buildView = (): GameView => {
     const hud = sim ? buildHudSnapshot(sim, selectedFishId, waterTier) : EMPTY_HUD
@@ -489,7 +499,11 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
 
     showCaret() {
       if (!caret) {
-        caret = lastCaret ?? { x: TANK.width / 2, y: (TANK.waterTop + TANK.sandTop) / 2 }
+        const bounds = tankBounds()
+        caret = lastCaret ?? {
+          x: bounds.width / 2,
+          y: (bounds.waterTop + bounds.sandTop) / 2,
+        }
       }
       publish()
     },
@@ -501,7 +515,10 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     },
 
     moveCaret(dx, dy) {
-      if (!caret) caret = { x: TANK.width / 2, y: (TANK.waterTop + TANK.sandTop) / 2 }
+      if (!caret) {
+        const bounds = tankBounds()
+        caret = { x: bounds.width / 2, y: (bounds.waterTop + bounds.sandTop) / 2 }
+      }
       caret = clampCaret({ x: caret.x + dx, y: caret.y + dy })
       hoverFishId = sim?.fishAt(caret.x, caret.y)?.id
       publish()
