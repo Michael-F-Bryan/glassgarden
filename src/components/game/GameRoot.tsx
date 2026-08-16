@@ -223,9 +223,14 @@ export default function GameRoot() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault()
         if (activeOverlay) {
-          event.preventDefault()
           closeOverlay(activeOverlay)
+        } else {
+          // Escape during play is the conventional pause: simulation halts
+          // and the menu opens. Closing it (Escape again, backdrop click,
+          // or Resume) picks play back up.
+          setMenuOpen(true)
         }
         return
       }
@@ -282,10 +287,10 @@ export default function GameRoot() {
       runtime.inspectAtCaret()
       return
     }
-    // A second way out, for anyone who does not think to press Tab.
-    if (event.key === 'Escape' && !activeOverlay) {
-      event.currentTarget.blur()
-    }
+    // Escape is deliberately not handled here: it bubbles to the window
+    // listener, which opens the pause menu — moving focus off the tank and
+    // returning it when the menu closes, so the tank still never traps the
+    // keyboard.
   }
 
   return (
@@ -299,6 +304,29 @@ export default function GameRoot() {
           <p className="text-xs text-cyan-300/70">a quiet aquarium that grows around your care</p>
         </div>
         <div className="flex items-center gap-2">
+          <div
+            role="group"
+            aria-label="Simulation speed"
+            data-testid="speed-control"
+            className="flex items-center gap-0.5 rounded-full border border-white/10 bg-slate-900/60 p-1"
+          >
+            {([1, 2, 5] as const).map((multiplier) => (
+              <button
+                key={multiplier}
+                type="button"
+                data-testid={`speed-${multiplier}`}
+                aria-pressed={view.speed === multiplier}
+                onClick={() => runtimeRef.current?.setSpeed(multiplier)}
+                className={`rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums transition ${
+                  view.speed === multiplier
+                    ? 'bg-cyan-400/25 text-cyan-100'
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                }`}
+              >
+                {multiplier}×
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             data-testid="menu-toggle"
@@ -671,6 +699,14 @@ export default function GameRoot() {
           <div
             className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
             data-testid="main-menu"
+            onClick={(event) => {
+              // Clicking the backdrop dismisses the topmost layer, exactly
+              // like Escape: the confirmation first, then the menu itself —
+              // resuming play, never leaving an invisible paused state.
+              if (event.target !== event.currentTarget) return
+              if (confirmingNewGame) setConfirmingNewGame(false)
+              else setMenuOpen(false)
+            }}
           >
             <div
               ref={menuPanelRef}

@@ -214,6 +214,51 @@ describe('game runtime', () => {
     runtime.stop()
   })
 
+  test('the selected speed multiplies simulated time and survives pause/resume', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+    h.tick(16)
+
+    expect(lastView(views).speed).toBe(1)
+    runtime.setSpeed(5)
+    expect(lastView(views).speed).toBe(5)
+
+    runtime.pause() // baseline save at the current sim time
+    const timeBefore = JSON.parse(h.storage.getItem(SAVE_KEY)!).time
+    runtime.resume()
+    for (let i = 0; i < 4; i += 1) h.tick(500) // 2 s of wall-clock frames
+    runtime.pause()
+    const timeAfter = JSON.parse(h.storage.getItem(SAVE_KEY)!).time
+    expect(timeAfter - timeBefore).toBeCloseTo(10, 0) // 2 s × 5
+
+    // Pausing halted it; resuming keeps the selection rather than resetting.
+    runtime.resume()
+    expect(lastView(views).speed).toBe(5)
+    runtime.stop()
+  })
+
+  test('a hidden-tab gap advances at the selected speed too', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    runtime.subscribe(() => {})
+    runtime.start(canvas())
+    h.tick(16)
+
+    runtime.setSpeed(2)
+    h.setVisible(false)
+    h.tick(30_000)
+    h.setVisible(true)
+
+    runtime.pause()
+    const saved = JSON.parse(h.storage.getItem(SAVE_KEY)!)
+    expect(saved.time).toBeGreaterThan(59)
+    expect(saved.time).toBeLessThan(62)
+    runtime.stop()
+  })
+
   test('pausing freezes time, blocks intents, and cancels the held gesture', () => {
     const h = harness()
     const runtime = createGameRuntime(h.deps)

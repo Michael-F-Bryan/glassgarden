@@ -32,6 +32,9 @@ export type GameView = {
   awaySummary: OfflineSummary | null
   tool: Tool
   paused: boolean
+  /** The selected simulation-speed multiplier (1 is real time; the dev
+   * bridge may set 0 or fractions). Pausing does not change it. */
+  speed: number
   /** Where the keyboard is aiming inside the tank, in logical tank
    * coordinates, or null while the player is using a pointer. Drawn as a
    * visible target so a keyboard user can see where an action will land. */
@@ -46,6 +49,7 @@ export const EMPTY_VIEW: GameView = {
   awaySummary: null,
   tool: 'feed',
   paused: false,
+  speed: 1,
   caret: null,
   caretTarget: null,
 }
@@ -85,6 +89,9 @@ export type GameRuntime = {
   stop(): void
   pause(): void
   resume(): void
+  /** Select the simulation-speed multiplier. Independent of pause: pausing
+   * halts the clock, resuming picks the selected speed back up. */
+  setSpeed(multiplier: number): void
   /** Atomic session replacement; also behind newGame() and the devtools. */
   replace(next: GameSim): void
   newGame(): void
@@ -236,6 +243,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       awaySummary,
       tool,
       paused,
+      speed,
       caret: caret ? { ...caret } : null,
       caretTarget:
         overFish?.resident && caret
@@ -487,6 +495,11 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     resume() {
       if (!paused) return
       paused = false
+      publish()
+    },
+
+    setSpeed(multiplier) {
+      speed = normaliseDevSpeed(multiplier)
       publish()
     },
 
