@@ -21,14 +21,22 @@ describe('game UI layout', () => {
     expect(html).not.toContain('data-testid="shop-toggle"')
   })
 
-  test('tools stay on the tank; toasts live in the sidebar, off the play surface', () => {
+  test('tools stay on the tank; toasts overlay its bottom-left corner', () => {
     const html = renderGame()
 
     expect(html).toContain('data-testid="tool-palette"')
     expect(html).toContain('data-ui-anchor="top-left"')
     expect(html).toContain('data-testid="toast-stack"')
-    expect(html).toContain('data-ui-anchor="sidebar"')
-    expect(html).not.toContain('data-ui-anchor="bottom-left"')
+    expect(html).toContain('data-ui-anchor="bottom-left"')
+    expect(html).not.toContain('data-ui-anchor="sidebar"')
+  })
+
+  test('the resident list owns the fish count; no redundant bottom-right pill', () => {
+    const html = renderGame()
+
+    expect(html).not.toContain('data-testid="population"')
+    // Capacity stays visible where it matters: the roster header's X/Y.
+    expect(html).toContain('data-testid="fish-roster"')
   })
 
   test('main menu button is in the chrome and the menu itself starts closed', () => {

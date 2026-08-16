@@ -16,7 +16,6 @@ export type HudSnapshot = {
   capacity: number
   /** Live logical tank size, for pointer-to-tank coordinate conversion. */
   tank: { width: number; height: number }
-  distressedCount: number
   criticalNames: string[]
   ownsSiphon: boolean
   gameOver: boolean
@@ -116,7 +115,6 @@ export const EMPTY_HUD: HudSnapshot = {
   fishCount: 0,
   capacity: capacityFor('starter'),
   tank: { width: tankBoundsFor('starter').width, height: tankBoundsFor('starter').height },
-  distressedCount: 0,
   criticalNames: [],
   ownsSiphon: false,
   gameOver: false,
@@ -225,11 +223,6 @@ export function buildHudSnapshot(
     fishCount: fishEntities.length,
     capacity: capacityFor(state.equipment.habitat),
     tank: { width: bounds.width, height: bounds.height },
-    distressedCount: fishEntities.filter(
-      (entity) =>
-        entity.physiology.hunger > TUNING.distressHungerAbove ||
-        entity.physiology.sickness > TUNING.distressSicknessAbove,
-    ).length,
     criticalNames: fishEntities
       .filter((entity) => entity.physiology.hunger >= 0.999 || entity.physiology.sickness >= 0.75)
       .map((entity) => entity.resident.name),

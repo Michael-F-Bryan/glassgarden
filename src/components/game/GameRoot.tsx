@@ -471,6 +471,39 @@ export default function GameRoot() {
           </span>
         </div>
 
+        {/* Toasts overlay the tank's bottom-left corner: they are absolutely
+          * positioned notices over the glass, never layout participants, so
+          * showing one cannot shove the shop sidebar or any other control.
+          * The container ignores the pointer; only the toasts themselves are
+          * clickable, so a stray feed/siphon gesture beside one still lands
+          * on the tank. */}
+        <div
+          className="pointer-events-none absolute bottom-3 left-3 z-20 flex w-80 max-w-[75%] flex-col gap-2"
+          data-testid="toast-stack"
+          data-ui-anchor="bottom-left"
+          aria-live="polite"
+        >
+          {view.toasts.map((toast) => (
+            <button
+              type="button"
+              key={toast.key}
+              data-testid={`toast-${toast.tone}`}
+              title="Dismiss"
+              onClick={() => runtimeRef.current?.dismissToast(toast.key)}
+              className={`pointer-events-auto w-full cursor-pointer rounded-xl border px-4 py-2 text-left text-sm shadow-lg backdrop-blur transition animate-in fade-in slide-in-from-left-2 duration-300 ${
+                toast.tone === 'development'
+                  ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
+                  : toast.tone === 'warning'
+                    ? 'border-red-400/40 bg-red-950/85 text-red-100'
+                    : 'border-cyan-200/20 bg-slate-900/80 text-slate-200'
+              }`}
+            >
+              {toast.tone === 'development' && <span className="mr-2 text-base">✦</span>}
+              {toast.message}
+            </button>
+          ))}
+        </div>
+
         <div className="absolute right-3 bottom-3 flex items-center gap-2 text-xs">
           <span
             data-testid="water-quality"
@@ -500,15 +533,6 @@ export default function GameRoot() {
                 style={{ width: `${Math.round(hud.murkiness * 100)}%` }}
               />
             </span>
-          </span>
-          <span
-            data-testid="population"
-            className="rounded-full bg-slate-950/60 px-3 py-1 text-slate-200/90 backdrop-blur"
-          >
-            {hud.fishCount} fish
-            {hud.distressedCount > 0 && (
-              <span className="ml-2 text-amber-300/90">{hud.distressedCount} unhappy</span>
-            )}
           </span>
           <button
             type="button"
@@ -838,34 +862,6 @@ export default function GameRoot() {
         data-testid="shop-panel"
         data-ui-anchor="right-sidebar"
       >
-        {/* Toasts live in the sidebar, off the playable tank surface, so a
-         * dismissible notice can never intercept a Feed or Siphon gesture. */}
-        <div
-          className="mb-3 flex flex-col gap-2 empty:hidden"
-          data-testid="toast-stack"
-          data-ui-anchor="sidebar"
-          aria-live="polite"
-        >
-          {view.toasts.map((toast) => (
-            <button
-              type="button"
-              key={toast.key}
-              data-testid={`toast-${toast.tone}`}
-              title="Dismiss"
-              onClick={() => runtimeRef.current?.dismissToast(toast.key)}
-              className={`w-full cursor-pointer rounded-xl border px-4 py-2 text-left text-sm shadow-lg transition animate-in fade-in slide-in-from-right-2 duration-300 ${
-                toast.tone === 'development'
-                  ? 'border-amber-300/80 bg-gradient-to-r from-amber-950/90 to-yellow-900/80 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.28)]'
-                  : toast.tone === 'warning'
-                    ? 'border-red-400/40 bg-red-950/85 text-red-100'
-                    : 'border-cyan-200/20 bg-slate-900/80 text-slate-200'
-              }`}
-            >
-              {toast.tone === 'development' && <span className="mr-2 text-base">✦</span>}
-              {toast.message}
-            </button>
-          ))}
-        </div>
         <div className="mb-4 border-b border-cyan-100/10 pb-3">
           <p className="text-[0.65rem] font-semibold tracking-[0.2em] text-cyan-300/55 uppercase">
             Tank supplies

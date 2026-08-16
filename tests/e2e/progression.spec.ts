@@ -43,7 +43,7 @@ test('care, then pressure, reveals the siphon and then filtration', async ({ pag
   await page.getByTestId('tool-siphon').click()
   await expect(page.getByTestId('tool-siphon')).toHaveAttribute('aria-pressed', 'true')
   for (let i = 0; i < 16; i += 1) {
-    // Re-read the box each sweep: expiring toasts restretch the grid row.
+    // Re-read the box each sweep so it can never go stale mid-test.
     const box = (await canvas.boundingBox())!
     const x = box.x + 110 + (i % 12) * 60
     const y = box.y + box.height - 36

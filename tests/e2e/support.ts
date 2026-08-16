@@ -50,8 +50,8 @@ export async function startScenario(
 
 /**
  * Convert logical tank coordinates to page coordinates. Reads the canvas box
- * fresh every call: the sidebar's toast stack restretches the grid row, so a
- * box captured earlier in a test goes stale.
+ * fresh every call, so a box captured earlier in a test cannot go stale
+ * across layout changes (window resizes, panels opening).
  */
 export async function tankPoint(
   page: Page,
