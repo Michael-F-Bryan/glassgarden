@@ -277,9 +277,11 @@ export class GameSim {
   }
 
   /**
-   * Use the gravel siphon at a point: removes waste and spoiled food within
-   * reach and pulls some green out of the local water. The value is how many
-   * bits of debris were removed.
+   * Use the gravel siphon at a point: removes waste, spoiled food, and fresh
+   * food that has settled on the sand (gone, not refunded — a real gravel
+   * vac cannot tell dinner from debris), and pulls some green out of the
+   * local water. Food still falling or drifting mid-water is left alone.
+   * The value is how many bits of debris were removed.
    */
   siphonAt(x: number, y: number): ActionResult<number> {
     if (!this.state.equipment.siphon) return { ok: false, reason: 'unowned' }
@@ -287,7 +289,7 @@ export class GameSim {
     let removed = 0
     const debris = [
       ...this.state.world.with('waste'),
-      ...[...this.state.world.with('food')].filter((e) => e.food.spoiled),
+      ...[...this.state.world.with('food')].filter((e) => e.food.spoiled || e.food.restingOnSand),
     ]
     for (const entity of debris) {
       const distance = Math.hypot(entity.position.x - x, entity.position.y - y)

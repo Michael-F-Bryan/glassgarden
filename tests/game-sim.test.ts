@@ -147,6 +147,64 @@ describe('feeding and growth', () => {
   })
 })
 
+describe('food at the substrate', () => {
+  /** A pellet below the sand line, one tick from snapping to the canonical
+   * rest height the movement system enforces — so these tests always use the
+   * real resting geometry rather than a hardcoded copy of it. */
+  function settledPellet(state: ReturnType<typeof createFreshGame>, sim: GameSim, x: number) {
+    const pellet = addEntity(state, {
+      position: { x, y: TANK.sandTop + 50 },
+      velocity: { x: 0, y: 0 },
+      food: { nutrition: 1, spoilsAt: state.time + 10_000, spoiled: false, restingOnSand: false },
+    })
+    sim.advanceElapsed(TUNING.simTickSeconds, 'visible')
+    expect(pellet.food!.restingOnSand).toBe(true)
+    return pellet
+  }
+
+  test('a small starter fish can reach and eat food resting on the sand', () => {
+    const state = createFreshGame(721)
+    const sim = new GameSim(state)
+    const fish = onlyFish(sim)
+    fish.position = { x: 200, y: 200 }
+    fish.physiology.hunger = 0 // uninterested while the pellet settles
+    settledPellet(state, sim, 600)
+
+    const weightBefore = fish.physiology.weight
+    fish.physiology.hunger = 0.7
+    runFor(sim, 45)
+
+    expect([...state.world.with('food')]).toHaveLength(0)
+    expect(onlyFish(sim).physiology.weight).toBeGreaterThan(weightBefore)
+  })
+
+  test('the siphon lifts fresh settled food without a refund, and leaves falling food alone', () => {
+    const state = createFreshGame(723)
+    const sim = new GameSim(state)
+    state.equipment.siphon = true
+    const fish = onlyFish(sim)
+    fish.physiology.hunger = 0 // nobody eats the evidence
+    const resting = settledPellet(state, sim, 600)
+    // A second pellet still suspended mid-water, inside the siphon's reach.
+    const falling = addEntity(state, {
+      position: { x: 600, y: TANK.sandTop - 95 },
+      velocity: { x: 0, y: 0 },
+      food: { nutrition: 1, spoilsAt: state.time + 10_000, spoiled: false, restingOnSand: false },
+    })
+
+    const coinsBefore = state.coins
+    const sweepY = TANK.sandTop - 40 // covers both pellets within siphonRadius
+    expect(Math.hypot(resting.position.y - sweepY)).toBeLessThan(TUNING.siphonRadius)
+    expect(Math.hypot(falling.position.y - sweepY)).toBeLessThan(TUNING.siphonRadius)
+    expect(sim.siphonAt(600, sweepY)).toMatchObject({ ok: true, value: 1 })
+
+    const remaining = [...state.world.with('food')]
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].id).toBe(falling.id)
+    expect(state.coins).toBe(coinsBefore) // the pellet is gone, not refunded
+  })
+})
+
 describe('pollution and sickness', () => {
   test('waste on the sand pollutes the water and puts the siphon in the shop', () => {
     const state = createFreshGame(5)

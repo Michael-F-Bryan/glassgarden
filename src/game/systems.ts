@@ -180,7 +180,10 @@ function movementSystem(state: GameState, dt: number): void {
     steerFish(state, entity, dt, claims)
   }
   for (const entity of state.world.with('food')) {
-    sinkToSand(entity, dt, 26, bounds.sandTop + 6, () => (entity.food.restingOnSand = true))
+    // Food comes to rest at the sand's surface, not buried inside it: the
+    // smallest fry bottoms out at sandTop - 10 with an eating reach of ~12,
+    // so a pellet any deeper than this is permanently uneatable geometry.
+    sinkToSand(entity, dt, 26, bounds.sandTop - 2, () => (entity.food.restingOnSand = true))
   }
   for (const entity of state.world.with('waste')) {
     sinkToSand(entity, dt, 34, bounds.sandTop + 14, () => (entity.waste.restingOnSand = true))
