@@ -1,4 +1,4 @@
-import { capacityFor, tankBoundsFor } from './equipment'
+import { capacityFor, FEEDER_PROFILES, foodProfile, tankBoundsFor, type FoodStage } from './equipment'
 import { TUNING, type Behaviour, type Genome, type JournalKind, type Physiology } from './model'
 import type { GameSim, ShopOfferId } from './sim'
 import { pollutionAt } from './water'
@@ -21,6 +21,10 @@ export type HudSnapshot = {
   gameOver: boolean
   /** False only until the player's very first pellet; drives the feed hint. */
   fedOnce: boolean
+  /** What is in the food tin, and what one drop of it costs — the feed tool
+   * shows both, so switching rungs is visible at the point of use rather
+   * than only in the shop. */
+  food: { label: string; unitCost: number }
   waterQuality: WaterTier
   /** Overall murk in [0, 1], driving the quality meter's fill. Averaged, not
    * worst-cell: debris on the sand pins one cell at maximum in any mature
@@ -64,27 +68,37 @@ export type ShopItemView = {
   affordable: boolean
 }
 
+/** What the tin is called, wherever the current food is named. */
+const FOOD_LABELS: Record<FoodStage, string> = {
+  flake: 'Starter flakes',
+  crumb: 'Crumbs',
+  pellet: 'Hearty pellets',
+}
+
 const SHOP_COPY: Record<ShopOfferId, { label: string; description: string }> = {
   siphon: {
     label: 'Gravel siphon',
     description: 'Clean up droppings and spoiled food before they foul the water.',
   },
+  crumbFood: {
+    label: FOOD_LABELS.crumb,
+    description: `Coarser than flakes and far more filling, so a pinch lasts. Replaces the starter flakes for you and any feeder, at ◉${foodProfile('crumb').unitCost} a drop.`,
+  },
   heartyFood: {
-    label: 'Hearty pellets',
-    description:
-      'Richer food that makes a proper meal of every drop. Replaces the starter flakes for you and any feeder.',
+    label: FOOD_LABELS.pellet,
+    description: `Richer food that makes a proper meal of every drop. Replaces the crumbs for you and any feeder, at ◉${foodProfile('pellet').unitCost} a drop.`,
   },
   dripFeeder: {
     label: 'Drip feeder',
-    description: 'Drops a pellet for hungry fish while you are busy elsewhere. Suits a small tank. Uses your coins.',
+    description: `Drops food for hungry fish while you are busy elsewhere — enough for about ${FEEDER_PROFILES.drip.supportsResidents} residents on hearty pellets. Uses the food in your tin and pays its current price.`,
   },
   twinHopper: {
     label: 'Twin hopper',
-    description: 'Two chambers, twice the rounds — enough for a busy tank. Still a coin per pellet.',
+    description: `Two chambers, twice the rounds — comfortable up to about ${FEEDER_PROFILES.twin.supportsResidents} residents on hearty pellets. Still pays the current food price for every drop.`,
   },
   rotaryFeeder: {
     label: 'Rotary feeder',
-    description: 'Turns steadily all day and can keep a full tank fed. Still a coin per pellet.',
+    description: `Turns steadily all day and can keep about ${FEEDER_PROFILES.rotary.supportsResidents} residents fed on hearty pellets. Still pays the current food price for every drop.`,
   },
   spongeFilter: {
     label: 'Sponge filter',
@@ -119,6 +133,7 @@ export const EMPTY_HUD: HudSnapshot = {
   ownsSiphon: false,
   gameOver: false,
   fedOnce: true, // no hint until the real sim reports otherwise
+  food: { label: FOOD_LABELS.flake, unitCost: foodProfile('flake').unitCost },
   waterQuality: 'clear',
   murkiness: 0,
   journal: [],
@@ -229,6 +244,10 @@ export function buildHudSnapshot(
     ownsSiphon: state.equipment.siphon,
     gameOver: state.gameOver,
     fedOnce: state.developments.has('fedOnce'),
+    food: {
+      label: FOOD_LABELS[state.equipment.food],
+      unitCost: foodProfile(state.equipment.food).unitCost,
+    },
     waterQuality: describeWater(sim.murkiness(), previousWater),
     murkiness: sim.murkiness(),
     journal: [...state.journal]

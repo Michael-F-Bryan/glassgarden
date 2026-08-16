@@ -138,8 +138,8 @@ describe('decodeSave: structural and semantic validation', () => {
     expect(decodeSave('null').kind).toBe('invalid')
     expect(decodeSave('42').kind).toBe('invalid')
 
-    const unsupported = decodeSave(JSON.stringify({ version: 5 }))
-    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 5 })
+    const unsupported = decodeSave(JSON.stringify({ version: 6 }))
+    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 6 })
   })
 
   test('duplicate entity ids are rejected', () => {
@@ -167,6 +167,48 @@ describe('decodeSave: structural and semantic validation', () => {
     save.waterCells = save.waterCells.slice(1)
 
     expect(decodeSave(JSON.stringify(save)).kind).toBe('invalid')
+  })
+
+  test('impossible or unbounded meal histories are rejected', () => {
+    const base = GameSim.fresh(106).toSave(1_000)
+    base.time = 100
+
+    const impossibleManual = structuredClone(base)
+    impossibleManual.care.meals = [{ at: 10, eaten: 1, manual: 2 }]
+
+    const fromTheFuture = structuredClone(base)
+    fromTheFuture.care.meals = [{ at: 110, eaten: 1, manual: 1 }]
+
+    const outOfOrder = structuredClone(base)
+    outOfOrder.care.meals = [
+      { at: 20, eaten: 1, manual: 1 },
+      { at: 10, eaten: 1, manual: 1 },
+    ]
+
+    const unbounded = structuredClone(base)
+    unbounded.care.meals = Array.from({ length: 5_000 }, (_, at) => ({ at, eaten: 1, manual: 1 }))
+
+    for (const save of [impossibleManual, fromTheFuture, outOfOrder, unbounded]) {
+      expect(decodeSave(JSON.stringify(save)).kind).toBe('invalid')
+    }
+  })
+
+  test('invalid siphon cooldown evidence is rejected', () => {
+    const base = GameSim.fresh(107).toSave(1_000)
+    base.time = 100
+
+    const duplicate = structuredClone(base) as unknown as Record<string, unknown>
+    duplicate.siphonCreditAt = [
+      { cell: 4, at: 99 },
+      { cell: 4, at: 100 },
+    ]
+
+    const fromTheFuture = structuredClone(base) as unknown as Record<string, unknown>
+    fromTheFuture.siphonCreditAt = [{ cell: 4, at: 101 }]
+
+    for (const save of [duplicate, fromTheFuture]) {
+      expect(decodeSave(JSON.stringify(save)).kind).toBe('invalid')
+    }
   })
 
   test('a fish activity referencing a food entity that no longer exists normalises to wander instead of rejecting', () => {
@@ -216,7 +258,7 @@ describe('the wire format is independent of runtime components', () => {
     expect(wireFish.fish!.genome.hue).toEqual(expect.any(Number))
     expect(wireFish).not.toHaveProperty('resident')
     expect(wireFish).not.toHaveProperty('physiology')
-    expect(document.version).toBe(4)
+    expect(document.version).toBe(5)
   })
 
   test('a V1 save written before the component split still loads and runs', () => {
@@ -253,7 +295,7 @@ describe('a save written by the previous build', () => {
     if (result.kind !== 'loaded') return
     const document = result.document
 
-    expect(document.version).toBe(4)
+    expect(document.version).toBe(5)
     expect(document.equipment).toEqual({
       siphon: true,
       feeder: 'drip',
@@ -290,7 +332,7 @@ describe('a save written by the previous build', () => {
     expect([...sim.read.world.with('resident')].length).toBeGreaterThanOrEqual(before)
     expect(sim.read.equipment.feeder).toBe('drip')
     // And it re-saves in the current format.
-    expect(sim.toSave(2_000).version).toBe(4)
+    expect(sim.toSave(2_000).version).toBe(5)
   })
 
   test('migration is deterministic', () => {
@@ -301,12 +343,18 @@ describe('a save written by the previous build', () => {
 })
 
 describe('a V3 save (pre-food-stages)', () => {
-  /** A V3 document as the previous build wrote it: no equipment.food. */
+  /** A V3 document as that build wrote it: no equipment.food, and the care
+   * counters under the names and meanings V3 gave them. */
   function v3Save() {
     const save = GameSim.fresh(220).toSave(1_000) as unknown as Record<string, unknown>
     const equipment = { ...(save.equipment as Record<string, unknown>) }
     delete equipment.food
-    return { ...save, version: 3, equipment }
+    return {
+      ...save,
+      version: 3,
+      equipment,
+      care: { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0, stableFullSeconds: 0 },
+    }
   }
 
   test('migrates keeping the pellets it always fed, and never re-offers them', () => {
@@ -314,7 +362,7 @@ describe('a V3 save (pre-food-stages)', () => {
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
 
-    expect(result.document.version).toBe(4)
+    expect(result.document.version).toBe(5)
     // A pre-V4 tank fed nutrition-1 pellets all along; the migration must
     // not quietly demote it to starter flakes.
     expect(result.document.equipment.food).toBe('pellet')
@@ -368,7 +416,7 @@ describe('round-trip and migration determinism', () => {
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
 
-    expect(result.document.version).toBe(4)
+    expect(result.document.version).toBe(5)
     expect(result.document.journal).toEqual([])
     expect(result.document.retiredNames).toEqual([])
     expect(result.document.feederLastDropAt).toBe(0)
@@ -383,10 +431,11 @@ describe('round-trip and migration determinism', () => {
     // No noticedGrowth either in this fixture, so fedOnce infers false.
     expect(result.document.developments).not.toContain('fedOnce')
     expect(result.document.care).toEqual({
-      feederShortfallSeconds: 0,
-      siphonUses: 0,
-      pollutedSeconds: 0,
+      feederStrainSeconds: 0,
+      cleaningCredits: 0,
+      murkySeconds: 0,
       stableFullSeconds: 0,
+      meals: [],
     })
 
     // Re-migrating the same fixture reaches the identical document.
@@ -454,7 +503,7 @@ describe('round-trip and migration determinism', () => {
     // The migrated tank is playable and re-saves in the current format.
     const sim = new GameSim(hydrate(document))
     sim.advanceElapsed(1, 'visible')
-    expect(sim.toSave(2_000).version).toBe(4)
+    expect(sim.toSave(2_000).version).toBe(5)
     expect(sim.read.equipment.feeder).toBe('drip')
 
     // Migration is deterministic: the same V1 bytes always land identically.

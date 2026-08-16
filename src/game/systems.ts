@@ -3,9 +3,9 @@ import {
   feederDropX,
   feederProfile,
   filterProfile,
+  foodProfile,
   nextFeederStage,
   nextFilterStage,
-  nextFoodStage,
   nextHabitatStage,
 } from './equipment'
 import { generateName, inheritGenome } from './genome'
@@ -20,9 +20,13 @@ import {
   addEntity,
   discover,
   emit,
+  handFedMealsSince,
   hasDiscovered,
   livingFish,
+  mealsEatenSince,
+  pruneMeals,
   recordJournal,
+  recordMeal,
   removeEntity,
   residentCount,
   spawnFish,
@@ -99,6 +103,22 @@ function hungerSystem(state: GameState, dt: number, mode: SimulationMode): void 
 }
 
 const EAT_HUNGER_CUTOFF = 0.08
+
+/** Sickness at which a fish stops going about its business and hangs near the
+ * sand, ignoring food it would otherwise chase. */
+const GRAVELY_ILL_SICKNESS = 0.75
+
+/** Whether a fish will actually swim for a pellet dropped now: a gravely ill
+ * one will not, unless it is starving. */
+function willComeForFood(body: { sickness: number; hunger: number }): boolean {
+  return body.sickness < GRAVELY_ILL_SICKNESS || body.hunger >= 0.999
+}
+
+/** Total living weight in the tank — what "a tank grown enough to matter"
+ * means to the food ladder. */
+function tankGrams(state: GameState): number {
+  return livingFish(state).reduce((sum, entity) => sum + entity.physiology.weight, 0)
+}
 
 /** Hunger difference below which two fish count as equally hungry, so
  * proximity decides which of them chases a contested pellet. */
@@ -235,7 +255,7 @@ function steerFish(
   // Re-evaluate what the fish wants to do. A starving fish must still chase
   // food — the death warning exists so the player can rescue it by feeding.
   const starving = body.hunger >= 0.999
-  const gravelyIll = body.sickness >= 0.75
+  const gravelyIll = body.sickness >= GRAVELY_ILL_SICKNESS
   if (starving || gravelyIll) {
     const food = starving ? nearestEdibleFood(state, entity, claims) : undefined
     if (food) displaceClaimant(state, claims, food.id, entity.id)
@@ -340,6 +360,7 @@ function eatingSystem(state: GameState): void {
     if (distance > reach) continue
 
     const nutrition = food.food.nutrition
+    recordMeal(state, food.food.manual)
     removeEntity(state, food)
     body.hunger = Math.max(0, body.hunger - TUNING.hungerRelievedPerNutrition * nutrition)
     const headroom = Math.max(0, 1 - body.weight / entity.genome.maxWeight)
@@ -412,7 +433,7 @@ function healthSystem(state: GameState, dt: number, mode: SimulationMode): void 
     const body = entity.physiology
     const distressed =
       body.hunger > TUNING.distressHungerAbove || body.sickness > TUNING.distressSicknessAbove
-    const critical = body.hunger >= 0.999 || body.sickness >= 0.75
+    const critical = body.hunger >= 0.999 || body.sickness >= GRAVELY_ILL_SICKNESS
 
     if (distressed && (body.lastWarningAt === undefined || state.time - body.lastWarningAt > 45)) {
       body.lastWarningAt = state.time
@@ -649,33 +670,57 @@ function breedingSystem(state: GameState): void {
  * instead would leave a fish waiting indefinitely whenever the food already
  * in the water is all spoken for by others.
  *
- * Every moment a hungry fish is left waiting is recorded as the shortfall
- * that eventually reveals the next feeder tier.
+ * Strain is a stricter question than "is anyone peckish". A working feeder
+ * always has someone above `feederFeedsAbove` — that is the population it is
+ * serving, not a failure — so strain is only counted for a resident left
+ * genuinely hungry (`feederStrainHungerAbove`) with nothing earmarked, and
+ * is given back while the feeder is coping. A comfortable tank therefore
+ * sits at zero forever instead of eventually revealing an upgrade it does
+ * not need.
  */
 function feederSystem(state: GameState, dt: number): void {
   const profile = feederProfile(state.equipment.feeder)
   if (!profile) return
 
-  const waiting = livingFish(state).filter((entity) => {
-    if (entity.physiology.hunger <= TUNING.feederFeedsAbove) return false
-    const activity = entity.behaviour.activity
-    if (activity.kind !== 'seekFood') return true
-    const target = state.byId.get(activity.foodId)
-    return !target?.food || target.food.spoiled
-  })
-  const behind = waiting.length > 0
-  if (behind) state.care.feederShortfallSeconds += dt
+  /** Fish this hungry, able to come for food, with no reachable morsel
+   * already spoken for. A gravely ill resident ignores food until it is
+   * actually starving (see steerFish), so dropping for one only buries the
+   * tank in pellets that spoil where they land — automation must not become
+   * a pollution generator. */
+  const unfedAbove = (hunger: number) =>
+    livingFish(state).filter((entity) => {
+      if (entity.physiology.hunger <= hunger) return false
+      if (!willComeForFood(entity.physiology)) return false
+      const activity = entity.behaviour.activity
+      // Courtship deliberately outranks feeding until the dance ends. Food
+      // dropped during it is ignored, so neither feeder output nor feeder
+      // strain may treat a courting resident as waiting for a morsel.
+      if (activity.kind === 'court') return false
+      if (activity.kind !== 'seekFood') return true
+      const target = state.byId.get(activity.foodId)
+      return !target?.food || target.food.spoiled
+    })
 
-  if (!behind || state.coins < TUNING.pelletCost) return
+  const behind = unfedAbove(TUNING.feederStrainHungerAbove)
+  state.care.feederStrainSeconds =
+    behind.length > 0
+      ? state.care.feederStrainSeconds + dt
+      : Math.max(0, state.care.feederStrainSeconds - TUNING.feederStrainDecayPerSecond * dt)
+
+  const waiting = unfedAbove(TUNING.feederFeedsAbove)
+  const unitCost = foodProfile(state.equipment.food).unitCost
+  if (waiting.length === 0 || state.coins < unitCost) return
   if (state.time - state.feederLastDropAt < profile.dropSeconds) return
-  state.coins -= TUNING.pelletCost
+  state.coins -= unitCost
   state.feederLastDropAt = state.time
   // Drop from whichever spout is nearest the hungriest waiting fish, so food
   // arrives where it is needed instead of always in the same corner.
   const neediest = waiting.reduce((worst, entity) =>
     entity.physiology.hunger > worst.physiology.hunger ? entity : worst,
   )
-  spawnPellet(state, feederDropX(profile, neediest.position.x, tankBounds(state).width))
+  spawnPellet(state, feederDropX(profile, neediest.position.x, tankBounds(state).width), {
+    manual: false,
+  })
   state.feederDropCount += 1
 }
 
@@ -710,10 +755,15 @@ function economySystem(state: GameState, dt: number): void {
  */
 function developmentSystem(state: GameState, dt: number): void {
   // Sustained murk is one of the two routes to filtration; record it before
-  // anything else this tick can clear the water.
-  if (maxPollution(state.water) >= TUNING.pollutionNoticedAt) {
-    state.care.pollutedSeconds += dt
-  }
+  // anything else this tick can clear the water. The quantity measured is
+  // the average the HUD's quality meter shows — one dropping pinning a
+  // single cell is not a tank the player can see greening up, and a trigger
+  // that fired on it would contradict the meter beside it.
+  state.care.murkySeconds =
+    averagePollution(state.water) >= TUNING.filterMurkAtLeast ? state.care.murkySeconds + dt : 0
+  // An idle tank's meal history should empty on its own, not sit at whatever
+  // it held when feeding stopped.
+  pruneMeals(state)
 
   if (!hasDiscovered(state, 'growthNoticed')) {
     const grown = livingFish(state).find(
@@ -750,29 +800,50 @@ function developmentSystem(state: GameState, dt: number): void {
     recordJournal(state, 'development', 'The water took on its first green tinge.')
   }
 
-  // Richer food is revealed by feeding workload: another mouth to feed, or
-  // one fish grown far past what a pinch of flakes can satisfy.
-  if (!hasDiscovered(state, 'heartyFoodOffered') && nextFoodStage(state.equipment.food)) {
-    const residents = livingFish(state)
-    const totalWeight = residents.reduce((sum, entity) => sum + entity.physiology.weight, 0)
-    if (
-      residents.length >= TUNING.heartyFoodAtResidents ||
-      totalWeight >= TUNING.heartyFoodAtTankGrams
-    ) {
+  // Each rung of the food ladder is revealed by the workload the rung below
+  // it created: morsels the tank actually ate in the recent past, in a tank
+  // grown enough to be worth the step up. Food dropped and missed cost a
+  // coin but proves nothing about feeding pressure.
+  if (state.equipment.food === 'flake' && !hasDiscovered(state, 'crumbFoodOffered')) {
+    const busy =
+      mealsEatenSince(state, TUNING.crumbFoodWindowSeconds) >= TUNING.crumbFoodEatenInWindow
+    if (busy && tankGrams(state) >= TUNING.crumbFoodAtTankGrams) {
+      discover(state, 'crumbFoodOffered')
+      emit(state, {
+        type: 'toast',
+        tone: 'development',
+        message:
+          'Your flakes are gone before they reach the sand, and there is always another mouthful wanted. The shop keeps a coarser crumb for tanks that eat like this.',
+      })
+      recordJournal(state, 'development', 'The shop began offering crumbs.')
+    }
+  }
+
+  if (state.equipment.food === 'crumb' && !hasDiscovered(state, 'heartyFoodOffered')) {
+    const busy =
+      mealsEatenSince(state, TUNING.heartyFoodWindowSeconds) >= TUNING.heartyFoodEatenInWindow
+    const grown =
+      tankGrams(state) >= TUNING.heartyFoodAtTankGrams ||
+      residentCount(state) >= TUNING.heartyFoodAtResidents
+    if (busy && grown) {
       discover(state, 'heartyFoodOffered')
       emit(state, {
         type: 'toast',
         tone: 'development',
         message:
-          'Mealtimes are getting busy — flakes vanish as fast as you can pinch them in. The shop has taken to stocking a heartier pellet.',
+          'Mealtimes are getting busy — crumbs vanish as fast as you can pinch them in. The shop has taken to stocking a heartier pellet.',
       })
       recordJournal(state, 'development', 'The shop began offering hearty pellets.')
     }
   }
 
+  // The drip feeder answers hand-feeding that has become a chore: enough
+  // mouths, and a stretch of morsels the player dropped personally. A tank
+  // already fed by equipment never advances this.
   if (
     !hasDiscovered(state, 'dripFeederOffered') &&
-    residentCount(state) >= TUNING.feederOfferedAtResidents
+    residentCount(state) >= TUNING.feederOfferedAtResidents &&
+    handFedMealsSince(state, TUNING.feederManualWindowSeconds) >= TUNING.feederManualEatenInWindow
   ) {
     discover(state, 'dripFeederOffered')
     emit(state, {
@@ -784,7 +855,7 @@ function developmentSystem(state: GameState, dt: number): void {
   }
 
   // Each feeder tier is revealed by the previous one visibly struggling.
-  if (state.care.feederShortfallSeconds >= TUNING.feederStrainForNextTier) {
+  if (state.care.feederStrainSeconds >= TUNING.feederStrainForNextTier) {
     const upgrade = nextFeederStage(state.equipment.feeder)
     if (upgrade === 'twin' && discover(state, 'twinHopperOffered')) {
       emit(state, {
@@ -812,8 +883,8 @@ function developmentSystem(state: GameState, dt: number): void {
     state.equipment.siphon &&
     nextFilterStage(state.equipment.filter)
   ) {
-    const cleanedOften = state.care.siphonUses >= TUNING.filterOfferedAfterSiphonUses
-    const murkPersists = state.care.pollutedSeconds >= TUNING.filterOfferedAfterPollutedSeconds
+    const cleanedOften = state.care.cleaningCredits >= TUNING.filterOfferedAfterCleanings
+    const murkPersists = state.care.murkySeconds >= TUNING.filterOfferedAfterMurkySeconds
     if ((cleanedOften || murkPersists) && discover(state, 'spongeFilterOffered')) {
       emit(state, {
         type: 'toast',

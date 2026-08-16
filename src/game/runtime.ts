@@ -60,7 +60,7 @@ export const EMPTY_VIEW: GameView = {
 export type TankPresenter = {
   draw(state: GameReadModel, options: DrawOptions): void
   /** Cosmetic confirmations that a feed/siphon action landed. */
-  notifyFeed(x: number): void
+  notifyFeed(x: number, cost: number): void
   notifySiphon(x: number, y: number): void
   resetTransient(): void
   dispose(): void
@@ -302,7 +302,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     if (!sim || paused) return false
     const result = sim.dropFood(x)
     if (result.ok) {
-      presenter?.notifyFeed(x)
+      presenter?.notifyFeed(x, result.value)
       return true
     }
     // Game over is announced by its own overlay; only poverty warrants a

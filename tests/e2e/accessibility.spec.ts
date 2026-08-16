@@ -53,7 +53,7 @@ test('a keyboard player can clean the sand with the siphon', async ({ page }) =>
   }
 
   await expect.poll(async () => (await snapshot(page)).waste.length).toBeLessThan(before)
-  expect((await snapshot(page)).care.siphonUses).toBeGreaterThan(0)
+  expect((await snapshot(page)).care.cleaningCredits).toBeGreaterThan(0)
 })
 
 test('a keyboard player can move between residents and inspect one', async ({ page }) => {

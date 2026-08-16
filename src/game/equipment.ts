@@ -13,7 +13,7 @@ import { TANK, type TankBounds } from './model'
 export type FeederStage = 'none' | 'drip' | 'twin' | 'rotary'
 export type FilterStage = 'none' | 'sponge'
 export type HabitatStage = 'starter' | 'expanded'
-export type FoodStage = 'flake' | 'pellet'
+export type FoodStage = 'flake' | 'crumb' | 'pellet'
 
 export type Equipment = {
   siphon: boolean
@@ -34,22 +34,33 @@ export type FoodProfile = {
   nutrition: number
   /** One-time shop cost of switching the tank to this food. */
   cost: number
+  /** What every drop of it costs — by hand or from a feeder. Richer food is
+   * dearer per morsel, so feeding stays a real operating expense even once
+   * automation is doing the dropping. */
+  unitCost: number
 }
 
 /**
- * Food is the opening's pacing valve. Starter flakes are deliberately weak:
- * a peckish fish is satisfied for seconds rather than half a minute, so a
- * fresh tank is a run of small feed-and-eat moments. Hearty pellets restore
- * the one-drop-per-meal economy once the tank has real feeding workload —
- * every feeder capacity rating (FEEDER_PROFILES) assumes them.
+ * Food is the opening's pacing valve, and its rungs are the sawtooth.
+ *
+ * Starter flakes are deliberately tiny: a peckish fish is satisfied for
+ * seconds rather than half a minute, so a fresh tank is a run of small
+ * feed-and-eat moments rather than one pellet and a wait. Crumbs are the
+ * first relief — roughly a third of the feeding frequency for twice the coin
+ * — and hearty pellets restore the one-drop-per-meal economy once the tank
+ * has real workload. Every feeder capacity rating (FEEDER_PROFILES) assumes
+ * pellets.
  */
 export const FOOD_PROFILES: Record<FoodStage, FoodProfile> = {
-  flake: { nutrition: 0.4, cost: 0 },
-  pellet: { nutrition: 1, cost: 80 },
+  flake: { nutrition: 0.15, cost: 0, unitCost: 1 },
+  crumb: { nutrition: 0.4, cost: 30, unitCost: 2 },
+  pellet: { nutrition: 1, cost: 80, unitCost: 4 },
 }
 
 export function nextFoodStage(stage: FoodStage): Exclude<FoodStage, 'flake'> | undefined {
-  return stage === 'flake' ? 'pellet' : undefined
+  if (stage === 'flake') return 'crumb'
+  if (stage === 'crumb') return 'pellet'
+  return undefined
 }
 
 export function foodProfile(stage: FoodStage): FoodProfile {
@@ -114,13 +125,18 @@ export type FeederProfile = {
  * pellet relieves `hungerRelievedPerNutrition`, so one resident needs a
  * pellet roughly every 11 seconds. The drop intervals below are chosen to
  * cover their stated populations with a small margin — on hearty pellets;
- * a feeder still running starter flakes visibly strains sooner, which only
+ * a feeder still running crumbs or flakes visibly strains sooner, which only
  * hurries the shop's next offer along.
+ *
+ * `supportsResidents` is the *measured* safe band, not an aspiration: each
+ * tier is asserted to hold that many mature residents below distress for ten
+ * simulated minutes (tests/progression.test.ts). The rotary already covers
+ * the expanded habitat, which is why the ladder stops there.
  */
 export const FEEDER_PROFILES: Record<Exclude<FeederStage, 'none'>, FeederProfile> = {
-  drip: { dropSeconds: 3, cost: 250, supportsResidents: 3, spouts: 1 },
-  twin: { dropSeconds: 1.5, cost: 650, supportsResidents: 8, spouts: 2 },
-  rotary: { dropSeconds: 0.75, cost: 1_500, supportsResidents: 12, spouts: 4 },
+  drip: { dropSeconds: 3, cost: 250, supportsResidents: 4, spouts: 1 },
+  twin: { dropSeconds: 1.5, cost: 650, supportsResidents: 12, spouts: 2 },
+  rotary: { dropSeconds: 0.75, cost: 1_500, supportsResidents: 20, spouts: 4 },
 }
 
 /**

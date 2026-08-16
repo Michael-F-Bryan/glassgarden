@@ -4,6 +4,7 @@ import {
   capacityFor,
   FEEDER_PROFILES,
   FILTER_PROFILES,
+  FOOD_PROFILES,
   HABITAT_PROFILES,
   tankBoundsFor,
   type FeederStage,
@@ -35,6 +36,9 @@ function stockedTank(options: {
   residents: number
   feeder: FeederStage
   coins?: number
+  /** Give the tank the habitat and filtration a population that size would
+   * actually have in play — see the capacity suite. */
+  keptProperly?: boolean
 }): { state: GameState; sim: GameSim } {
   const state = createState(options.seed)
   for (let i = 0; i < options.residents; i += 1) {
@@ -46,6 +50,10 @@ function stockedTank(options: {
       hunger: 0.3,
     })
   }
+  if (options.keptProperly) {
+    if (options.residents > capacityFor('starter')) state.equipment.habitat = 'expanded'
+    state.equipment.filter = 'sponge'
+  }
   state.equipment.feeder = options.feeder
   // Mature tanks are past the starter flakes; every feeder capacity rating
   // (FEEDER_PROFILES) assumes hearty pellets.
@@ -53,6 +61,19 @@ function stockedTank(options: {
   state.coins = options.coins ?? 100_000
   state.developments.add('fedOnce')
   return { state, sim: new GameSim(state) }
+}
+
+/**
+ * A stretch of hand-feeding already behind the player. The drip feeder
+ * answers hand-fed workload, so tests about what happens *after* that offer
+ * start from a tank that has plainly done the feeding, rather than replaying
+ * a minute of it — the feeding itself is proved in
+ * tests/opening-progression.test.ts.
+ */
+function alreadyHandFed(state: GameState): void {
+  state.care.meals = [
+    { at: state.time, eaten: TUNING.feederManualEatenInWindow, manual: TUNING.feederManualEatenInWindow },
+  ]
 }
 
 /** Feeder capacity is about feeding, not population growth: hold breeding
@@ -69,6 +90,12 @@ function hungers(state: GameState): number[] {
 
 describe('feeder capacity', () => {
   // The population each tier is sold as supporting must actually stay fed.
+  //
+  // This is a question about feeding throughput, so the tank is kept the way
+  // a tank that size really is: a habitat big enough to hold them, and a
+  // filter working the water. Left to rot instead, a fully-fed mature tank
+  // greens up until its residents are too ill to chase food — real pressure,
+  // and the sponge filter's whole purpose, but not a measure of the feeder.
   const cases: { stage: Exclude<FeederStage, 'none'>; residents: number }[] = [
     { stage: 'drip', residents: FEEDER_PROFILES.drip.supportsResidents },
     { stage: 'twin', residents: FEEDER_PROFILES.twin.supportsResidents },
@@ -77,7 +104,12 @@ describe('feeder capacity', () => {
 
   for (const { stage, residents } of cases) {
     test(`the ${stage} feeder holds ${residents} mature residents below distress`, () => {
-      const { state, sim } = stockedTank({ seed: 700 + residents, residents, feeder: stage })
+      const { state, sim } = stockedTank({
+        seed: 700 + residents,
+        residents,
+        feeder: stage,
+        keptProperly: true,
+      })
       withoutBreeding(state)
 
       // Let the tank reach its feeding rhythm, then watch a long steady run:
@@ -96,14 +128,19 @@ describe('feeder capacity', () => {
 
   test('a feeder one tier too small lets its overpopulated tank fall into distress', () => {
     const overloaded = FEEDER_PROFILES.twin.supportsResidents
-    const { state, sim } = stockedTank({ seed: 701, residents: overloaded, feeder: 'drip' })
+    const { state, sim } = stockedTank({
+      seed: 701,
+      residents: overloaded,
+      feeder: 'drip',
+      keptProperly: true,
+    })
     withoutBreeding(state)
 
     sim.advanceElapsed(600, 'visible')
 
     // This is the pressure the next tier is meant to relieve.
     expect(Math.max(...hungers(state))).toBeGreaterThan(TUNING.distressHungerAbove)
-    expect(state.care.feederShortfallSeconds).toBeGreaterThan(0)
+    expect(state.care.feederStrainSeconds).toBeGreaterThan(0)
   })
 })
 
@@ -123,14 +160,14 @@ describe('feeders stay a coin sink and do not scatter pellets', () => {
     const dropped = [...state.world.with('food')].length - pelletsBefore
 
     // The same tank without a feeder only earns over that tick; the feeder
-    // tank additionally pays for its pellet.
+    // tank additionally pays for its pellet, at the current food's price.
     const control = stockedTank({ seed: 710, residents: 4, feeder: 'none', coins: 500 })
     withoutBreeding(control.state)
     for (const entity of control.state.world.with('physiology')) entity.physiology.hunger = 0.9
     control.sim.advanceElapsed(TUNING.simTickSeconds, 'visible')
 
     expect(dropped).toBe(1)
-    expect(control.state.coins - state.coins).toBeCloseTo(TUNING.pelletCost, 6)
+    expect(control.state.coins - state.coins).toBeCloseTo(FOOD_PROFILES.pellet.unitCost, 6)
     expect(state.coins).toBeLessThan(before)
   })
 
@@ -184,8 +221,9 @@ describe('feeders stay a coin sink and do not scatter pellets', () => {
 })
 
 describe('hidden feeder developments', () => {
-  test('the drip feeder is offered once the tank holds three residents', () => {
+  test('the drip feeder is offered once hand-feeding three residents is a chore', () => {
     const { state, sim } = stockedTank({ seed: 720, residents: 3, feeder: 'none' })
+    alreadyHandFed(state)
 
     const { notifications } = sim.advanceElapsed(1, 'visible')
 
@@ -196,7 +234,12 @@ describe('hidden feeder developments', () => {
 
   test('a drip feeder falling behind reveals the twin hopper, once, without naming numbers', () => {
     const overloaded = FEEDER_PROFILES.twin.supportsResidents
-    const { state, sim } = stockedTank({ seed: 721, residents: overloaded, feeder: 'drip' })
+    const { state, sim } = stockedTank({
+      seed: 721,
+      residents: overloaded,
+      feeder: 'drip',
+      keptProperly: true,
+    })
     state.developments.add('dripFeederOffered')
 
     const first = sim.advanceElapsed(400, 'visible')
@@ -213,8 +256,15 @@ describe('hidden feeder developments', () => {
   })
 
   test('installing a feeder resets the strain so the next tier must be earned again', () => {
-    const overloaded = FEEDER_PROFILES.rotary.supportsResidents
-    const { state, sim } = stockedTank({ seed: 722, residents: overloaded, feeder: 'drip' })
+    // Comfortably past the twin hopper's rating, so both tiers in turn fall
+    // behind on feeding alone — the tank itself stays well kept.
+    const overloaded = FEEDER_PROFILES.twin.supportsResidents + 2
+    const { state, sim } = stockedTank({
+      seed: 722,
+      residents: overloaded,
+      feeder: 'drip',
+      keptProperly: true,
+    })
     state.developments.add('dripFeederOffered')
     sim.advanceElapsed(400, 'visible')
     expect(state.developments.has('twinHopperOffered')).toBe(true)
@@ -222,7 +272,7 @@ describe('hidden feeder developments', () => {
     expect(sim.buy('twinHopper').ok).toBe(true)
 
     expect(state.equipment.feeder).toBe('twin')
-    expect(state.care.feederShortfallSeconds).toBe(0)
+    expect(state.care.feederStrainSeconds).toBe(0)
     expect(state.developments.has('rotaryFeederOffered')).toBe(false)
 
     // The twin hopper must fall behind on its own before the rotary appears.
@@ -256,17 +306,28 @@ describe('hidden feeder developments', () => {
 })
 
 describe('filtration', () => {
-  test('repeated siphoning reveals the sponge filter, once', () => {
+  test('repeated real cleaning reveals the sponge filter, once', () => {
     const { state, sim } = stockedTank({ seed: 730, residents: 2, feeder: 'none' })
     state.equipment.siphon = true
 
-    for (let i = 0; i < TUNING.filterOfferedAfterSiphonUses; i += 1) {
-      sim.siphonAt(400, TANK.sandTop - 10)
+    // Each sweep lifts a dropping from its own patch of sand: work a keeper
+    // would recognise, which is the only kind that counts. The offer lands
+    // mid-round, so every notice along the way is collected.
+    const announced: string[] = []
+    for (let i = 0; i < TUNING.filterOfferedAfterCleanings; i += 1) {
+      const x = 60 + i * 130
+      addEntity(state, {
+        position: { x, y: TANK.sandTop - 6 },
+        velocity: { x: 0, y: 0 },
+        waste: { size: 2, restingOnSand: true },
+      })
+      sim.siphonAt(x, TANK.sandTop - 6)
+      const step = sim.advanceElapsed(TUNING.siphonCreditCooldownSeconds, 'visible')
+      announced.push(...step.notifications.map((n) => n.message))
     }
-    const first = sim.advanceElapsed(1, 'visible')
 
     expect(state.developments.has('spongeFilterOffered')).toBe(true)
-    expect(first.notifications.some((n) => n.message.includes('sponge filter'))).toBe(true)
+    expect(announced.some((message) => message.includes('sponge filter'))).toBe(true)
     expect(sim.shopOffers().map((offer) => offer.id)).toContain('spongeFilter')
 
     const second = sim.advanceElapsed(1, 'visible')
@@ -277,7 +338,7 @@ describe('filtration', () => {
     const { state, sim } = stockedTank({ seed: 736, residents: 2, feeder: 'none' })
     state.water.cells.fill(0.9)
 
-    sim.advanceElapsed(TUNING.filterOfferedAfterPollutedSeconds + 60, 'visible')
+    sim.advanceElapsed(TUNING.filterOfferedAfterMurkySeconds + 60, 'visible')
 
     expect(state.equipment.siphon).toBe(false)
     expect(state.developments.has('spongeFilterOffered')).toBe(false)
@@ -299,10 +360,10 @@ describe('filtration', () => {
       })
     }
 
-    sim.advanceElapsed(TUNING.filterOfferedAfterPollutedSeconds + 120, 'visible')
+    sim.advanceElapsed(TUNING.filterOfferedAfterMurkySeconds + 120, 'visible')
 
-    expect(state.care.siphonUses).toBe(0)
-    expect(state.care.pollutedSeconds).toBeGreaterThan(TUNING.filterOfferedAfterPollutedSeconds)
+    expect(state.care.cleaningCredits).toBe(0)
+    expect(state.care.murkySeconds).toBeGreaterThan(TUNING.filterOfferedAfterMurkySeconds)
     expect(state.developments.has('spongeFilterOffered')).toBe(true)
   })
 
@@ -385,6 +446,7 @@ describe('filtration', () => {
 describe('developments are durable across a reload', () => {
   test('a discovered development does not replay after save and load', () => {
     const { state, sim } = stockedTank({ seed: 740, residents: 3, feeder: 'none' })
+    alreadyHandFed(state)
     const first = sim.advanceElapsed(1, 'visible')
     expect(first.notifications.some((n) => n.message.includes('drip feeder'))).toBe(true)
 
@@ -419,7 +481,7 @@ describe('developments are durable across a reload', () => {
       habitat: 'starter',
       food: 'pellet',
     })
-    expect(resumed.read.care.siphonUses).toBe(state.care.siphonUses)
+    expect(resumed.read.care.cleaningCredits).toBe(state.care.cleaningCredits)
     expect(resumed.toSave(1_000)).toEqual(saved)
   })
 })

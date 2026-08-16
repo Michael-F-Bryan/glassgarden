@@ -176,6 +176,7 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
       'pollutionNoticed',
       'siphonOffered',
       'fishOffered',
+      'crumbFoodOffered',
       'heartyFoodOffered',
       'dripFeederOffered',
     ] as const) {
@@ -212,6 +213,7 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
       'siphonOffered',
       'fishOffered',
       'eggSeen',
+      'crumbFoodOffered',
       'heartyFoodOffered',
       'dripFeederOffered',
       'twinHopperOffered',

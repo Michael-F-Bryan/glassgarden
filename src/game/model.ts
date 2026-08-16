@@ -128,6 +128,10 @@ export type Food = {
   spoilsAt: number
   spoiled: boolean
   restingOnSand: boolean
+  /** True when the player dropped this morsel by hand. Hand-feeding becoming
+   * a chore is what reveals the drip feeder, so a feeder's own drops must
+   * never advance that evidence. */
+  manual: boolean
 }
 
 export type Waste = {
@@ -228,6 +232,7 @@ export type DevelopmentId =
   | 'habitatExpansionOffered'
   | 'bondSeen'
   | 'heartyFoodOffered'
+  | 'crumbFoodOffered'
 
 export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'fedOnce',
@@ -243,7 +248,22 @@ export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'habitatExpansionOffered',
   'bondSeen',
   'heartyFoodOffered',
+  'crumbFoodOffered',
 ]
+
+/** Stable V5 wire/runtime bound. Exact meal batches normally number in the
+ * hundreds; this leaves ample headroom while preventing an unbounded save. */
+export const MEAL_HISTORY_BATCH_LIMIT = 4_096
+
+/** A slice of one simulation tick, counting morsels the tank actually ate. */
+export type MealBucket = {
+  /** Exact sim time at which this batch of morsels was eaten. */
+  at: number
+  /** Morsels eaten during the tick, whatever put them in the water. */
+  eaten: number
+  /** Of those, the ones the player dropped by hand. */
+  manual: number
+}
 
 /**
  * The evidence hidden developments actually consult — nothing speculative.
@@ -251,27 +271,47 @@ export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
  * explained by what they were doing rather than by a formula on screen.
  */
 export type CareHistory = {
-  /** Sim seconds the current feeder spent unable to keep up with demand.
-   * Reset when a faster feeder is installed, so each tier is judged on its
-   * own strain rather than inheriting the last one's. */
-  feederShortfallSeconds: number
-  /** How many times the player has swept the siphon. */
-  siphonUses: number
-  /** Sim seconds the tank has spent above the pollution the player noticed. */
-  pollutedSeconds: number
+  /**
+   * Net sim seconds the current feeder has spent behind its tank. It climbs
+   * only while a resident is genuinely hungry with nothing earmarked for it
+   * (TUNING.feederStrainHungerAbove) and decays while the feeder is coping,
+   * so a comfortable tank never reveals an upgrade merely by running. Spent
+   * when a feeder is installed, so each tier is judged on its own strain.
+   */
+  feederStrainSeconds: number
+  /** Siphon sweeps that did real work — lifted debris or visibly cleared
+   * local murk — rate-limited per water cell so a held gesture cannot farm
+   * them. Sweeping clean sand credits nothing. */
+  cleaningCredits: number
+  /** Continuous sim seconds the tank's *visible* average murk has stayed at
+   * or above TUNING.filterMurkAtLeast — the same quantity the HUD meter
+   * shows. Resets the moment the water reads clear again. */
+  murkySeconds: number
   /** Continuous sim seconds the tank has been at capacity with every
    * resident comfortable and the water clean — the evidence that reveals the
    * habitat expansion. Resets whenever the streak breaks. */
   stableFullSeconds: number
+  /** Rolling record of eaten morsels, oldest first, pruned to
+   * TUNING.mealHistorySeconds. Food dropped but missed, spoiled, or siphoned
+   * away never appears here. */
+  meals: MealBucket[]
 }
 
 export function createCareHistory(): CareHistory {
-  return { feederShortfallSeconds: 0, siphonUses: 0, pollutedSeconds: 0, stableFullSeconds: 0 }
+  return {
+    feederStrainSeconds: 0,
+    cleaningCredits: 0,
+    murkySeconds: 0,
+    stableFullSeconds: 0,
+    meals: [],
+  }
 }
 
 export const TUNING = {
   startingCoins: 30,
-  pelletCost: 1,
+  /** What a drop costs belongs to the food, not to the game: see
+   * FOOD_PROFILES[stage].unitCost (equipment.ts). Richer morsels cost more,
+   * so feeding stays a visible operating expense as a tank grows. */
   siphonCost: 60,
   /** Feeders drop a pellet for a fish this hungry. Set well below distress:
    * a fish still has to swim to the pellet, and hunger keeps climbing while
@@ -296,8 +336,9 @@ export const TUNING = {
   growthPerNutrition: 1.15,
   starterMaxWeight: 26,
   starterWeight: 1.2,
-  /** Peckish enough to chase the tutorial pellet, far from a crisis. */
-  starterHunger: 0.35,
+  /** Peckish enough for a short opening run of mouthfuls before appetite
+   * lapses, and still nowhere near a crisis. */
+  starterHunger: 0.42,
   babyWeight: 1.0,
   /** Hunger accumulated per second by a full-grown fish (smaller fish less).
    * Recently fed fish (hunger < satiationBelow) digest at satiationFactor. */
@@ -305,18 +346,22 @@ export const TUNING = {
   satiationBelow: 0.5,
   satiationFactor: 0.45,
   hungerRelievedPerNutrition: 0.38,
-  seekFoodAbove: 0.25,
+  /** Against a starter flake's small mouthful, a higher threshold ends the
+   * opening feeding episode after two bites; at 0.20 those flakes form a run
+   * of care rather than isolated nibbles. */
+  seekFoodAbove: 0.2,
   /**
    * digesting >= this spawns a dropping. Measured before tuning (see
    * tests/e2e/debugging.spec.ts "mature full tank"): at one dropping per two
    * pellets and a ~15-minute breakdown, a fed twelve-resident tank settled at
    * ~200 standing droppings — an unreadable carpet that clogged the sponge
-   * filter to ~18% of its rated clearance and made siphoning futile. Each
-   * dropping now stands for four pellets' worth of digestion and leaches
-   * proportionally harder (wastePollutionPerSecond below), so the ecological
-   * pressure survives while the standing count stays legible.
+   * filter to ~18% of its rated clearance and made siphoning futile. Two
+   * pellets' worth of digestion per dropping puts the first real debris near
+   * the opening instead of several minutes into it; the faster breakdown
+   * below (wasteBreakdownPerSecond) keeps the mature standing count inside
+   * the same legible band.
    */
-  digestionPerDropping: 4,
+  digestionPerDropping: 2,
 
   wastePollutionPerSecond: 0.03, // per unit of waste size
   spoiledFoodPollutionPerSecond: 0.008,
@@ -326,13 +371,20 @@ export const TUNING = {
   sicknessPerSecondAtFullPollution: 1 / 45,
   sicknessRecoveryPerSecond: 1 / 90,
   /** Debris self-degrades (after leaching pollution) so entities stay bounded.
-   * Paired with digestionPerDropping above: ~6-minute breakdown keeps a fed
-   * twelve-resident tank near ~40 standing droppings — visibly worth
-   * siphoning, never a carpet. */
-  wasteBreakdownPerSecond: 0.0045,
+   * Paired with digestionPerDropping above: droppings now appear twice as
+   * often, and breaking down in ~3.5 minutes rather than ~6 holds a fed
+   * twelve-resident tank near the same ~50 standing droppings — visibly
+   * worth siphoning, never a carpet. */
+  wasteBreakdownPerSecond: 0.008,
   spoiledFoodLingerSeconds: 180,
   siphonRadius: 70,
   siphonPollutionClear: 0.35, // fraction of local cell pollution removed per use
+  /** A sweep earns a cleaning credit only when it did something: lifted
+   * debris, or pulled at least this much pollution out of the local cell. */
+  siphonCreditPollutionDrop: 0.05,
+  /** …and at most one credit per water cell in this many sim seconds, so
+   * holding the siphon still — or scrubbing a tiny loop — cannot farm it. */
+  siphonCreditCooldownSeconds: 1.5,
 
   distressHungerAbove: 0.85,
   distressSicknessAbove: 0.6,
@@ -362,20 +414,42 @@ export const TUNING = {
   growthNoticedAtMultiple: 2, // starter weight vs its hatch weight
   pollutionNoticedAt: 0.18,
   fishUnlockWeight: 8,
-  /** Hearty pellets are revealed by feeding workload: either a second mouth
-   * to feed, or one fish grown big enough that flakes barely register. */
-  heartyFoodAtResidents: 2,
-  heartyFoodAtTankGrams: 14,
-  /** The drip feeder is offered once the tank holds this many residents. */
+
+  /** The longest workload window — the drip feeder's — sets retention. */
+  mealHistorySeconds: 480,
+  /** Crumbs answer a stretch of steady hand-feeding in a tank with enough
+   * mass to be worth the step up; the grams gate keeps a newly arrived fry
+   * from qualifying on the strength of someone else's meals. */
+  crumbFoodWindowSeconds: 360,
+  crumbFoodEatenInWindow: 40,
+  crumbFoodAtTankGrams: 6,
+  /** Hearty pellets need the same busy mealtimes plus a tank that has really
+   * grown: heavy residents, or simply enough of them. */
+  heartyFoodWindowSeconds: 360,
+  heartyFoodEatenInWindow: 40,
+  heartyFoodAtTankGrams: 40,
+  heartyFoodAtResidents: 4,
+  /** The drip feeder answers hand-feeding that has become a chore: several
+   * residents, and this many morsels the player dropped *by hand* and the
+   * tank actually ate inside the window. */
   feederOfferedAtResidents: 3,
-  /** Sim seconds of a feeder failing to keep up before the next tier is
-   * offered. Measured per tier: installing a feeder resets the count. */
-  feederStrainForNextTier: 75,
-  /** Either repeated manual cleaning or long-running murk reveals the filter,
-   * once the player owns a siphon. The murk route is deliberately slow: it
-   * stands for a tank that keeps greening up despite maintenance. */
-  filterOfferedAfterSiphonUses: 10,
-  filterOfferedAfterPollutedSeconds: 900,
+  feederManualWindowSeconds: 480,
+  feederManualEatenInWindow: 60,
+  /** A resident this hungry with nothing earmarked for it is one the feeder
+   * is failing, not one it is about to serve. */
+  feederStrainHungerAbove: 0.65,
+  /** Strain given back per sim second while nobody is behind, so a coping
+   * feeder trends to zero instead of eventually crossing on uptime alone. */
+  feederStrainDecayPerSecond: 0.5,
+  /** Net sim seconds behind before the next tier is offered. */
+  feederStrainForNextTier: 45,
+  /** Either real cleaning work or long-running *visible* murk reveals the
+   * filter, once the player owns a siphon. Both routes are measured the way
+   * the player experiences them: sweeps that removed something, and the
+   * average murk the HUD actually shows. */
+  filterOfferedAfterCleanings: 8,
+  filterMurkAtLeast: 0.14,
+  filterOfferedAfterMurkySeconds: 420,
   /** The habitat expansion is revealed by a tank at capacity that stays
    * comfortable this long without interruption: no distressed resident and
    * the overall murk below expansionMaxMurk — a standard a full tank only

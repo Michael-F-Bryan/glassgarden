@@ -78,9 +78,9 @@ describe('development controls', () => {
 
     tools.simulateAway(3 * 60 * 60)
     const before = tools.snapshot().fish[0]
-    // Starter flakes are deliberately small: a rescue is a few pinches in a
-    // row, not one filling pellet.
-    for (let i = 0; i < 3; i += 1) {
+    // Starter flakes are deliberately tiny: a rescue is a run of pinches in
+    // a row, not one filling pellet.
+    for (let i = 0; i < 10; i += 1) {
       expect(sim.dropFood(before.x + 50).ok).toBe(true)
     }
 

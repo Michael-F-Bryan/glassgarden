@@ -8,7 +8,7 @@
  */
 import { z } from 'zod'
 
-import { DEVELOPMENT_IDS, type DevelopmentId } from './model'
+import { DEVELOPMENT_IDS, MEAL_HISTORY_BATCH_LIMIT, type DevelopmentId } from './model'
 import type { SaveFile } from './save'
 import { WATER_COLS, WATER_ROWS } from './water'
 
@@ -70,6 +70,10 @@ const FoodSchema = z.object({
   spoilsAt: finite(),
   spoiled: z.boolean(),
   restingOnSand: z.boolean(),
+  /** Legacy-optional: absent before hand-dropped morsels were told apart
+   * from a feeder's. A morsel already in flight in an older save cannot be
+   * attributed, so it loads as automated and advances no chore evidence. */
+  manual: z.boolean().optional(),
 })
 
 const WasteSchema = z.object({
@@ -236,6 +240,99 @@ export const SaveV4Schema = SaveV3Schema.omit({
 export type SaveFileV4 = z.infer<typeof SaveV4Schema>
 
 /**
+ * V5 opened the food ladder to three rungs and replaced the care counters
+ * that measured the wrong thing: raw siphon pulses became credited cleans,
+ * worst-cell pollution time became the visible average's, and the feeder's
+ * ever-climbing uptime counter became net strain. The rolling meal history
+ * is new state entirely.
+ */
+const EquipmentV5Schema = EquipmentV3Schema.extend({
+  food: z.enum(['flake', 'crumb', 'pellet']),
+})
+
+const MealBucketSchema = z
+  .object({
+    at: finite().min(0),
+    eaten: z.number().int().min(0),
+    manual: z.number().int().min(0),
+  })
+  .refine((bucket) => bucket.manual <= bucket.eaten, {
+    message: 'manual meals cannot exceed total meals eaten',
+    path: ['manual'],
+  })
+
+const CareHistoryV5Schema = z
+  .object({
+    feederStrainSeconds: finite().min(0),
+    cleaningCredits: z.number().int().min(0),
+    murkySeconds: finite().min(0),
+    stableFullSeconds: finite().min(0),
+    meals: z.array(MealBucketSchema).max(MEAL_HISTORY_BATCH_LIMIT),
+  })
+  .superRefine((care, ctx) => {
+    for (let index = 1; index < care.meals.length; index += 1) {
+      if (care.meals[index].at <= care.meals[index - 1].at) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'meal buckets must be in strictly increasing time order',
+          path: ['meals', index, 'at'],
+        })
+      }
+    }
+  })
+
+const SiphonCreditSchema = z.object({
+  cell: z.number().int().min(0).max(WATER_COLS * WATER_ROWS - 1),
+  at: finite().min(0),
+})
+
+export const SaveV5Schema = SaveV4Schema.omit({
+  version: true,
+  equipment: true,
+  care: true,
+})
+  .extend({
+    version: z.literal(5),
+    equipment: EquipmentV5Schema,
+    care: CareHistoryV5Schema,
+    // Early local V5 saves predated durable siphon cooldowns. Treat their
+    // missing field as empty; V1–V4 migrations do the same.
+    siphonCreditAt: z.array(SiphonCreditSchema).max(WATER_COLS * WATER_ROWS).default([]),
+  })
+  .superRefine((save, ctx) => {
+    for (let index = 0; index < save.care.meals.length; index += 1) {
+      if (save.care.meals[index].at > save.time) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'meal batch cannot come from the future',
+          path: ['care', 'meals', index, 'at'],
+        })
+      }
+    }
+    const seenCells = new Set<number>()
+    for (let index = 0; index < save.siphonCreditAt.length; index += 1) {
+      const credit = save.siphonCreditAt[index]
+      if (seenCells.has(credit.cell)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'siphon cooldown cells must be unique',
+          path: ['siphonCreditAt', index, 'cell'],
+        })
+      }
+      seenCells.add(credit.cell)
+      if (credit.at > save.time) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'siphon cooldown cannot come from the future',
+          path: ['siphonCreditAt', index, 'at'],
+        })
+      }
+    }
+  })
+
+export type SaveFileV5 = z.infer<typeof SaveV5Schema>
+
+/**
  * One entity as it appears on the wire. Deliberately NOT the runtime
  * `Entity`: the persisted format keeps a single `fish` blob, while the
  * simulation splits residents into cohesive components. `save.ts` owns the
@@ -380,14 +477,55 @@ export function migrateV3ToV4(save: SaveFileV3): SaveFileV4 {
   }
 }
 
-/** Fill V4's own legacy-optional fields (none yet) and normalise ordering. */
-export function migrateV4ToCurrent(save: SaveFileV4): SaveFile {
+/**
+ * V4 → V5. Two deliberate decisions, both about not lying to a returning
+ * keeper:
+ *
+ * Food. A pre-V5 "flake" was as rich as today's crumb (0.40), so a migrated
+ * tank moves to crumbs and keeps feeding exactly what it always fed rather
+ * than being silently cut to a third of it. The crumb development comes with
+ * it, since that rung is plainly already behind them.
+ *
+ * Care counters. The three redefined counters start clean: their old values
+ * counted different quantities (every siphon pulse; seconds any single cell
+ * was dirty; seconds any fish was merely peckish), and carrying those
+ * numbers into the new thresholds would hand over developments nobody
+ * earned. `stableFullSeconds` is unchanged in meaning, so it is kept.
+ */
+export function migrateV4ToV5(save: SaveFileV4): SaveFileV5 {
+  const movedToCrumbs = save.equipment.food === 'flake'
   return {
     ...save,
+    version: 5,
+    equipment: { ...save.equipment, food: movedToCrumbs ? 'crumb' : save.equipment.food },
+    developments: sortDevelopments(
+      movedToCrumbs ? [...save.developments, 'crumbFoodOffered'] : save.developments,
+    ),
+    care: {
+      feederStrainSeconds: 0,
+      cleaningCredits: 0,
+      murkySeconds: 0,
+      stableFullSeconds: save.care.stableFullSeconds,
+      meals: [],
+    },
+    siphonCreditAt: [],
+  }
+}
+
+/** Fill V5's own legacy-optional fields and normalise ordering. */
+export function migrateV5ToCurrent(save: SaveFileV5): SaveFile {
+  return {
+    ...save,
+    siphonCreditAt: [...save.siphonCreditAt].sort((a, b) => a.cell - b.cell),
     developments: sortDevelopments(save.developments),
     retiredNames: save.retiredNames ?? [],
     journal: save.journal ?? [],
     feederLastDropAt: save.feederLastDropAt ?? 0,
     feederDropCount: save.feederDropCount ?? 0,
+    entities: save.entities.map((entity) =>
+      entity.food === undefined
+        ? entity
+        : { ...entity, food: { ...entity.food, manual: entity.food.manual ?? false } },
+    ),
   }
 }

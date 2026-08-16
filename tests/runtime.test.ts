@@ -31,7 +31,7 @@ function fakeStorage(initial: Record<string, string> = {}) {
 type Harness = {
   deps: GameRuntimeDeps
   storage: Storage
-  presenter: TankPresenter & { draws: number; transientResets: number }
+  presenter: TankPresenter & { draws: number; transientResets: number; feedCosts: number[] }
   /** Advance the fake clocks and fire the pending animation frame once. */
   tick(ms: number): void
   setVisible(visible: boolean): void
@@ -48,10 +48,13 @@ function harness(initialStorage: Record<string, string> = {}): Harness {
   const presenter = {
     draws: 0,
     transientResets: 0,
+    feedCosts: [] as number[],
     draw() {
       this.draws += 1
     },
-    notifyFeed() {},
+    notifyFeed(_x: number, cost: number) {
+      this.feedCosts.push(cost)
+    },
     notifySiphon() {},
     resetTransient() {
       this.transientResets += 1
@@ -300,6 +303,24 @@ describe('game runtime', () => {
     const coinsAfter = lastView(views).hud.coins
     // 1 immediate + 6 pulses = 7 pellets at ◉1 each (income accrual rounds down).
     expect(coinsBefore - coinsAfter).toBeGreaterThanOrEqual(6)
+    expect(h.presenter.feedCosts).toEqual(new Array(7).fill(1))
+    runtime.stop()
+  })
+
+  test('the feed confirmation reports the current food price', () => {
+    const state = createFreshGame(17)
+    state.equipment.food = 'pellet'
+    const saved = new GameSim(state).toSave(WALL_START_MS)
+    const h = harness({ [SAVE_KEY]: JSON.stringify(saved) })
+    const runtime = createGameRuntime(h.deps)
+    runtime.subscribe(() => {})
+    runtime.start(canvas())
+    h.tick(16)
+
+    runtime.pointerDown({ x: 1000, y: 300 })
+    runtime.pointerUp()
+
+    expect(h.presenter.feedCosts).toEqual([4])
     runtime.stop()
   })
 

@@ -3,12 +3,14 @@ import {
   FEEDER_PROFILES,
   FILTER_PROFILES,
   FOOD_PROFILES,
+  foodProfile,
   HABITAT_PROFILES,
   nextFeederStage,
   nextFilterStage,
   nextFoodStage,
   nextHabitatStage,
   type FeederStage,
+  type FoodStage,
 } from './equipment'
 import { generateName, randomGenome } from './genome'
 import {
@@ -38,7 +40,7 @@ import {
   type GameState,
 } from './state'
 import { stepTick, type SimulationMode } from './systems'
-import { averagePollution, clearPollutionNear } from './water'
+import { averagePollution, cellIndexAt, clearPollutionNear } from './water'
 
 export type { OfflineSummary, StepReport, UiNotification } from './model'
 export type { SimulationMode } from './systems'
@@ -98,6 +100,7 @@ const TICK_BOUNDARY_EPSILON = 1e-9
 export type ShopOffer = {
   id:
     | 'siphon'
+    | 'crumbFood'
     | 'heartyFood'
     | 'dripFeeder'
     | 'twinHopper'
@@ -116,6 +119,38 @@ export type ShopOfferId = ShopOffer['id']
 
 type FeederOfferId = 'dripFeeder' | 'twinHopper' | 'rotaryFeeder'
 type FeederStageName = Exclude<FeederStage, 'none'>
+type FoodOfferId = 'crumbFood' | 'heartyFood'
+type FoodStageName = Exclude<FoodStage, 'flake'>
+
+/** The food ladder's rungs, as one table: which offer sells each rung, which
+ * hidden development reveals it, and what the tin looks like afterwards. */
+const FOOD_OFFER_IDS: Record<FoodStageName, FoodOfferId> = {
+  crumb: 'crumbFood',
+  pellet: 'heartyFood',
+}
+
+const FOOD_STAGE_BY_OFFER: Record<FoodOfferId, FoodStageName> = {
+  crumbFood: 'crumb',
+  heartyFood: 'pellet',
+}
+
+const FOOD_DEVELOPMENTS: Record<FoodStageName, DevelopmentId> = {
+  crumb: 'crumbFoodOffered',
+  pellet: 'heartyFoodOffered',
+}
+
+const FOOD_PURCHASE_COPY: Record<FoodStageName, { notice: string; name: string }> = {
+  crumb: {
+    name: 'crumbs',
+    notice:
+      'Coarse crumbs fill the food tin now — a pinch goes properly further than the flakes did, and costs a little more.',
+  },
+  pellet: {
+    name: 'hearty pellets',
+    notice:
+      'Hearty pellets fill the food tin now — one drop makes a proper meal where crumbs only took the edge off.',
+  },
+}
 
 /** Each feeder stage's shop id, the development that reveals it, and the
  * copy shown when it is installed — one table instead of a branch per tier. */
@@ -144,9 +179,12 @@ const FEEDER_LABELS: Record<FeederStageName, string> = {
 }
 
 const FEEDER_PURCHASE_COPY: Record<FeederStageName, string> = {
-  drip: 'Drip feeder installed above the tank. It spends a coin per pellet.',
-  twin: 'The twin hopper takes over — two chambers, twice the rounds. It still spends a coin per pellet.',
-  rotary: 'The rotary feeder turns steadily above the tank, enough for a full house. Every pellet still costs a coin.',
+  drip:
+    'Drip feeder installed above the tank. It uses the current food and pays its price for every drop.',
+  twin:
+    'The twin hopper takes over — two chambers, twice the rounds. It still uses the current food and pays for every drop.',
+  rotary:
+    'The rotary feeder turns steadily above the tank, enough for a full house. It still uses the current food and pays for every drop.',
 }
 
 /**
@@ -269,14 +307,15 @@ export class GameSim {
     return TUNING.incomeFloor + TUNING.incomePerGram * totalWeight
   }
 
-  /** Drop a food pellet into the water near x. */
-  dropFood(x: number): ActionResult {
+  /** Drop a morsel of the owned food into the water near x, by hand. */
+  dropFood(x: number): ActionResult<number> {
     if (this.state.gameOver) return { ok: false, reason: 'gameOver' }
-    if (this.state.coins < TUNING.pelletCost) return { ok: false, reason: 'unaffordable' }
-    this.state.coins -= TUNING.pelletCost
+    const unitCost = foodProfile(this.state.equipment.food).unitCost
+    if (this.state.coins < unitCost) return { ok: false, reason: 'unaffordable' }
+    this.state.coins -= unitCost
     discover(this.state, 'fedOnce')
-    spawnPellet(this.state, x)
-    return { ok: true, value: undefined, notifications: [] }
+    spawnPellet(this.state, x, { manual: true })
+    return { ok: true, value: unitCost, notifications: [] }
   }
 
   /**
@@ -285,10 +324,19 @@ export class GameSim {
    * vac cannot tell dinner from debris), and pulls some green out of the
    * local water. Food still falling or drifting mid-water is left alone.
    * The value is how many bits of debris were removed.
+   *
+   * A sweep only earns a cleaning credit when it did something a keeper
+   * would recognise as work — lifted debris, or measurably cleared the local
+   * water — and at most once per cell per `siphonCreditCooldownSeconds`. The
+   * gesture pulses several times a second while held, so without both rules
+   * a two-second hold over clean sand would reveal the sponge filter.
    */
   siphonAt(x: number, y: number): ActionResult<number> {
     if (!this.state.equipment.siphon) return { ok: false, reason: 'unowned' }
-    this.state.care.siphonUses += 1
+    const bounds = tankBounds(this.state)
+    const cell = cellIndexAt({ x, y }, bounds)
+    const murkBefore = this.state.water.cells[cell]
+
     let removed = 0
     const debris = [
       ...this.state.world.with('waste'),
@@ -301,7 +349,18 @@ export class GameSim {
         removed += 1
       }
     }
-    clearPollutionNear(this.state.water, { x, y }, TUNING.siphonPollutionClear, tankBounds(this.state))
+    clearPollutionNear(this.state.water, { x, y }, TUNING.siphonPollutionClear, bounds)
+
+    const cleared = murkBefore - this.state.water.cells[cell]
+    const didWork = removed > 0 || cleared >= TUNING.siphonCreditPollutionDrop
+    const lastCredit = this.state.siphonCreditAt.get(cell)
+    const settled =
+      lastCredit === undefined ||
+      this.state.time - lastCredit >= TUNING.siphonCreditCooldownSeconds
+    if (didWork && settled) {
+      this.state.care.cleaningCredits += 1
+      this.state.siphonCreditAt.set(cell, this.state.time)
+    }
     return { ok: true, value: removed, notifications: [] }
   }
 
@@ -316,11 +375,13 @@ export class GameSim {
         affordable: coins >= TUNING.siphonCost,
       })
     }
+    // Exactly one food offer at a time: the next rung up, once its own
+    // hidden development has been revealed.
     const foodUpgrade = nextFoodStage(equipment.food)
-    if (foodUpgrade && hasDiscovered(this.state, 'heartyFoodOffered')) {
+    if (foodUpgrade && hasDiscovered(this.state, FOOD_DEVELOPMENTS[foodUpgrade])) {
       const profile = FOOD_PROFILES[foodUpgrade]
       offers.push({
-        id: 'heartyFood',
+        id: FOOD_OFFER_IDS[foodUpgrade],
         cost: profile.cost,
         affordable: coins >= profile.cost,
       })
@@ -389,20 +450,18 @@ export class GameSim {
         message: 'Gravel siphon acquired. Select it, then hold and sweep the sand to clean.',
       })
       recordJournal(this.state, 'purchase', `Bought a gravel siphon for ◉${offer.cost}.`)
-    } else if (offer.id === 'heartyFood') {
-      this.state.equipment.food = 'pellet'
-      notifications.push({
-        tone: 'info',
-        message:
-          'Hearty pellets fill the food tin now — one drop makes a proper meal where flakes only teased.',
-      })
-      recordJournal(this.state, 'purchase', `Switched the tank to hearty pellets for ◉${offer.cost}.`)
+    } else if (offer.id === 'crumbFood' || offer.id === 'heartyFood') {
+      const stage = FOOD_STAGE_BY_OFFER[offer.id]
+      const copy = FOOD_PURCHASE_COPY[stage]
+      this.state.equipment.food = stage
+      notifications.push({ tone: 'info', message: copy.notice })
+      recordJournal(this.state, 'purchase', `Switched the tank to ${copy.name} for ◉${offer.cost}.`)
     } else if (offer.id === 'dripFeeder' || offer.id === 'twinHopper' || offer.id === 'rotaryFeeder') {
       const stage = FEEDER_STAGE_BY_OFFER[offer.id]
       this.state.equipment.feeder = stage
-      // Each tier earns its own upgrade: the strain that revealed this one
-      // does not carry over to the next.
-      this.state.care.feederShortfallSeconds = 0
+      // Each tier earns its own upgrade: the strain that revealed this one is
+      // spent here rather than carrying over to the next.
+      this.state.care.feederStrainSeconds = 0
       this.state.feederLastDropAt = this.state.time
       notifications.push({ tone: 'info', message: FEEDER_PURCHASE_COPY[stage] })
       recordJournal(

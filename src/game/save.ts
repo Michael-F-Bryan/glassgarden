@@ -8,12 +8,14 @@ import {
   migrateV1ToV2,
   migrateV2ToV3,
   migrateV3ToV4,
-  migrateV4ToCurrent,
+  migrateV4ToV5,
+  migrateV5ToCurrent,
   normalizeSemantics,
   SaveV1Schema,
   SaveV2Schema,
   SaveV3Schema,
   SaveV4Schema,
+  SaveV5Schema,
   sortDevelopments,
   type WireEntity,
   type WireFish,
@@ -26,13 +28,14 @@ export const SAVE_KEY = 'glassgarden-save'
  * this into a GameState — reaching hydrate always goes through decodeSave's
  * validation first, whether directly or via the deprecated deserialize(). */
 export type SaveFile = {
-  version: 4
+  version: 5
   savedAtMs: number
   time: number
   coins: number
   equipment: Equipment
   developments: DevelopmentId[]
   care: CareHistory
+  siphonCreditAt: { cell: number; at: number }[]
   feederLastDropAt: number
   feederDropCount: number
   fishPurchased: number
@@ -162,7 +165,7 @@ function fromWire(wire: WireEntity): Entity {
       },
     }
   }
-  if (wire.food) return { ...base, food: { ...wire.food } }
+  if (wire.food) return { ...base, food: { ...wire.food, manual: wire.food.manual ?? false } }
   if (wire.waste) return { ...base, waste: { ...wire.waste } }
   if (wire.egg) return { ...base, egg: structuredClone(wire.egg) }
   throw new Error(`hydrate: entity ${wire.id} has no archetype component`)
@@ -170,13 +173,16 @@ function fromWire(wire: WireEntity): Entity {
 
 export function serialize(state: GameState, savedAtMs: number): SaveFile {
   return {
-    version: 4,
+    version: 5,
     savedAtMs,
     time: state.time,
     coins: state.coins,
     equipment: { ...state.equipment },
     developments: sortDevelopments([...state.developments]),
-    care: { ...state.care },
+    care: { ...state.care, meals: state.care.meals.map((bucket) => ({ ...bucket })) },
+    siphonCreditAt: [...state.siphonCreditAt]
+      .sort(([a], [b]) => a - b)
+      .map(([cell, at]) => ({ cell, at })),
     feederLastDropAt: state.feederLastDropAt,
     feederDropCount: state.feederDropCount,
     fishPurchased: state.fishPurchased,
@@ -208,7 +214,8 @@ export function hydrate(document: SaveFile): GameState {
     coins: document.coins,
     equipment: { ...document.equipment },
     developments: new Set(document.developments),
-    care: { ...document.care },
+    care: { ...document.care, meals: document.care.meals.map((bucket) => ({ ...bucket })) },
+    siphonCreditAt: new Map(document.siphonCreditAt.map(({ cell, at }) => [cell, at])),
     feederLastDropAt: document.feederLastDropAt,
     feederDropCount: document.feederDropCount,
     fishPurchased: document.fishPurchased,
@@ -235,7 +242,7 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
     return { kind: 'invalid', raw, issues: ['save is not a JSON object'] }
   }
   const version = (parsed as { version?: unknown }).version
-  if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
+  if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5) {
     return { kind: 'unsupported', raw, version }
   }
   // Each version validates against its own schema, then migrates forward
@@ -247,7 +254,9 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
         ? SaveV2Schema.safeParse(parsed)
         : version === 3
           ? SaveV3Schema.safeParse(parsed)
-          : SaveV4Schema.safeParse(parsed)
+          : version === 4
+            ? SaveV4Schema.safeParse(parsed)
+            : SaveV5Schema.safeParse(parsed)
   if (!structural.success) {
     return { kind: 'invalid', raw, issues: structural.error.issues.map(formatIssue) }
   }
@@ -256,13 +265,17 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
     return { kind: 'invalid', raw, issues: semanticIssues }
   }
   const normalized = normalizeSemantics(structural.data)
-  const asV3 =
-    normalized.version === 4 || normalized.version === 3
+  const atLeastV3 =
+    normalized.version === 5 || normalized.version === 4 || normalized.version === 3
       ? normalized
       : normalized.version === 2
         ? migrateV2ToV3(normalized)
         : migrateV2ToV3(migrateV1ToV2(normalized))
-  const document = migrateV4ToCurrent(asV3.version === 4 ? asV3 : migrateV3ToV4(asV3))
+  const atLeastV4 =
+    atLeastV3.version === 5 || atLeastV3.version === 4 ? atLeastV3 : migrateV3ToV4(atLeastV3)
+  const document = migrateV5ToCurrent(
+    atLeastV4.version === 5 ? atLeastV4 : migrateV4ToV5(atLeastV4),
+  )
   return { kind: 'loaded', document }
 }
 

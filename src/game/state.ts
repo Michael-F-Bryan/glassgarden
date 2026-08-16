@@ -4,6 +4,7 @@ import { generateName, randomGenome } from './genome'
 import { createEquipment, foodProfile, tankBoundsFor, type Equipment } from './equipment'
 import {
   createCareHistory,
+  MEAL_HISTORY_BATCH_LIMIT,
   RESIDENT_COMPONENTS,
   TUNING,
   type TankBounds,
@@ -47,6 +48,12 @@ export type GameState = {
   developments: Set<DevelopmentId>
   /** Evidence the hidden developments consult. */
   care: CareHistory
+  /**
+   * Sim time each water cell last earned a cleaning credit, keyed by cell
+   * index. Persisted because simulation time does not advance during an
+   * immediate save/load; dropping it would reset the progression rate limit.
+   */
+  siphonCreditAt: Map<number, number>
   water: WaterGrid
   rng: Rng
   events: GameEvent[]
@@ -88,6 +95,7 @@ export function createState(seed: number): GameState {
     retiredNames: [],
     developments: new Set(),
     care: createCareHistory(),
+    siphonCreditAt: new Map(),
     water: createWaterGrid(),
     rng: createRng(seed),
     events: [],
@@ -99,6 +107,50 @@ export function createState(seed: number): GameState {
 export function recordJournal(state: GameState, kind: JournalKind, message: string): void {
   state.journal.push({ atSim: state.time, kind, message })
   if (state.journal.length > TUNING.journalMaxEntries) state.journal.shift()
+}
+
+/**
+ * Record one morsel a fish actually ate. Only eating calls this: food that is
+ * missed, spoils, or is siphoned away cost the player a coin but never
+ * counts as feeding workload.
+ */
+export function recordMeal(state: GameState, manual: boolean): void {
+  const current = state.care.meals.at(-1)
+  const bucket =
+    current?.at === state.time ? current : { at: state.time, eaten: 0, manual: 0 }
+  if (bucket !== current) state.care.meals.push(bucket)
+  bucket.eaten += 1
+  if (manual) bucket.manual += 1
+  pruneMeals(state)
+  if (state.care.meals.length > MEAL_HISTORY_BATCH_LIMIT) {
+    state.care.meals.splice(0, state.care.meals.length - MEAL_HISTORY_BATCH_LIMIT)
+  }
+}
+
+/** Drop batches that have aged out of every window that reads them. Called
+ * whenever a meal is recorded and once per tick, so an idle tank's history
+ * empties on its own rather than waiting for the next meal. */
+export function pruneMeals(state: GameState): void {
+  const oldest = state.time - TUNING.mealHistorySeconds
+  while (state.care.meals.length > 0 && state.care.meals[0].at < oldest) {
+    state.care.meals.shift()
+  }
+}
+
+/** Morsels eaten within the last `seconds` of sim time. */
+export function mealsEatenSince(state: GameState, seconds: number): number {
+  const from = state.time - seconds
+  return state.care.meals
+    .filter((bucket) => bucket.at >= from)
+    .reduce((sum, bucket) => sum + bucket.eaten, 0)
+}
+
+/** Of those, the ones the player dropped by hand. */
+export function handFedMealsSince(state: GameState, seconds: number): number {
+  const from = state.time - seconds
+  return state.care.meals
+    .filter((bucket) => bucket.at >= from)
+    .reduce((sum, bucket) => sum + bucket.manual, 0)
 }
 
 export function addEntity(state: GameState, entity: Omit<Entity, 'id'>): Entity {
@@ -220,8 +272,13 @@ export function takenNames(state: GameState): Set<string> {
 
 /** Drop a morsel of the owned food into the water near x — shared by the
  * player and the feeder. What lands depends on equipment.food: weak starter
- * flakes at first, hearty pellets once the upgrade is bought. */
-export function spawnPellet(state: GameState, x: number): Entity {
+ * flakes at first, then crumbs, then hearty pellets. Who dropped it is
+ * carried on the morsel, since only hand-feeding is a chore. */
+export function spawnPellet(
+  state: GameState,
+  x: number,
+  options: { manual: boolean },
+): Entity {
   const bounds = tankBounds(state)
   return addEntity(state, {
     position: {
@@ -234,6 +291,7 @@ export function spawnPellet(state: GameState, x: number): Entity {
       spoilsAt: state.time + TUNING.pelletSpoilSeconds,
       spoiled: false,
       restingOnSand: false,
+      manual: options.manual,
     },
   })
 }

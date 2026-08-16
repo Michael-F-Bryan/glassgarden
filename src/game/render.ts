@@ -52,7 +52,7 @@ type DrawableResident = Entity &
   Required<Pick<Entity, 'resident' | 'genome' | 'physiology' | 'behaviour'>>
 
 type SiphonPuff = { x: number; y: number; at: number }
-type CoinFloat = { x: number; y: number; at: number }
+type CoinFloat = { x: number; y: number; at: number; cost: number }
 
 /** How long the returning-appetite cue lingers, in sim seconds. Cosmetic:
  * the sim records only the crossing moment (Physiology.appetiteSince). */
@@ -86,7 +86,7 @@ export function createCanvasPresenter(canvas: HTMLCanvasElement) {
       ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
       renderer.draw(ctx, state, options)
     },
-    notifyFeed: (x: number) => renderer.notifyFeed(x),
+    notifyFeed: (x: number, cost: number) => renderer.notifyFeed(x, cost),
     notifySiphon: (x: number, y: number) => renderer.notifySiphon(x, y),
     resetTransient: () => renderer.resetTransient(),
     dispose: () => window.removeEventListener('resize', resize),
@@ -110,9 +110,9 @@ export class TankRenderer {
     if (this.puffs.length > 8) this.puffs.shift()
   }
 
-  /** Cosmetic "−◉1" drifting up from where a pellet was paid for. */
-  notifyFeed(x: number): void {
-    this.coinFloats.push({ x, y: this.bounds.waterTop + 14, at: performance.now() / 1000 })
+  /** Cosmetic price confirmation drifting up from where food was paid for. */
+  notifyFeed(x: number, cost: number): void {
+    this.coinFloats.push({ x, y: this.bounds.waterTop + 14, at: performance.now() / 1000, cost })
     if (this.coinFloats.length > 10) this.coinFloats.shift()
   }
 
@@ -310,7 +310,7 @@ export class TankRenderer {
       ctx.fillStyle = '#ffd97a'
       ctx.shadowColor = 'rgba(10, 20, 30, 0.7)'
       ctx.shadowBlur = 3
-      ctx.fillText('−◉1', float.x, float.y - t * 26)
+      ctx.fillText(`−◉${float.cost}`, float.x, float.y - t * 26)
       ctx.restore()
     }
   }

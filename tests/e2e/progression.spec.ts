@@ -39,23 +39,36 @@ test('care, then pressure, reveals the siphon and then filtration', async ({ pag
   await expect(page.getByTestId('tool-siphon')).toBeVisible()
   expect((await snapshot(page)).equipment.siphon).toBe(true)
 
-  // Repeated cleaning is the maintenance pressure that reveals the filter.
-  await page.getByTestId('tool-siphon').click()
-  await expect(page.getByTestId('tool-siphon')).toHaveAttribute('aria-pressed', 'true')
-  for (let i = 0; i < 16; i += 1) {
-    // Re-read the box each sweep so it can never go stale mid-test.
-    const box = (await canvas.boundingBox())!
-    const x = box.x + 110 + (i % 12) * 60
-    const y = box.y + box.height - 36
-    await page.mouse.move(x, y)
-    await page.mouse.down()
-    await page.mouse.move(x + 30, y)
-    await page.mouse.up()
+  // Cleaning that does real work is the maintenance pressure that reveals
+  // the filter: sweeps that actually lift a dropping off the sand. Sweeping
+  // clean glass earns nothing, so the tank has to keep making the mess.
+  for (let i = 0; i < 45; i += 1) {
+    state = await snapshot(page)
+    if (state.developments.includes('spongeFilterOffered')) break
+
+    await page.getByTestId('tool-siphon').click()
+    for (const dropping of state.waste.slice(0, 3)) {
+      const point = await tankPoint(page, dropping.x, dropping.y)
+      await page.mouse.click(point.x, point.y)
+      await advance(page, 2) // sweeping the same spot on repeat is not work
+    }
+
+    // Feed the tank on again, so there is something to clean next round.
+    await page.getByTestId('tool-feed').click()
+    const fish = state.fish[0]
+    const drop = await tankPoint(
+      page,
+      Math.min(state.tank.width - 40, fish.x + 50),
+      state.tank.waterTop + 40,
+    )
+    for (let pinch = 0; pinch < 6; pinch += 1) {
+      await page.mouse.click(drop.x, drop.y)
+    }
+    await advance(page, 25)
   }
-  await advance(page, 3)
 
   state = await snapshot(page)
-  expect(state.care.siphonUses).toBeGreaterThanOrEqual(10)
+  expect(state.care.cleaningCredits).toBeGreaterThanOrEqual(8)
   expect(state.developments).toContain('spongeFilterOffered')
   await expect(page.getByTestId('buy-spongeFilter')).toBeVisible()
 })
@@ -225,7 +238,7 @@ test('a straining feeder reveals the next tier, and the upgrade relieves the tan
   // A drip feeder cannot hold this many mature residents.
   await advance(page, 900)
   let state = await snapshot(page)
-  expect(state.care.feederShortfallSeconds).toBeGreaterThan(0)
+  expect(state.care.feederStrainSeconds).toBeGreaterThan(0)
   expect(state.developments).toContain('twinHopperOffered')
   const strained = Math.max(...state.fish.map((fish) => fish.hunger))
   expect(strained).toBeGreaterThan(0.6)
@@ -239,7 +252,7 @@ test('a straining feeder reveals the next tier, and the upgrade relieves the tan
 
   state = await snapshot(page)
   expect(state.equipment.feeder).toBe('twin')
-  expect(state.care.feederShortfallSeconds).toBe(0)
+  expect(state.care.feederStrainSeconds).toBe(0)
   expect(state.shop.map((offer) => offer.id)).not.toContain('dripFeeder')
 
   // The relieved tank feeds comfortably again.

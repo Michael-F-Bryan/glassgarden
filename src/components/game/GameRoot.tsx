@@ -446,7 +446,7 @@ export default function GameRoot() {
                 : 'border-white/10 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60'
             }`}
           >
-            🫘 Feed <span className="ml-1 text-xs opacity-70">◉1</span>
+            🫘 Feed <span className="ml-1 text-xs opacity-70">◉{hud.food.unitCost}</span>
           </button>
           {hud.ownsSiphon && (
             <button
@@ -466,7 +466,7 @@ export default function GameRoot() {
           )}
           <span className="ml-1 hidden rounded-full bg-slate-950/60 px-3 py-1 text-xs text-slate-200/90 backdrop-blur sm:block">
             {view.tool === 'feed'
-              ? 'click to drop food · hold to sprinkle'
+              ? `${hud.food.label} · click to drop food · hold to sprinkle`
               : 'hold and sweep the sand to clean'}
           </span>
         </div>
