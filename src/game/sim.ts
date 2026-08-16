@@ -2,9 +2,11 @@ import {
   capacityFor,
   FEEDER_PROFILES,
   FILTER_PROFILES,
+  FOOD_PROFILES,
   HABITAT_PROFILES,
   nextFeederStage,
   nextFilterStage,
+  nextFoodStage,
   nextHabitatStage,
   type FeederStage,
 } from './equipment'
@@ -96,6 +98,7 @@ const TICK_BOUNDARY_EPSILON = 1e-9
 export type ShopOffer = {
   id:
     | 'siphon'
+    | 'heartyFood'
     | 'dripFeeder'
     | 'twinHopper'
     | 'rotaryFeeder'
@@ -313,6 +316,15 @@ export class GameSim {
         affordable: coins >= TUNING.siphonCost,
       })
     }
+    const foodUpgrade = nextFoodStage(equipment.food)
+    if (foodUpgrade && hasDiscovered(this.state, 'heartyFoodOffered')) {
+      const profile = FOOD_PROFILES[foodUpgrade]
+      offers.push({
+        id: 'heartyFood',
+        cost: profile.cost,
+        affordable: coins >= profile.cost,
+      })
+    }
     // Exactly one feeder offer at a time: the next stage up, once its own
     // hidden development has been revealed.
     const feederUpgrade = nextFeederStage(equipment.feeder)
@@ -377,6 +389,14 @@ export class GameSim {
         message: 'Gravel siphon acquired. Select it, then hold and sweep the sand to clean.',
       })
       recordJournal(this.state, 'purchase', `Bought a gravel siphon for ◉${offer.cost}.`)
+    } else if (offer.id === 'heartyFood') {
+      this.state.equipment.food = 'pellet'
+      notifications.push({
+        tone: 'info',
+        message:
+          'Hearty pellets fill the food tin now — one drop makes a proper meal where flakes only teased.',
+      })
+      recordJournal(this.state, 'purchase', `Switched the tank to hearty pellets for ◉${offer.cost}.`)
     } else if (offer.id === 'dripFeeder' || offer.id === 'twinHopper' || offer.id === 'rotaryFeeder') {
       const stage = FEEDER_STAGE_BY_OFFER[offer.id]
       this.state.equipment.feeder = stage

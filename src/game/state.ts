@@ -1,7 +1,7 @@
 import { World } from 'miniplex'
 
 import { generateName, randomGenome } from './genome'
-import { createEquipment, tankBoundsFor, type Equipment } from './equipment'
+import { createEquipment, foodProfile, tankBoundsFor, type Equipment } from './equipment'
 import {
   createCareHistory,
   RESIDENT_COMPONENTS,
@@ -218,7 +218,9 @@ export function takenNames(state: GameState): Set<string> {
   return names
 }
 
-/** Drop a pellet into the water near x — shared by the player and the feeder. */
+/** Drop a morsel of the owned food into the water near x — shared by the
+ * player and the feeder. What lands depends on equipment.food: weak starter
+ * flakes at first, hearty pellets once the upgrade is bought. */
 export function spawnPellet(state: GameState, x: number): Entity {
   const bounds = tankBounds(state)
   return addEntity(state, {
@@ -228,7 +230,7 @@ export function spawnPellet(state: GameState, x: number): Entity {
     },
     velocity: { x: state.rng.range(-8, 8), y: 0 },
     food: {
-      nutrition: TUNING.pelletNutrition,
+      nutrition: foodProfile(state.equipment.food).nutrition,
       spoilsAt: state.time + TUNING.pelletSpoilSeconds,
       spoiled: false,
       restingOnSand: false,

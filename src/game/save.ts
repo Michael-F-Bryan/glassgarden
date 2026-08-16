@@ -7,11 +7,13 @@ import {
   checkSemantics,
   migrateV1ToV2,
   migrateV2ToV3,
-  migrateV3ToCurrent,
+  migrateV3ToV4,
+  migrateV4ToCurrent,
   normalizeSemantics,
   SaveV1Schema,
   SaveV2Schema,
   SaveV3Schema,
+  SaveV4Schema,
   sortDevelopments,
   type WireEntity,
   type WireFish,
@@ -24,7 +26,7 @@ export const SAVE_KEY = 'glassgarden-save'
  * this into a GameState — reaching hydrate always goes through decodeSave's
  * validation first, whether directly or via the deprecated deserialize(). */
 export type SaveFile = {
-  version: 3
+  version: 4
   savedAtMs: number
   time: number
   coins: number
@@ -77,6 +79,7 @@ function toWire(entity: Entity): WireEntity {
         breedingCooldownUntil: entity.breeding.cooldownUntil,
         partnerId: entity.breeding.partnerId,
         activity: structuredClone(entity.behaviour.activity),
+        appetiteSince: entity.physiology.appetiteSince,
         criticalSince: entity.physiology.criticalSince,
         lastWarningAt: entity.physiology.lastWarningAt,
         facing: entity.behaviour.facing,
@@ -140,6 +143,7 @@ function fromWire(wire: WireEntity): Entity {
         health: fish.health,
         ageSeconds: fish.ageSeconds,
         digesting: fish.digesting,
+        appetiteSince: fish.appetiteSince,
         criticalSince: fish.criticalSince,
         lastWarningAt: fish.lastWarningAt,
       },
@@ -166,7 +170,7 @@ function fromWire(wire: WireEntity): Entity {
 
 export function serialize(state: GameState, savedAtMs: number): SaveFile {
   return {
-    version: 3,
+    version: 4,
     savedAtMs,
     time: state.time,
     coins: state.coins,
@@ -231,7 +235,7 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
     return { kind: 'invalid', raw, issues: ['save is not a JSON object'] }
   }
   const version = (parsed as { version?: unknown }).version
-  if (version !== 1 && version !== 2 && version !== 3) {
+  if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
     return { kind: 'unsupported', raw, version }
   }
   // Each version validates against its own schema, then migrates forward
@@ -241,7 +245,9 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
       ? SaveV1Schema.safeParse(parsed)
       : version === 2
         ? SaveV2Schema.safeParse(parsed)
-        : SaveV3Schema.safeParse(parsed)
+        : version === 3
+          ? SaveV3Schema.safeParse(parsed)
+          : SaveV4Schema.safeParse(parsed)
   if (!structural.success) {
     return { kind: 'invalid', raw, issues: structural.error.issues.map(formatIssue) }
   }
@@ -250,13 +256,13 @@ function decodeParsed(parsed: unknown, raw: string): LoadResult {
     return { kind: 'invalid', raw, issues: semanticIssues }
   }
   const normalized = normalizeSemantics(structural.data)
-  const document = migrateV3ToCurrent(
-    normalized.version === 3
+  const asV3 =
+    normalized.version === 4 || normalized.version === 3
       ? normalized
       : normalized.version === 2
         ? migrateV2ToV3(normalized)
-        : migrateV2ToV3(migrateV1ToV2(normalized)),
-  )
+        : migrateV2ToV3(migrateV1ToV2(normalized))
+  const document = migrateV4ToCurrent(asV3.version === 4 ? asV3 : migrateV3ToV4(asV3))
   return { kind: 'loaded', document }
 }
 

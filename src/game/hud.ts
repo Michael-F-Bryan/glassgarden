@@ -70,6 +70,11 @@ const SHOP_COPY: Record<ShopOfferId, { label: string; description: string }> = {
     label: 'Gravel siphon',
     description: 'Clean up droppings and spoiled food before they foul the water.',
   },
+  heartyFood: {
+    label: 'Hearty pellets',
+    description:
+      'Richer food that makes a proper meal of every drop. Replaces the starter flakes for you and any feeder.',
+  },
   dripFeeder: {
     label: 'Drip feeder',
     description: 'Drops a pellet for hungry fish while you are busy elsewhere. Suits a small tank. Uses your coins.',

@@ -57,6 +57,9 @@ const FishSchema = z.object({
    * once a pair has left an egg together. */
   partnerId: z.number().int().positive().optional(),
   activity: FishActivitySchema,
+  /** Sim time appetite last returned. Optional on every version: purely a
+   * cue timestamp, absent whenever the fish is comfortably fed. */
+  appetiteSince: finite().optional(),
   criticalSince: finite().optional(),
   lastWarningAt: finite().optional(),
   facing: z.union([z.literal(1), z.literal(-1)]),
@@ -216,6 +219,22 @@ export const SaveV3Schema = SaveV2Schema.omit({
 
 export type SaveFileV3 = z.infer<typeof SaveV3Schema>
 
+/** V4 added food as a typed equipment stage (starter flakes vs hearty
+ * pellets). Everything else is unchanged from V3. */
+const EquipmentV4Schema = EquipmentV3Schema.extend({
+  food: z.enum(['flake', 'pellet']),
+})
+
+export const SaveV4Schema = SaveV3Schema.omit({
+  version: true,
+  equipment: true,
+}).extend({
+  version: z.literal(4),
+  equipment: EquipmentV4Schema,
+})
+
+export type SaveFileV4 = z.infer<typeof SaveV4Schema>
+
 /**
  * One entity as it appears on the wire. Deliberately NOT the runtime
  * `Entity`: the persisted format keeps a single `fish` blob, while the
@@ -347,8 +366,22 @@ export function migrateV2ToV3(save: SaveFileV2): SaveFileV3 {
   }
 }
 
-/** Fill V3's own legacy-optional fields (none yet) and normalise ordering. */
-export function migrateV3ToCurrent(save: SaveFileV3): SaveFile {
+/**
+ * V3 → V4. Every pre-V4 tank fed nutrition-1 pellets, so a migrated save
+ * keeps exactly the food it has always used; only fresh tanks begin on the
+ * weaker starter flakes. The hearty-food development is deliberately NOT
+ * granted: the shop has nothing further to offer a tank already on pellets.
+ */
+export function migrateV3ToV4(save: SaveFileV3): SaveFileV4 {
+  return {
+    ...save,
+    version: 4,
+    equipment: { ...save.equipment, food: 'pellet' },
+  }
+}
+
+/** Fill V4's own legacy-optional fields (none yet) and normalise ordering. */
+export function migrateV4ToCurrent(save: SaveFileV4): SaveFile {
   return {
     ...save,
     developments: sortDevelopments(save.developments),

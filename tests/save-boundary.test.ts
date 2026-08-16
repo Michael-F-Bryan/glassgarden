@@ -138,8 +138,8 @@ describe('decodeSave: structural and semantic validation', () => {
     expect(decodeSave('null').kind).toBe('invalid')
     expect(decodeSave('42').kind).toBe('invalid')
 
-    const unsupported = decodeSave(JSON.stringify({ version: 4 }))
-    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 4 })
+    const unsupported = decodeSave(JSON.stringify({ version: 5 }))
+    expect(unsupported).toMatchObject({ kind: 'unsupported', version: 5 })
   })
 
   test('duplicate entity ids are rejected', () => {
@@ -216,7 +216,7 @@ describe('the wire format is independent of runtime components', () => {
     expect(wireFish.fish!.genome.hue).toEqual(expect.any(Number))
     expect(wireFish).not.toHaveProperty('resident')
     expect(wireFish).not.toHaveProperty('physiology')
-    expect(document.version).toBe(3)
+    expect(document.version).toBe(4)
   })
 
   test('a V1 save written before the component split still loads and runs', () => {
@@ -253,12 +253,14 @@ describe('a save written by the previous build', () => {
     if (result.kind !== 'loaded') return
     const document = result.document
 
-    expect(document.version).toBe(3)
+    expect(document.version).toBe(4)
     expect(document.equipment).toEqual({
       siphon: true,
       feeder: 'drip',
       filter: 'none',
       habitat: 'starter',
+      // Every pre-V4 tank fed nutrition-1 pellets; migration keeps them.
+      food: 'pellet',
     })
     expect(document.developments).toEqual([
       'fedOnce',
@@ -288,13 +290,40 @@ describe('a save written by the previous build', () => {
     expect([...sim.read.world.with('resident')].length).toBeGreaterThanOrEqual(before)
     expect(sim.read.equipment.feeder).toBe('drip')
     // And it re-saves in the current format.
-    expect(sim.toSave(2_000).version).toBe(3)
+    expect(sim.toSave(2_000).version).toBe(4)
   })
 
   test('migration is deterministic', () => {
     const once = decodeSave(JSON.stringify(realV1))
     const twice = decodeSave(JSON.stringify(realV1))
     expect(once).toEqual(twice)
+  })
+})
+
+describe('a V3 save (pre-food-stages)', () => {
+  /** A V3 document as the previous build wrote it: no equipment.food. */
+  function v3Save() {
+    const save = GameSim.fresh(220).toSave(1_000) as unknown as Record<string, unknown>
+    const equipment = { ...(save.equipment as Record<string, unknown>) }
+    delete equipment.food
+    return { ...save, version: 3, equipment }
+  }
+
+  test('migrates keeping the pellets it always fed, and never re-offers them', () => {
+    const result = decodeSave(JSON.stringify(v3Save()))
+    expect(result.kind).toBe('loaded')
+    if (result.kind !== 'loaded') return
+
+    expect(result.document.version).toBe(4)
+    // A pre-V4 tank fed nutrition-1 pellets all along; the migration must
+    // not quietly demote it to starter flakes.
+    expect(result.document.equipment.food).toBe('pellet')
+    // And the shop has nothing to offer a tank already on pellets.
+    const sim = new GameSim(hydrate(result.document))
+    expect(sim.shopOffers().map((offer) => offer.id)).not.toContain('heartyFood')
+
+    // Migration is deterministic.
+    expect(decodeSave(JSON.stringify(v3Save()))).toEqual(result)
   })
 })
 
@@ -339,7 +368,7 @@ describe('round-trip and migration determinism', () => {
     expect(result.kind).toBe('loaded')
     if (result.kind !== 'loaded') return
 
-    expect(result.document.version).toBe(3)
+    expect(result.document.version).toBe(4)
     expect(result.document.journal).toEqual([])
     expect(result.document.retiredNames).toEqual([])
     expect(result.document.feederLastDropAt).toBe(0)
@@ -348,6 +377,7 @@ describe('round-trip and migration determinism', () => {
       feeder: 'none',
       filter: 'none',
       habitat: 'starter',
+      food: 'pellet',
     })
     expect(result.document.developments).not.toContain('dripFeederOffered')
     // No noticedGrowth either in this fixture, so fedOnce infers false.
@@ -404,6 +434,7 @@ describe('round-trip and migration determinism', () => {
       feeder: 'drip',
       filter: 'none',
       habitat: 'starter',
+      food: 'pellet',
     })
     expect(document.developments).toEqual([
       'fedOnce',
@@ -423,7 +454,7 @@ describe('round-trip and migration determinism', () => {
     // The migrated tank is playable and re-saves in the current format.
     const sim = new GameSim(hydrate(document))
     sim.advanceElapsed(1, 'visible')
-    expect(sim.toSave(2_000).version).toBe(3)
+    expect(sim.toSave(2_000).version).toBe(4)
     expect(sim.read.equipment.feeder).toBe('drip')
 
     // Migration is deterministic: the same V1 bytes always land identically.

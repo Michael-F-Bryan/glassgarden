@@ -54,6 +54,10 @@ type DrawableResident = Entity &
 type SiphonPuff = { x: number; y: number; at: number }
 type CoinFloat = { x: number; y: number; at: number }
 
+/** How long the returning-appetite cue lingers, in sim seconds. Cosmetic:
+ * the sim records only the crossing moment (Physiology.appetiteSince). */
+const APPETITE_CUE_SECONDS = 4
+
 /**
  * The runtime's window onto the canvas: owns the 2d context, device-pixel
  * scaling, and the window resize listener, so the runtime itself never
@@ -164,7 +168,7 @@ export class TankRenderer {
     )
     for (const entity of fishEntities) {
       const highlighted = entity.id === options.selectedFishId || entity.id === options.hoverFishId
-      this.drawFish(ctx, entity, realTime, highlighted)
+      this.drawFish(ctx, entity, state.time, realTime, highlighted)
       if (entity.id === options.selectedFishId || entity.id === options.hoverFishId) {
         this.drawNameplate(ctx, entity)
       }
@@ -539,15 +543,18 @@ export class TankRenderer {
 
   private drawFood(ctx: CanvasRenderingContext2D, entity: Entity): void {
     const spoiled = entity.food!.spoiled
-    ctx.fillStyle = spoiled ? '#6b6b35' : '#e8b04b'
+    // Size follows nutrition, so a starter flake reads lighter than the
+    // hearty pellet that replaces it.
+    const radius = 3 + entity.food!.nutrition * 1.5
+    ctx.fillStyle = spoiled ? '#6b6b35' : entity.food!.nutrition < 1 ? '#ecc98f' : '#e8b04b'
     ctx.beginPath()
-    ctx.arc(entity.position.x, entity.position.y, 4.5, 0, Math.PI * 2)
+    ctx.arc(entity.position.x, entity.position.y, radius, 0, Math.PI * 2)
     ctx.fill()
     if (spoiled) {
       ctx.strokeStyle = 'rgba(120, 150, 60, 0.6)'
       ctx.lineWidth = 1.5
       ctx.beginPath()
-      ctx.arc(entity.position.x, entity.position.y, 7, 0, Math.PI * 2)
+      ctx.arc(entity.position.x, entity.position.y, radius + 2.5, 0, Math.PI * 2)
       ctx.stroke()
     }
   }
@@ -604,6 +611,7 @@ export class TankRenderer {
   private drawFish(
     ctx: CanvasRenderingContext2D,
     entity: DrawableResident,
+    simTime: number,
     realTime: number,
     highlighted: boolean,
   ): void {
@@ -753,6 +761,34 @@ export class TankRenderer {
     }
 
     ctx.restore()
+
+    // A brief "peckish again" cue the moment appetite returns: three amber
+    // crumbs above the fish that fade within seconds, so returning interest
+    // in food is visible without becoming standing icon clutter. Distress
+    // owns the space once hunger is serious (the pips below take over).
+    const appetite = fish.appetiteSince
+    if (
+      appetite !== undefined &&
+      simTime - appetite < APPETITE_CUE_SECONDS &&
+      fish.hunger <= 0.85 &&
+      fish.activity.kind !== 'court'
+    ) {
+      const t = (simTime - appetite) / APPETITE_CUE_SECONDS
+      ctx.save()
+      ctx.fillStyle = `rgba(255, 217, 122, ${(0.9 * (1 - t)).toFixed(3)})`
+      for (let i = -1; i <= 1; i += 1) {
+        ctx.beginPath()
+        ctx.arc(
+          entity.position.x + i * 7,
+          entity.position.y - height - 14 - Math.sin(realTime * 4 + i) * 1.5,
+          2.2,
+          0,
+          Math.PI * 2,
+        )
+        ctx.fill()
+      }
+      ctx.restore()
+    }
 
     // Status pips above distressed fish, drawn unrotated.
     if (fish.hunger > 0.85 || fish.sickness > 0.6) {

@@ -169,12 +169,14 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
     state.coins = 900
     state.equipment.siphon = true
     state.equipment.feeder = 'drip'
+    state.equipment.food = 'pellet'
     for (const id of [
       'fedOnce',
       'growthNoticed',
       'pollutionNoticed',
       'siphonOffered',
       'fishOffered',
+      'heartyFoodOffered',
       'dripFeederOffered',
     ] as const) {
       state.developments.add(id)
@@ -202,6 +204,7 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
     state.equipment.siphon = true
     state.equipment.feeder = 'rotary'
     state.equipment.filter = 'sponge'
+    state.equipment.food = 'pellet'
     for (const id of [
       'fedOnce',
       'growthNoticed',
@@ -209,6 +212,7 @@ export function createDevScenario(name: DevScenario, seed = DEFAULT_DEV_SEED): G
       'siphonOffered',
       'fishOffered',
       'eggSeen',
+      'heartyFoodOffered',
       'dripFeederOffered',
       'twinHopperOffered',
       'rotaryFeederOffered',

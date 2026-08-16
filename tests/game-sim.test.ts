@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
 import { generateName, randomGenome } from '@/game/genome'
-import { capacityFor } from '@/game/equipment'
+import { capacityFor, FOOD_PROFILES } from '@/game/equipment'
 import { TANK, TUNING, type StepReport, type UiNotification } from '@/game/model'
 import { decodeSave, deserialize, hydrate, parseSave } from '@/game/save'
 import { GameSim } from '@/game/sim'
@@ -42,6 +42,8 @@ function onlyFish(sim: GameSim) {
 
 function pairedState(seed: number, options?: { hunger?: number }) {
   const state = createState(seed)
+  // Two full adults are far past the flake era; feed them properly.
+  state.equipment.food = 'pellet'
   for (const name of ['Ada', 'Bez'] as const) {
     spawnFish(state, {
       genome: randomGenome(state.rng, 26),
@@ -136,14 +138,115 @@ describe('feeding and growth', () => {
 
   test('digestion turns meals into waste droppings', () => {
     const sim = GameSim.fresh(13)
-    // A dropping represents several pellets' worth of digestion, so keep the
-    // fish hungry enough to actually eat every pellet dropped for it.
-    for (let round = 0; round < 8; round += 1) {
+    // A dropping represents several meals' worth of digestion (and starter
+    // flakes digest to less than a pellet), so keep the fish hungry enough
+    // to actually eat every morsel dropped for it, across enough meals.
+    for (let round = 0; round < 14; round += 1) {
       onlyFish(sim).physiology.hunger = 0.6
       sim.dropFood(onlyFish(sim).position.x)
       runFor(sim, 10)
     }
     expect([...sim.read.world.with('waste')].length).toBeGreaterThan(0)
+  })
+})
+
+describe('opening feeding loop', () => {
+  test('a fresh tank drops weak starter flakes', () => {
+    const state = createFreshGame(41)
+    const sim = new GameSim(state)
+    expect(state.equipment.food).toBe('flake')
+
+    sim.dropFood(600)
+
+    const flake = [...state.world.with('food')][0]
+    expect(flake.food!.nutrition).toBe(FOOD_PROFILES.flake.nutrition)
+    expect(flake.food!.nutrition).toBeLessThan(FOOD_PROFILES.pellet.nutrition)
+  })
+
+  test('the starter fish eats several meals in the first minute instead of one filling pellet', () => {
+    const sim = GameSim.fresh(43)
+    let meals = 0
+    for (let t = 0; t < 60; t += TEST_STEP) {
+      const fish = onlyFish(sim)
+      const foodInWater = [...sim.read.world.with('food')].length
+      // Play like an attentive keeper: a fresh flake whenever the fish shows
+      // interest and nothing is already in the water.
+      if (foodInWater === 0 && fish.physiology.hunger >= TUNING.seekFoodAbove) {
+        sim.dropFood(fish.position.x)
+      }
+      const before = [...sim.read.world.with('food')].length
+      sim.advanceElapsed(TEST_STEP, 'visible')
+      if ([...sim.read.world.with('food')].length < before) meals += 1
+    }
+    expect(meals).toBeGreaterThanOrEqual(3)
+  })
+
+  test('feeding workload reveals hearty pellets: a grown fish or a second mouth', () => {
+    // Route one: a single fish grown past what flakes can satisfy.
+    const grown = createFreshGame(45)
+    const grownSim = new GameSim(grown)
+    onlyFish(grownSim).physiology.weight = TUNING.heartyFoodAtTankGrams + 1
+    const result = grownSim.advanceElapsed(1, 'visible')
+    expect(grown.developments.has('heartyFoodOffered')).toBe(true)
+    expect(
+      result.notifications.some((n) => n.tone === 'development' && /pellet/i.test(n.message)),
+    ).toBe(true)
+    expect(grownSim.shopOffers().map((offer) => offer.id)).toContain('heartyFood')
+
+    // Route two: the population grows to a second resident.
+    const crowd = createFreshGame(47)
+    const crowdSim = new GameSim(crowd)
+    spawnFish(crowd, {
+      genome: randomGenome(crowd.rng, 24),
+      name: 'Second',
+      weight: 2,
+      generation: 1,
+    })
+    crowdSim.advanceElapsed(1, 'visible')
+    expect(crowd.developments.has('heartyFoodOffered')).toBe(true)
+  })
+
+  test('buying hearty pellets makes every subsequent drop a full pellet, durably', () => {
+    const state = createFreshGame(49)
+    const sim = new GameSim(state)
+    state.developments.add('heartyFoodOffered')
+    state.coins = 200
+
+    expect(sim.buy('heartyFood').ok).toBe(true)
+    expect(state.equipment.food).toBe('pellet')
+    // One-shot: the shop has nothing further to sell.
+    expect(sim.shopOffers().map((offer) => offer.id)).not.toContain('heartyFood')
+
+    sim.dropFood(600)
+    expect([...state.world.with('food')].at(-1)!.food!.nutrition).toBe(
+      FOOD_PROFILES.pellet.nutrition,
+    )
+
+    const resumed = new GameSim(deserialize(sim.toSave(1_000)))
+    expect(resumed.read.equipment.food).toBe('pellet')
+  })
+
+  test('returning appetite is recorded the moment hunger crosses the seek threshold', () => {
+    const state = createFreshGame(51)
+    const sim = new GameSim(state)
+    const fish = onlyFish(sim)
+    fish.physiology.hunger = 0.1
+    sim.advanceElapsed(1, 'visible')
+    expect(onlyFish(sim).physiology.appetiteSince).toBeUndefined()
+
+    // Cross the threshold: the crossing moment is recorded exactly once.
+    fish.physiology.hunger = TUNING.seekFoodAbove - 0.001
+    sim.advanceElapsed(1, 'visible')
+    const first = onlyFish(sim).physiology.appetiteSince
+    expect(first).toBeDefined()
+    sim.advanceElapsed(5, 'visible')
+    expect(onlyFish(sim).physiology.appetiteSince).toBe(first)
+
+    // A meal clears it; getting peckish again records a fresh moment.
+    sim.dropFood(fish.position.x)
+    runFor(sim, 30)
+    const after = onlyFish(sim).physiology.appetiteSince
+    expect(after === undefined || after > first!).toBe(true)
   })
 })
 
@@ -608,7 +711,7 @@ describe('persistence', () => {
     expect(parseSave('{"version":99}')).toBeUndefined()
     const sim = GameSim.fresh(503)
     const roundTripped = parseSave(JSON.stringify(sim.toSave(5)))
-    expect(roundTripped?.version).toBe(3)
+    expect(roundTripped?.version).toBe(4)
   })
 })
 

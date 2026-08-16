@@ -74,6 +74,10 @@ export type Physiology = {
   health: number // 1 fine .. 0 dead
   ageSeconds: number
   digesting: number // nutrition awaiting conversion to waste
+  /** Sim time hunger last climbed into appetite (seekFoodAbove). The
+   * renderer shows a brief cue at this moment, so returning interest in food
+   * is visible without a permanent icon; cleared when hunger drops back. */
+  appetiteSince?: number
   /** Sim time when this fish entered critical condition, for warned death. */
   criticalSince?: number
   /** Last time a distress warning toast fired for this fish. */
@@ -223,6 +227,7 @@ export type DevelopmentId =
   | 'spongeFilterOffered'
   | 'habitatExpansionOffered'
   | 'bondSeen'
+  | 'heartyFoodOffered'
 
 export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'fedOnce',
@@ -237,6 +242,7 @@ export const DEVELOPMENT_IDS: readonly DevelopmentId[] = [
   'spongeFilterOffered',
   'habitatExpansionOffered',
   'bondSeen',
+  'heartyFoodOffered',
 ]
 
 /**
@@ -282,7 +288,9 @@ export const TUNING = {
   incomeFloor: 0.28,
   incomePerGram: 0.055,
 
-  pelletNutrition: 1,
+  /** Nutrition per dropped morsel lives in FOOD_PROFILES (equipment.ts):
+   * starter flakes are weak on purpose, so the opening is a run of small
+   * satisfying feeds rather than one pellet and a long wait. */
   pelletSpoilSeconds: 45,
   /** Weight gained per nutrition eaten, scaled by remaining growth headroom. */
   growthPerNutrition: 1.15,
@@ -354,6 +362,10 @@ export const TUNING = {
   growthNoticedAtMultiple: 2, // starter weight vs its hatch weight
   pollutionNoticedAt: 0.18,
   fishUnlockWeight: 8,
+  /** Hearty pellets are revealed by feeding workload: either a second mouth
+   * to feed, or one fish grown big enough that flakes barely register. */
+  heartyFoodAtResidents: 2,
+  heartyFoodAtTankGrams: 14,
   /** The drip feeder is offered once the tank holds this many residents. */
   feederOfferedAtResidents: 3,
   /** Sim seconds of a feeder failing to keep up before the next tier is

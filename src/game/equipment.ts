@@ -13,16 +13,47 @@ import { TANK, type TankBounds } from './model'
 export type FeederStage = 'none' | 'drip' | 'twin' | 'rotary'
 export type FilterStage = 'none' | 'sponge'
 export type HabitatStage = 'starter' | 'expanded'
+export type FoodStage = 'flake' | 'pellet'
 
 export type Equipment = {
   siphon: boolean
   feeder: FeederStage
   filter: FilterStage
   habitat: HabitatStage
+  /** What every drop — hand or feeder — puts in the water. */
+  food: FoodStage
 }
 
 export function createEquipment(): Equipment {
-  return { siphon: false, feeder: 'none', filter: 'none', habitat: 'starter' }
+  return { siphon: false, feeder: 'none', filter: 'none', habitat: 'starter', food: 'flake' }
+}
+
+export type FoodProfile = {
+  /** Nutrition per dropped morsel: hunger relief, growth, and digestion all
+   * scale by it (see TUNING.hungerRelievedPerNutrition and friends). */
+  nutrition: number
+  /** One-time shop cost of switching the tank to this food. */
+  cost: number
+}
+
+/**
+ * Food is the opening's pacing valve. Starter flakes are deliberately weak:
+ * a peckish fish is satisfied for seconds rather than half a minute, so a
+ * fresh tank is a run of small feed-and-eat moments. Hearty pellets restore
+ * the one-drop-per-meal economy once the tank has real feeding workload —
+ * every feeder capacity rating (FEEDER_PROFILES) assumes them.
+ */
+export const FOOD_PROFILES: Record<FoodStage, FoodProfile> = {
+  flake: { nutrition: 0.4, cost: 0 },
+  pellet: { nutrition: 1, cost: 80 },
+}
+
+export function nextFoodStage(stage: FoodStage): Exclude<FoodStage, 'flake'> | undefined {
+  return stage === 'flake' ? 'pellet' : undefined
+}
+
+export function foodProfile(stage: FoodStage): FoodProfile {
+  return FOOD_PROFILES[stage]
 }
 
 export type HabitatProfile = {
@@ -79,10 +110,12 @@ export type FeederProfile = {
 }
 
 /**
- * A mature resident gains hunger at `hungerPerSecondAdult` and each pellet
- * relieves `hungerRelievedPerNutrition`, so one resident needs a pellet
- * roughly every 11 seconds. The drop intervals below are chosen to cover
- * their stated populations with a small margin.
+ * A mature resident gains hunger at `hungerPerSecondAdult` and each hearty
+ * pellet relieves `hungerRelievedPerNutrition`, so one resident needs a
+ * pellet roughly every 11 seconds. The drop intervals below are chosen to
+ * cover their stated populations with a small margin — on hearty pellets;
+ * a feeder still running starter flakes visibly strains sooner, which only
+ * hurries the shop's next offer along.
  */
 export const FEEDER_PROFILES: Record<Exclude<FeederStage, 'none'>, FeederProfile> = {
   drip: { dropSeconds: 3, cost: 250, supportsResidents: 3, spouts: 1 },

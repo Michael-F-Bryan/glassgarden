@@ -88,9 +88,12 @@ test('simulates three hours away and rescues the fish through the UI', async ({ 
   const fish = before.fish[0]
   const dropX = Math.min(before.tank.width - 40, fish.x + 50)
   await page.getByTestId('tool-feed').click()
-  await clickTank(page, dropX, before.tank.waterTop + 40)
-  await expect.poll(async () => (await snapshot(page)).food.length).toBe(1)
-  await page.evaluate(() => (window as DevWindow).__glassgardenDev!.advance(12))
+  // Starter flakes are small: a rescue is a few pinches, not one pellet.
+  for (let i = 0; i < 3; i += 1) {
+    await clickTank(page, dropX, before.tank.waterTop + 40)
+  }
+  await expect.poll(async () => (await snapshot(page)).food.length).toBe(3)
+  await page.evaluate(() => (window as DevWindow).__glassgardenDev!.advance(20))
 
   const after = await snapshot(page)
   expect(after.fish).toHaveLength(1)

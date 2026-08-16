@@ -47,6 +47,9 @@ function stockedTank(options: {
     })
   }
   state.equipment.feeder = options.feeder
+  // Mature tanks are past the starter flakes; every feeder capacity rating
+  // (FEEDER_PROFILES) assumes hearty pellets.
+  state.equipment.food = 'pellet'
   state.coins = options.coins ?? 100_000
   state.developments.add('fedOnce')
   return { state, sim: new GameSim(state) }
@@ -414,6 +417,7 @@ describe('developments are durable across a reload', () => {
       feeder: 'twin',
       filter: 'sponge',
       habitat: 'starter',
+      food: 'pellet',
     })
     expect(resumed.read.care.siphonUses).toBe(state.care.siphonUses)
     expect(resumed.toSave(1_000)).toEqual(saved)

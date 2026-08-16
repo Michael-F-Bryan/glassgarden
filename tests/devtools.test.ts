@@ -78,9 +78,13 @@ describe('development controls', () => {
 
     tools.simulateAway(3 * 60 * 60)
     const before = tools.snapshot().fish[0]
-    expect(sim.dropFood(before.x + 50).ok).toBe(true)
+    // Starter flakes are deliberately small: a rescue is a few pinches in a
+    // row, not one filling pellet.
+    for (let i = 0; i < 3; i += 1) {
+      expect(sim.dropFood(before.x + 50).ok).toBe(true)
+    }
 
-    const after = tools.advance(12)
+    const after = tools.advance(20)
     expect(after.fish).toHaveLength(1)
     expect(after.fish[0].hunger).toBeLessThan(before.hunger)
   })

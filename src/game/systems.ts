@@ -5,6 +5,7 @@ import {
   filterProfile,
   nextFeederStage,
   nextFilterStage,
+  nextFoodStage,
   nextHabitatStage,
 } from './equipment'
 import { generateName, inheritGenome } from './genome'
@@ -83,6 +84,14 @@ function hungerSystem(state: GameState, dt: number, mode: SimulationMode): void 
     const rate = TUNING.hungerPerSecondAdult * (0.45 + 0.55 * maturity) * satiation
     const ceiling = mode === 'offline' ? TUNING.offlineHungerCeiling : 1
     body.hunger = Math.min(ceiling, body.hunger + rate * dt)
+    // The moment appetite returns is a player-visible fact: the renderer
+    // shows a brief cue at this timestamp, so "interested in food again"
+    // never depends on reading a hunger number.
+    if (body.hunger >= TUNING.seekFoodAbove) {
+      if (body.appetiteSince === undefined) body.appetiteSince = state.time
+    } else if (body.appetiteSince !== undefined) {
+      body.appetiteSince = undefined
+    }
     if (body.hunger >= 1) {
       body.weight = Math.max(0.5, body.weight - 0.005 * dt)
     }
@@ -739,6 +748,26 @@ function developmentSystem(state: GameState, dt: number): void {
       message: 'New in the shop: a gravel siphon, for cleaning up waste.',
     })
     recordJournal(state, 'development', 'The water took on its first green tinge.')
+  }
+
+  // Richer food is revealed by feeding workload: another mouth to feed, or
+  // one fish grown far past what a pinch of flakes can satisfy.
+  if (!hasDiscovered(state, 'heartyFoodOffered') && nextFoodStage(state.equipment.food)) {
+    const residents = livingFish(state)
+    const totalWeight = residents.reduce((sum, entity) => sum + entity.physiology.weight, 0)
+    if (
+      residents.length >= TUNING.heartyFoodAtResidents ||
+      totalWeight >= TUNING.heartyFoodAtTankGrams
+    ) {
+      discover(state, 'heartyFoodOffered')
+      emit(state, {
+        type: 'toast',
+        tone: 'development',
+        message:
+          'Mealtimes are getting busy — flakes vanish as fast as you can pinch them in. The shop has taken to stocking a heartier pellet.',
+      })
+      recordJournal(state, 'development', 'The shop began offering hearty pellets.')
+    }
   }
 
   if (
