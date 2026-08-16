@@ -48,6 +48,17 @@ export async function startScenario(
   return loadScenario(page, name, seed)
 }
 
+/** Dismiss any visible toasts. They overlay the tank's bottom-left corner,
+ * so a pointer gesture aimed at the sand there would hit the notice instead
+ * of the glass — exactly what a player clears (or waits out) before
+ * sweeping that spot. */
+export async function dismissToasts(page: Page): Promise<void> {
+  const toasts = page.getByTestId('toast-stack').locator('button')
+  while ((await toasts.count()) > 0) {
+    await toasts.first().click()
+  }
+}
+
 /**
  * Convert logical tank coordinates to page coordinates. Reads the canvas box
  * fresh every call, so a box captured earlier in a test cannot go stale

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { loadScenario, openGame, snapshot, tankPoint } from './support'
+import { dismissToasts, loadScenario, openGame, snapshot, tankPoint } from './support'
 
 type DevWindow = Window & {
   __glassgarden?: unknown
@@ -47,6 +47,7 @@ test('loads deterministic scenarios and cleans a dirty tank through the UI', asy
   expect(dirty.waste).toHaveLength(3)
   expect(dirty.equipment.siphon).toBe(true)
 
+  await dismissToasts(page) // the arrival notice overlays the leftmost dropping
   await page.getByTestId('tool-siphon').click()
   await clickTank(page, dirty.waste[0].x, dirty.waste[0].y)
 

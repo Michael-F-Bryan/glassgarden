@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { loadScenario, openGame, snapshot, tankPoint } from './support'
+import { dismissToasts, loadScenario, openGame, snapshot, tankPoint } from './support'
 
 test.beforeEach(async ({ page }) => {
   await openGame(page)
@@ -9,6 +9,7 @@ test.beforeEach(async ({ page }) => {
 test('one sweep of the siphon clears every dropping along its path', async ({ page }) => {
   const dirty = await loadScenario(page, 'dirty-tank', 21)
   expect(dirty.waste).toHaveLength(3)
+  await dismissToasts(page) // the arrival notice overlays the leftmost dropping
   await page.getByTestId('tool-siphon').click()
 
   const first = await tankPoint(page, dirty.waste[0].x, dirty.waste[0].y)
