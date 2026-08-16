@@ -139,6 +139,22 @@ const SPRINKLE_INTERVAL_MS = 280
 const SIPHON_INTERVAL_MS = 220
 const SIPHON_SWEEP_DISTANCE = 55
 
+/**
+ * The gap policy, made explicit so it is deterministic and testable.
+ * Elapsed wall time between two frames is treated as exactly one of:
+ *
+ * - an ordinary frame delta (≤ FRAME_GAP_SECONDS): simulated at the selected
+ *   speed, 'visible' or 'background' by current page visibility;
+ * - a short absence with the page still open (≤ EXTENDED_ABSENCE_SECONDS —
+ *   a hidden tab, a brief laptop suspend): honest time, simulated IN FULL at
+ *   the selected speed under 'background' rules, where nothing can die;
+ * - an extended absence (beyond that, or a page closure older than
+ *   EXTENDED_ABSENCE_SECONDS at boot): the slowed, capped offline catch-up
+ *   with its "while you were away" summary.
+ */
+const FRAME_GAP_SECONDS = 5
+const EXTENDED_ABSENCE_SECONDS = 90
+
 type Gesture = {
   tool: Tool
   startedAtMs: number
@@ -332,9 +348,9 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
     const dt = (nowMs - lastFrameMs) / 1000
     lastFrameMs = nowMs
 
-    // One gap policy: a real absence (background tab, sleep) over five
-    // seconds runs the slowed, capped away-time catch-up; anything shorter
-    // is simulated in full at the fixed tick — nothing is discarded.
+    // One gap policy (see FRAME_GAP_SECONDS above): a short absence with the
+    // page open is honest, fully-simulated time; only an extended absence
+    // runs the slowed, capped away-time catch-up. Nothing is discarded.
     if (!paused && sim) {
       if (bootHandoff.awaySummary) {
         awaySummary = bootHandoff.awaySummary
@@ -343,8 +359,13 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       for (const notification of bootHandoff.notifications.splice(0)) {
         pushToast(notification.tone, notification.message)
       }
-      if (dt > 5) {
+      if (dt > EXTENDED_ABSENCE_SECONDS) {
         applySummary(sim.advanceOffline(dt))
+      } else if (dt > FRAME_GAP_SECONDS) {
+        // An ordinary tab switch must not become 20% offline catch-up: the
+        // aquarium advances at the selected speed, and the 'background'
+        // mode keeps the no-death-while-absent promise.
+        applyAdvance(sim.advanceElapsed(dt * speed, 'background'))
       } else {
         applyAdvance(sim.advanceElapsed(dt * speed, deps.visible() ? 'visible' : 'background'))
       }
@@ -384,7 +405,7 @@ export function createGameRuntime(deps: GameRuntimeDeps): GameRuntime {
       if (loaded.kind === 'loaded') {
         sim = new GameSim(hydrate(loaded.document))
         const awaySeconds = (deps.now() - loaded.document.savedAtMs) / 1000
-        if (awaySeconds > 90) {
+        if (awaySeconds > EXTENDED_ABSENCE_SECONDS) {
           // Handed to the first frame rather than applied here — see bootHandoff.
           const summary = sim.advanceOffline(awaySeconds)
           if (summary.simulatedSeconds > 10) bootHandoff.awaySummary = summary

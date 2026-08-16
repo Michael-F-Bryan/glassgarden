@@ -167,6 +167,53 @@ describe('game runtime', () => {
     runtime.stop()
   })
 
+  test('a short hidden-tab gap is simulated in full, not as slowed catch-up', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+    h.tick(16)
+
+    // The tab goes hidden; RAF stops firing and comes back 30 s later with
+    // one big frame delta. That is honest time: all 30 s are simulated.
+    h.setVisible(false)
+    h.tick(30_000)
+    h.setVisible(true)
+
+    runtime.pause() // saves at exactly the live sim time
+    const saved = JSON.parse(h.storage.getItem(SAVE_KEY)!)
+    expect(saved.time).toBeGreaterThan(29)
+    expect(saved.time).toBeLessThan(32)
+    // No "while you were away" theatre for a tab switch.
+    expect(lastView(views).awaySummary).toBeNull()
+    runtime.stop()
+  })
+
+  test('an extended absence still gets the slowed, capped catch-up and a summary', () => {
+    const h = harness()
+    const runtime = createGameRuntime(h.deps)
+    const views: GameView[] = []
+    runtime.subscribe((view) => views.push(view))
+    runtime.start(canvas())
+    h.tick(16)
+
+    h.setVisible(false)
+    h.tick(10 * 60 * 1000) // ten minutes away
+    h.setVisible(true)
+
+    const view = lastView(views)
+    expect(view.awaySummary).not.toBeNull()
+    expect(view.awaySummary!.awaySeconds).toBeCloseTo(600, 0)
+    expect(view.awaySummary!.simulatedSeconds).toBeCloseTo(600 * 0.2, 0)
+
+    runtime.pause()
+    const saved = JSON.parse(h.storage.getItem(SAVE_KEY)!)
+    expect(saved.time).toBeGreaterThan(600 * 0.2 - 2)
+    expect(saved.time).toBeLessThan(600 * 0.2 + 3)
+    runtime.stop()
+  })
+
   test('pausing freezes time, blocks intents, and cancels the held gesture', () => {
     const h = harness()
     const runtime = createGameRuntime(h.deps)
