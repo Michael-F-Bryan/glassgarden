@@ -48,12 +48,16 @@ export async function startScenario(
   return loadScenario(page, name, seed)
 }
 
-/** Dismiss any visible toasts. They overlay the tank's bottom-left corner,
- * so a pointer gesture aimed at the sand there would hit the notice instead
- * of the glass — exactly what a player clears (or waits out) before
- * sweeping that spot. */
+/** Wait for a freshly loaded scenario's pending notice to land, then clear
+ * the toast stack. Toasts overlay the tank's bottom-left corner, so a
+ * pointer gesture aimed at the sand there would hit the notice instead of
+ * the glass — exactly what a player clears (or waits out) before sweeping
+ * that spot. Waiting first matters: the notice is published on the next
+ * frame, and checking too early would "clear" nothing and still be
+ * intercepted. Only call after loading a scenario that emits a toast. */
 export async function dismissToasts(page: Page): Promise<void> {
   const toasts = page.getByTestId('toast-stack').locator('button')
+  await toasts.first().waitFor({ state: 'visible' })
   while ((await toasts.count()) > 0) {
     await toasts.first().click()
   }
